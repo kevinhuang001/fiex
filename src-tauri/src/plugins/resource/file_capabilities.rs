@@ -22,6 +22,7 @@ pub struct FileCapabilities {
     pub write: bool,
     pub create: bool,
     pub rename: bool,
+    pub trash: bool,
     pub remove: bool,
 }
 
@@ -34,6 +35,7 @@ impl FileCapabilities {
         write: true,
         create: true,
         rename: true,
+        trash: true,
         remove: true,
     };
 
@@ -46,6 +48,7 @@ impl FileCapabilities {
             write: self.write && other.write,
             create: self.create && other.create,
             rename: self.rename && other.rename,
+            trash: self.trash && other.trash,
             remove: self.remove && other.remove,
         }
     }
@@ -60,12 +63,13 @@ impl FileCapabilities {
             FsOperation::Write => self.write,
             FsOperation::Mkdir => self.create,
             FsOperation::Rename => self.rename,
+            FsOperation::Trash => self.trash,
             FsOperation::Remove => self.remove,
         }
     }
 
     pub fn has_mutation_capability(self) -> bool {
-        self.write || self.create || self.rename || self.remove
+        self.write || self.create || self.rename || self.trash || self.remove
     }
 
     pub fn into_allowed_ops(self) -> Vec<String> {
@@ -94,6 +98,7 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
         write: allows(FsOperation::Write),
         create: entry.is_dir && allows(FsOperation::Mkdir),
         rename: allows(FsOperation::Rename),
+        trash: allows(FsOperation::Trash),
         remove: allows(FsOperation::Remove),
     }
 }
@@ -112,6 +117,7 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
                 write: !protected,
                 create: entry.is_dir && !protected,
                 rename: !protected,
+                trash: !protected,
                 remove: !protected,
             }
         }

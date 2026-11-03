@@ -178,12 +178,8 @@ impl ResourceBroker {
     }
     /// Move this node to the platform Trash when local storage owns it.
     pub fn move_to_trash(&self) -> Result<(), FsError> {
-        self.scope.authorize_method("host.fs.remove")?;
-        self.require(FsOperation::Remove, false)?;
-        self.review_remove(
-            crate::plugin_sdk::filesystem::RemoveMode::Trash,
-            crate::plugin_sdk::filesystem::PreflightPhase::Execute,
-        )?;
+        self.scope.authorize_method("host.fs.trash")?;
+        self.require(FsOperation::Trash, false)?;
         provider_registry::move_to_trash(self)?;
         changes::removed(&self.path);
         Ok(())

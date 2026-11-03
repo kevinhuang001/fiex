@@ -25,12 +25,12 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           .map((entry) => ({
             ...entry,
             path: trashId(entry.name),
-            allowedOps: ['stat'],
+            allowedOps: entry.isDir ? ['stat', 'list', 'search', 'remove'] : ['stat', 'remove'],
           }))
         return {
           path: 'trash://',
           entries,
-          allowedOps: [],
+          allowedOps: ['list', 'stat', 'search'],
           virtualVolume: true,
           warnings: [],
         }

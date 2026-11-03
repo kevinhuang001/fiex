@@ -9,218 +9,236 @@ use fiex_provider_contracts::{
 };
 use std::sync::Arc;
 
-macro_rules! impl_context_menu_provider {
-    ($($provider:ty),+ $(,)?) => {
-        $(
-            impl ContextMenuProvider for $provider {
-                fn resolve(
-                    &self,
-                    invocation: &dyn ProviderInvocation,
-                ) -> Result<Vec<MenuItem>, ProviderError> {
-                    if invocation.method() != "contextMenu.resolve" {
-                        return Err(ProviderError::method_not_found(invocation.method()));
-                    }
-                    let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-                    let selection = context.selection();
-                    let capabilities = context.capabilities();
-                    if self.available(&selection, &capabilities) {
-                        Ok(super::super::super::builtin::retain_unclaimed(
-                            context,
-                            self.items(&selection, &capabilities),
-                        ))
-                    } else {
-                        Ok(Vec::new())
-                    }
-                }
-
-                fn execute(
-                    &self,
-                    invocation: &dyn ProviderInvocation,
-                ) -> Result<MenuExecuteResult, ProviderError> {
-                    if invocation.method() != "contextMenu.execute" {
-                        return Err(ProviderError::method_not_found(invocation.method()));
-                    }
-                    let items = <Self as ContextMenuProvider>::resolve(
-                        self,
-                        &NativeProviderInvocation::context_menu_resolve(invocation)?
-                            .with_local_data(Arc::new(
-                                NativeProviderInvocation::local_data::<Context>(invocation)?.clone(),
-                            )),
-                    )?;
-                    let item_id = match invocation.input()? {
-                        ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
-                        _ => None,
-                    }.ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
-                    if !items.iter().any(|item| item.id == item_id && !item.disabled) {
-                        return Err(ProviderError::invalid_params("native menu action was not offered"));
-                    }
-                    Ok(super::super::super::builtin::action_result(
-                        item_id,
-                        NativeProviderInvocation::local_data::<Context>(invocation)?,
-                    ))
-                }
-            }
-        )+
-    };
-}
-
-pub(super) struct Opening;
-impl Opening {
-    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        !selection.paths.is_empty()
-    }
-    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
-        // Directories navigate without reading; a file needs `read` to open.
-        let navigable = selection
-            .entries
-            .iter()
-            .all(|entry| entry.is_dir || capabilities.read);
-        let mut items = Vec::new();
-        if navigable {
-            items.push(item("open", "打开", "open", "open"));
-        }
-        if !selection.many() {
-            if capabilities.read {
-                items.push(item("preview", "快速查看", "eye", "quickLook"));
-            }
-            items.push(item("info", "显示简介", "info", "info"));
-        }
-        items
-    }
-}
-
-pub(super) struct Tags;
-impl Tags {
-    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        selection.all_local && !selection.paths.is_empty()
-    }
-    fn items(&self, _selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        if cfg!(target_os = "macos") {
-            vec![item("tags", "标签…", "tags", "")]
-        } else {
-            Vec::new()
-        }
-    }
-}
-
-/// Blank-canvas directory creation. It has its own match rule so Applications
-/// can keep New Folder while excluding New File.
-pub(super) struct NewFolder;
-impl NewFolder {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        selection.paths.is_empty() && capabilities.create
-    }
-    fn items(&self, _selection: &Selection<'_>, _capabilities: &FileCapabilities) -> Vec<MenuItem> {
-        vec![item("newFolder", "新建文件夹…", "folder-plus", "newFolder")]
-    }
-}
-
-/// Empty file creation is distinct from the VFS write capability used by
-/// reviewed imports and transfers.
-pub(super) struct NewFile;
-impl NewFile {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        selection.paths.is_empty() && capabilities.write
-    }
-    fn items(&self, _selection: &Selection<'_>, _capabilities: &FileCapabilities) -> Vec<MenuItem> {
-        vec![item("newFile", "新建空文件…", "file-plus", "newFile")]
-    }
-}
-
-pub(super) struct Rename;
-impl Rename {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.paths.is_empty()
-    }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        if selection.many() {
-            Vec::new()
-        } else {
-            vec![item("rename", "重新命名", "pencil", "rename")]
-        }
-    }
-}
-
-pub(super) struct BatchRename;
-impl BatchRename {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.paths.is_empty()
-    }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        if selection.many() {
-            vec![item("batchRename", "批量重命名…", "pencil", "")]
-        } else {
-            Vec::new()
-        }
-    }
-}
-
-pub(super) struct Clipboard;
-impl Clipboard {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        !selection.paths.is_empty() && capabilities.read
-    }
-    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
-        let mut items = Vec::new();
-        if capabilities.read {
-            items.push(item("copy", "复制", "copy", "copy"));
-        }
-        if capabilities.read && capabilities.remove {
-            items.push(item("cut", "剪切", "scissors", "cut"));
-        }
-        if capabilities.read && capabilities.write {
-            items.push(item("duplicate", "创建副本", "copy", "duplicate"));
-        }
-        items
-    }
-}
-
-pub(super) struct CopyPath;
-impl CopyPath {
-    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        !selection.paths.is_empty()
-    }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        vec![item("copyPath", "复制路径", "copy", "")]
-    }
-}
-
-pub(super) struct Trash;
-impl Trash {
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.remove && !selection.paths.is_empty()
-    }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        let mut items = if selection.all_local {
-            // The platform Trash only accepts local paths. Windows exposes the
-            // Recycle Bin under that name; the rest keep the Trash wording.
-            let title = if cfg!(windows) {
-                "移到回收站"
-            } else {
-                "移到废纸篓"
-            };
-            vec![item("trash", title, "trash", "trash")]
-        } else {
-            // Provider-backed mounts have no Trash. Their `vfs.remove` is the
-            // permanent delete, so the menu says exactly that.
-            vec![item("delete", "彻底删除", "trash", "")]
-        };
-        for item in &mut items {
-            item.placement = Some(MenuPlacement::Tail);
-            item.danger = true;
-        }
-        items
-    }
-}
-
-impl_context_menu_provider!(
-    Opening,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Action {
+    Open,
+    Preview,
+    Info,
     Tags,
     NewFolder,
     NewFile,
     Rename,
     BatchRename,
-    Clipboard,
+    Copy,
+    Cut,
+    Duplicate,
     CopyPath,
-    Trash,
-);
+    MoveToTrash,
+    DeletePermanently,
+    Pin,
+    Unpin,
+    Cache,
+    Uncache,
+    ConflictResolution,
+}
+
+pub(super) struct AtomicMenuAction(pub(super) Action);
+
+fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
+    !selection.paths.is_empty()
+        && selection.paths.iter().enumerate().all(|(index, path)| {
+            let Some(entry) = selection.entries.get(index) else {
+                return false;
+            };
+            match crate::core::volumes::native_vfs::provider_id(path) {
+                Some("core:trash") => entry.is_dir && !entry.is_symlink,
+                Some("core:applications") => true,
+                Some("core:recent") => entry.allowed_ops.iter().any(|op| op == "read"),
+                _ => entry.is_dir || capabilities.read,
+            }
+        })
+}
+
+impl AtomicMenuAction {
+    fn items(&self, selection: &Selection<'_>, caps: &FileCapabilities) -> Vec<MenuItem> {
+        let nonzero = !selection.paths.is_empty();
+        let one = selection.paths.len() == 1;
+        let mut items = match self.0 {
+            Action::Open if can_open(selection, caps) => {
+                vec![item("open", "打开", "open", "open")]
+            }
+            Action::Preview if one && caps.read => {
+                vec![item("preview", "快速查看", "eye", "quickLook")]
+            }
+            Action::Info if one => vec![item("info", "显示简介", "info", "info")],
+            Action::Tags if selection.all_local && cfg!(target_os = "macos") && nonzero => {
+                vec![item("tags", "标签…", "tags", "")]
+            }
+            Action::NewFolder
+                if selection.paths.is_empty() && caps.create && selection.preflight.new_folder =>
+            {
+                vec![item("newFolder", "新建文件夹…", "folder-plus", "newFolder")]
+            }
+            Action::NewFile
+                if selection.paths.is_empty() && caps.write && selection.preflight.new_file =>
+            {
+                vec![item("newFile", "新建空文件…", "file-plus", "newFile")]
+            }
+            Action::Rename if one && caps.rename && selection.preflight.rename => {
+                vec![item("rename", "重新命名", "pencil", "rename")]
+            }
+            Action::BatchRename
+                if selection.many() && caps.rename && selection.preflight.batch_rename =>
+            {
+                vec![item("batchRename", "批量重命名…", "pencil", "")]
+            }
+            Action::Copy if nonzero && caps.read => vec![item("copy", "复制", "copy", "copy")],
+            // Cut records references only. Import/Export/Move authorization is
+            // checked when Paste or drag-and-drop actually performs a transfer.
+            Action::Cut if nonzero && caps.read && caps.remove => {
+                vec![item("cut", "剪切", "scissors", "cut")]
+            }
+            Action::Duplicate if nonzero && caps.read && caps.write => {
+                vec![item("duplicate", "创建副本", "copy", "duplicate")]
+            }
+            Action::CopyPath if nonzero => vec![item("copyPath", "复制路径", "copy", "")],
+            Action::MoveToTrash if nonzero && caps.trash && selection.preflight.trash => {
+                vec![item(
+                    "trash",
+                    if cfg!(windows) {
+                        "移到回收站"
+                    } else {
+                        "移到废纸篓"
+                    },
+                    "trash",
+                    "trash",
+                )]
+            }
+            Action::DeletePermanently if nonzero && caps.remove && selection.preflight.remove => {
+                vec![item("delete", "彻底删除", "trash", "")]
+            }
+            Action::Pin
+            | Action::Unpin
+            | Action::Cache
+            | Action::Uncache
+            | Action::ConflictResolution => {
+                if !nonzero
+                    || !selection
+                        .paths
+                        .iter()
+                        .all(|path| crate::remote::is_remote(path))
+                {
+                    return Vec::new();
+                }
+                let wanted = match self.0 {
+                    Action::Pin => "remote.pin",
+                    Action::Unpin => "remote.unpin",
+                    Action::Cache => "remote.cache",
+                    Action::Uncache => "remote.uncache",
+                    Action::ConflictResolution => "",
+                    _ => unreachable!(),
+                };
+                let mut items =
+                    super::super::super::connection_cache::ConnectionCache.items(selection, caps);
+                if self.0 == Action::ConflictResolution {
+                    items.retain(|item| {
+                        matches!(item.id.as_str(), "remote.keepLocal" | "remote.keepRemote")
+                    });
+                } else {
+                    items.retain(|item| item.id == wanted);
+                }
+                items
+            }
+            _ => Vec::new(),
+        };
+        for item in &mut items {
+            if matches!(self.0, Action::MoveToTrash | Action::DeletePermanently) {
+                item.placement = Some(MenuPlacement::Tail);
+                item.danger = true;
+            }
+        }
+        items
+    }
+}
+
+impl ContextMenuProvider for AtomicMenuAction {
+    fn resolve(&self, invocation: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        if invocation.method() != "contextMenu.resolve" {
+            return Err(ProviderError::method_not_found(invocation.method()));
+        }
+        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        Ok(self.items(&context.selection(), &context.capabilities()))
+    }
+
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
+        if invocation.method() != "contextMenu.execute" {
+            return Err(ProviderError::method_not_found(invocation.method()));
+        }
+        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
+            .with_local_data(Arc::new(context.clone()));
+        let offered = self.resolve(&resolve)?;
+        let item_id = match invocation.input()? {
+            ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
+            _ => None,
+        }
+        .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
+        if !offered
+            .iter()
+            .any(|item| item.id == item_id && !item.disabled)
+        {
+            return Err(ProviderError::invalid_params(
+                "native menu action was not offered",
+            ));
+        }
+        Ok(super::super::super::builtin::action_result(
+            item_id, context,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn selection<'a>(
+        paths: &'a [String],
+        preflight: super::super::super::super::builtin::MenuPreflightAvailability,
+    ) -> Selection<'a> {
+        Selection {
+            paths,
+            entries: &[],
+            all_local: true,
+            preflight,
+        }
+    }
+
+    #[test]
+    fn trash_and_remove_capabilities_are_independent_and_coexist() {
+        let paths = ["/tmp/item".to_owned()];
+        let selection = selection(
+            &paths,
+            super::super::super::super::builtin::MenuPreflightAvailability {
+                trash: true,
+                remove: true,
+                ..Default::default()
+            },
+        );
+        for (trash, remove, expected) in [
+            (false, false, [false, false]),
+            (true, false, [true, false]),
+            (false, true, [false, true]),
+            (true, true, [true, true]),
+        ] {
+            let caps = FileCapabilities {
+                trash,
+                remove,
+                ..Default::default()
+            };
+            assert_eq!(
+                [
+                    !AtomicMenuAction(Action::MoveToTrash)
+                        .items(&selection, &caps)
+                        .is_empty(),
+                    !AtomicMenuAction(Action::DeletePermanently)
+                        .items(&selection, &caps)
+                        .is_empty(),
+                ],
+                expected
+            );
+        }
+    }
+}

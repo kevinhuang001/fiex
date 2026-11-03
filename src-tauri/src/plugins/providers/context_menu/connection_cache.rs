@@ -1,28 +1,14 @@
 //! Connection-cache menu group. Remote selections only; the action set is
 //! owned by the connection adapter and unchanged by capability gating.
 
-use super::{
-    builtin::Context,
-    file_ops::{item, Selection},
-};
-use crate::plugins::native_invocation::NativeProviderInvocation;
+use super::file_ops::{item, Selection};
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use fiex_provider_contracts::{
-    ContextMenuProvider, MenuActivity, MenuActivityKind, MenuExecuteResult, MenuItem,
-    ProviderError, ProviderInput, ProviderInvocation,
-};
+use fiex_provider_contracts::{MenuActivity, MenuActivityKind, MenuItem};
 
 pub(super) struct ConnectionCache;
 
 impl ConnectionCache {
-    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        !selection.paths.is_empty()
-            && selection
-                .paths
-                .iter()
-                .all(|path| crate::remote::is_remote(path))
-    }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
+    pub(super) fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         let entries = selection.entries;
         let can_cache = entries.len() == selection.paths.len()
             && entries.iter().all(|entry| {
@@ -107,97 +93,6 @@ impl ConnectionCache {
             ));
         }
         items
-    }
-}
-
-pub(super) fn has_items_for_context(
-    selection: &Selection<'_>,
-    capabilities: &FileCapabilities,
-) -> bool {
-    let provider = ConnectionCache;
-    if !provider.available(selection, capabilities) {
-        return false;
-    }
-    let entries = selection.entries;
-    let can_cache = entries.len() == selection.paths.len()
-        && entries.iter().all(|entry| {
-            let required = if entry.is_dir { "list" } else { "read" };
-            entry
-                .allowed_ops
-                .iter()
-                .any(|operation| operation == required)
-        });
-    let pinned = entries.iter().all(|entry| entry.pinned);
-    let has_cache =
-        entries.len() == selection.paths.len() && entries.iter().all(|entry| entry.has_cache);
-    let conflicts = entries
-        .iter()
-        .filter(|entry| entry.sync.as_deref() == Some("conflict"))
-        .collect::<Vec<_>>();
-    pinned
-        || can_cache
-        || (has_cache
-            && !entries.iter().any(|entry| {
-                entry.pinned || matches!(entry.sync.as_deref(), Some("conflict" | "pending"))
-            }))
-        || (!conflicts.is_empty()
-            && conflicts.iter().all(|entry| {
-                entry
-                    .allowed_ops
-                    .iter()
-                    .any(|operation| operation == "write")
-            }))
-        || (!conflicts.is_empty()
-            && conflicts.iter().all(|entry| {
-                entry
-                    .allowed_ops
-                    .iter()
-                    .any(|operation| operation == "read")
-            }))
-}
-
-impl ContextMenuProvider for ConnectionCache {
-    fn resolve(&self, invocation: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
-        if invocation.method() != "contextMenu.resolve" {
-            return Err(ProviderError::method_not_found(invocation.method()));
-        }
-        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-        let selection = context.selection();
-        let capabilities = context.capabilities();
-        if self.available(&selection, &capabilities) {
-            Ok(super::builtin::retain_unclaimed(
-                context,
-                self.items(&selection, &capabilities),
-            ))
-        } else {
-            Ok(Vec::new())
-        }
-    }
-
-    fn execute(
-        &self,
-        invocation: &dyn ProviderInvocation,
-    ) -> Result<MenuExecuteResult, ProviderError> {
-        if invocation.method() != "contextMenu.execute" {
-            return Err(ProviderError::method_not_found(invocation.method()));
-        }
-        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-        let item_id = match invocation.input()? {
-            ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
-            _ => None,
-        }
-        .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
-        let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
-            .with_local_data(std::sync::Arc::new(context.clone()));
-        if !ContextMenuProvider::resolve(self, &resolve)?
-            .iter()
-            .any(|item| item.id == item_id && !item.disabled)
-        {
-            return Err(ProviderError::invalid_params(
-                "native menu action was not offered",
-            ));
-        }
-        Ok(super::builtin::action_result(item_id, context))
     }
 }
 

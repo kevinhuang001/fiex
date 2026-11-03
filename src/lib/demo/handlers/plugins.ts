@@ -222,60 +222,10 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         }
       })
     case 'plugin_context_menu_resolve': {
-      const directory = String(a.directory || '')
-      const paths = Array.isArray(a.paths) ? (a.paths as string[]) : []
       // Core and plugin rows resolve separately so the top-level menu never
       // waits for plugin IPC; "all" keeps the one-batch contract for callers
       // that still ask for it.
       const source = String(a.source || 'all')
-      const nativeViewMenus: Record<string, unknown>[] = []
-      if (directory === 'applications://') {
-        const user = paths.some((path) => /^applications:\/\/(?:user\/|~)/.test(path))
-        // Mirror Core: installed applications use the explicit launch verb,
-        // while the root folder and user-owned stored shortcuts stay "打开".
-        const launch =
-          paths[0] !== undefined &&
-          paths[0] !== 'applications://' &&
-          !/^applications:\/\/(?:user\/|~)/.test(paths[0])
-        nativeViewMenus.push({
-          kind: 'builtin',
-          providerId: 'core.applications.menu',
-          menuSessionId: `virtual:${JSON.stringify(paths)}`,
-          items: [
-            { id: 'open', kind: 'action', title: launch ? '启动应用' : '打开', icon: 'open' },
-            ...(user
-              ? [
-                  {
-                    id: 'delete',
-                    kind: 'action',
-                    title: '彻底删除',
-                    icon: 'trash',
-                    danger: true,
-                    placement: 'tail',
-                  },
-                ]
-              : []),
-          ],
-        })
-      }
-      if (directory === 'recyclebin://' || directory === 'trash://') {
-        nativeViewMenus.push({
-          kind: 'builtin',
-          providerId: 'core.trash.menu',
-          menuSessionId: `virtual:${JSON.stringify(paths)}`,
-          items: [
-            { id: 'restore', kind: 'action', title: '放回原处', icon: 'restore' },
-            {
-              id: 'delete',
-              kind: 'action',
-              title: '彻底删除',
-              icon: 'trash',
-              danger: true,
-              placement: 'tail',
-            },
-          ],
-        })
-      }
       const plugins = demoPlugins
         .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
         .flatMap((plugin) => {
@@ -293,10 +243,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           plugin.backendAvailable &&
           !!plugin.extensions?.contextMenus,
       )
-      if (nativeViewMenus.length)
-        return source === 'core'
-          ? { menus: nativeViewMenus, hasEligiblePlugins }
-          : [...nativeViewMenus, ...plugins]
       const builtins = demoBuiltinMenus(a)
       if (source === 'core') return { menus: builtins, hasEligiblePlugins }
       return [...builtins, ...plugins]

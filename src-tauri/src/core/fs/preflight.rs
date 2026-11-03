@@ -4,8 +4,8 @@
 use super::*;
 use crate::plugin_sdk::filesystem::{
     CreateFilePreflight, CreateFolderPreflight, ExportPreflight, ImportPreflight, MovePreflight,
-    PreflightOperation, PreflightPhase, PreflightRequest, RemoveMode, RemovePreflight,
-    RenamePreflight, TransferKind,
+    PreflightOperation, PreflightPhase, PreflightRequest, RemovePreflight, RenamePreflight,
+    TransferKind, TrashPreflight,
 };
 use fiex_provider_contracts::TransferMetadata;
 use std::{
@@ -226,12 +226,20 @@ impl ResourceBroker {
         ))
     }
 
-    pub(crate) fn review_remove_available(&self, mode: RemoveMode) -> bool {
+    pub(crate) fn review_trash_available(&self) -> bool {
+        self.review_availability_cached(&PreflightRequest::new(
+            PreflightPhase::Availability,
+            PreflightOperation::Trash(TrashPreflight {
+                node_ids: vec![self.path.clone()],
+            }),
+        ))
+    }
+
+    pub(crate) fn review_remove_available(&self) -> bool {
         self.review_availability_cached(&PreflightRequest::new(
             PreflightPhase::Availability,
             PreflightOperation::Remove(RemovePreflight {
                 node_ids: vec![self.path.clone()],
-                mode,
             }),
         ))
     }
@@ -294,18 +302,25 @@ impl ResourceBroker {
         )
     }
 
-    pub(crate) fn review_remove(
-        &self,
-        mode: RemoveMode,
-        phase: PreflightPhase,
-    ) -> Result<(), FsError> {
+    pub(crate) fn review_remove(&self, phase: PreflightPhase) -> Result<(), FsError> {
         self.check_preflight(
             None,
             &PreflightRequest::new(
                 phase,
                 PreflightOperation::Remove(RemovePreflight {
                     node_ids: vec![self.path.clone()],
-                    mode,
+                }),
+            ),
+        )
+    }
+
+    pub(crate) fn review_trash(&self, phase: PreflightPhase) -> Result<(), FsError> {
+        self.check_preflight(
+            None,
+            &PreflightRequest::new(
+                phase,
+                PreflightOperation::Trash(TrashPreflight {
+                    node_ids: vec![self.path.clone()],
                 }),
             ),
         )

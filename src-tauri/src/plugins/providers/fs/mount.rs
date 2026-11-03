@@ -214,6 +214,11 @@ impl Mount {
         Ok(())
     }
 
+    pub fn trash(&self, node_id: &str) -> Result<(), String> {
+        self.invoke("vfs.trash", json!({"nodeId": node_id}))?;
+        Ok(())
+    }
+
     pub fn open_read(&self, node_id: &str) -> Result<FsStream, String> {
         proxy::open_read(self, json!({"nodeId": node_id})).map(FsStream::new)
     }

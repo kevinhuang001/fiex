@@ -111,12 +111,13 @@ fn application_user_children_cannot_create_files() {
 }
 
 #[test]
-fn trash_view_denies_regular_storage_mutations() {
+fn trash_view_root_denies_remove_and_trash_operations() {
     let view = super::binding::trusted("trash://", "core:test-trash").unwrap();
     let write = view.require(FsOperation::Write, false).unwrap_err();
     assert_eq!(write.kind, FsErrorKind::PermissionDenied);
     let remove = view.require(FsOperation::Remove, false).unwrap_err();
-    assert_eq!(remove.kind, FsErrorKind::PermissionDenied);
+    assert_eq!(remove.kind, FsErrorKind::Unsupported);
+    assert!(view.require(FsOperation::Trash, false).is_err());
     // Read-only Trash operations remain available.
     view.require(FsOperation::Stat, false).unwrap();
     view.require(FsOperation::List, false).unwrap();

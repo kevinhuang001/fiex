@@ -1,21 +1,13 @@
-//! Registered Core file-operation menu providers.
+//! Registered atomic Core file-operation menu providers.
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
-    ContextMenuProvider, FsOperation, LocationMatch, MenuItem, ProviderMatchExclude,
-    ProviderMatchRule,
+    ContextMenuProvider, FsOperation, LocationMatch, ProviderMatchExclude, ProviderMatchRule,
 };
 use std::sync::Arc;
 
-use self::groups::{
-    BatchRename, Clipboard, CopyPath, NewFile, NewFolder, Opening, Rename, Tags, Trash,
-};
-use super::super::connection_cache::ConnectionCache;
+use groups::{Action, AtomicMenuAction};
 
 mod groups;
-
-fn special_view_exclude() -> ProviderMatchExclude {
-    exclude_views(&["core:applications", "core:trash", "core:recent"])
-}
 
 fn exclude_views(provider_ids: &[&str]) -> ProviderMatchExclude {
     ProviderMatchExclude {
@@ -27,112 +19,158 @@ fn exclude_views(provider_ids: &[&str]) -> ProviderMatchExclude {
     }
 }
 
-/// Every generic Core menu group is registered as the same shared provider
-/// trait used by SDK plugins. Native implementations run directly in Core.
+fn selection(value: &str) -> ProviderMatchRule {
+    ProviderMatchRule {
+        selection: Some(value.into()),
+        ..Default::default()
+    }
+}
+
+fn required(selection: &str, operations: &[FsOperation]) -> ProviderMatchRule {
+    ProviderMatchRule {
+        selection: Some(selection.into()),
+        required_ops: operations.to_vec(),
+        ..Default::default()
+    }
+}
+
+fn storage_vfs(selection: &str) -> ProviderMatchRule {
+    ProviderMatchRule {
+        selection: Some(selection.into()),
+        storage: Some(LocationMatch {
+            types: Some(vec!["vfs".into()]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// Each registration owns both its match rule and one atomic action. Static
+/// eligibility is therefore colocated with the button identity; dynamic
+/// availability is computed by that action against the trusted Core snapshot.
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
+    let mut new_folder = required("zero", &[FsOperation::Mkdir]);
+    new_folder.exclude = Some(exclude_views(&["core:trash", "core:recent"]));
+    let mut new_file = required("zero", &[FsOperation::Write]);
+    new_file.exclude = Some(exclude_views(&[
+        "core:applications",
+        "core:trash",
+        "core:recent",
+    ]));
+    // Recent is a projection whose own VFS contract only grants stat/read.
+    // Keep deletion attached to the projection's authorization, never the
+    // backing file's broader capabilities.
+    let mut move_to_trash = required("nonzero", &[FsOperation::Trash]);
+    move_to_trash.exclude = Some(exclude_views(&["core:recent"]));
+    let mut delete_permanently = required("nonzero", &[FsOperation::Remove]);
+    delete_permanently.exclude = Some(exclude_views(&["core:recent"]));
+    let actions = [
+        ("builtin:open", 120, selection("nonzero"), Action::Open),
         (
-            "builtin:opening",
-            100,
-            Arc::new(Opening) as Arc<dyn ContextMenuProvider>,
+            "builtin:preview",
+            119,
+            required("single", &[FsOperation::Read]),
+            Action::Preview,
         ),
+        ("builtin:info", 118, selection("single"), Action::Info),
         (
             "builtin:tags",
-            99,
-            Arc::new(Tags) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:new-folder",
-            98,
-            Arc::new(NewFolder) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:new-file",
-            98,
-            Arc::new(NewFile) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:connection-cache",
-            98,
-            Arc::new(ConnectionCache) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:rename",
-            96,
-            Arc::new(Rename) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:batch-rename",
-            95,
-            Arc::new(BatchRename) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:clipboard",
-            94,
-            Arc::new(Clipboard) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:copy-path",
-            92,
-            Arc::new(CopyPath) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "builtin:trash",
-            91,
-            Arc::new(Trash) as Arc<dyn ContextMenuProvider>,
-        ),
-    ];
-    for (id, priority, implementation) in implementations {
-        let rule = match id {
-            "builtin:tags" => ProviderMatchRule {
+            117,
+            ProviderMatchRule {
+                selection: Some("nonzero".into()),
                 storage: Some(LocationMatch {
                     provider_ids: Some(vec!["core:local-fs".into()]),
                     ..Default::default()
                 }),
                 ..Default::default()
             },
-            "builtin:connection-cache" => ProviderMatchRule {
-                storage: Some(LocationMatch {
-                    types: Some(vec!["vfs".into()]),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            "builtin:new-folder" => ProviderMatchRule {
-                selection: Some("zero".into()),
-                required_ops: vec![FsOperation::Mkdir],
-                exclude: Some(exclude_views(&["core:trash", "core:recent"])),
-                ..Default::default()
-            },
-            "builtin:new-file" => ProviderMatchRule {
-                selection: Some("zero".into()),
-                required_ops: vec![FsOperation::Write],
-                exclude: Some(special_view_exclude()),
-                ..Default::default()
-            },
-            "builtin:opening" => ProviderMatchRule {
-                exclude: Some(exclude_views(&["core:applications"])),
-                ..Default::default()
-            },
-            "builtin:rename"
-            | "builtin:batch-rename"
-            | "builtin:clipboard"
-            | "builtin:copy-path"
-            | "builtin:trash" => ProviderMatchRule {
-                exclude: Some(special_view_exclude()),
-                ..Default::default()
-            },
-            _ => ProviderMatchRule::default(),
-        };
+            Action::Tags,
+        ),
+        ("builtin:new-folder", 110, new_folder, Action::NewFolder),
+        ("builtin:new-file", 109, new_file, Action::NewFile),
+        (
+            "builtin:rename",
+            106,
+            required("single", &[FsOperation::Rename]),
+            Action::Rename,
+        ),
+        (
+            "builtin:batch-rename",
+            105,
+            required("multi", &[FsOperation::Rename]),
+            Action::BatchRename,
+        ),
+        (
+            "builtin:copy",
+            103,
+            required("nonzero", &[FsOperation::Read]),
+            Action::Copy,
+        ),
+        (
+            "builtin:cut",
+            102,
+            required("nonzero", &[FsOperation::Read, FsOperation::Remove]),
+            Action::Cut,
+        ),
+        (
+            "builtin:duplicate",
+            101,
+            required("nonzero", &[FsOperation::Read, FsOperation::Write]),
+            Action::Duplicate,
+        ),
+        (
+            "builtin:copy-path",
+            100,
+            selection("nonzero"),
+            Action::CopyPath,
+        ),
+        ("builtin:pin", 90, storage_vfs("nonzero"), Action::Pin),
+        ("builtin:unpin", 89, storage_vfs("nonzero"), Action::Unpin),
+        ("builtin:cache", 88, storage_vfs("nonzero"), Action::Cache),
+        (
+            "builtin:uncache",
+            87,
+            storage_vfs("nonzero"),
+            Action::Uncache,
+        ),
+        (
+            "builtin:conflict-resolution",
+            86,
+            storage_vfs("nonzero"),
+            Action::ConflictResolution,
+        ),
+        (
+            "builtin:move-to-trash",
+            10,
+            move_to_trash,
+            Action::MoveToTrash,
+        ),
+        (
+            "builtin:delete-permanently",
+            9,
+            delete_permanently,
+            Action::DeletePermanently,
+        ),
+    ];
+    for (id, priority, rule, action) in actions {
         values
-            .register(id, priority, rule, implementation)
+            .register(
+                id,
+                priority,
+                rule,
+                Arc::new(AtomicMenuAction(action)) as Arc<dyn ContextMenuProvider>,
+            )
             .expect("invalid builtin menu registration");
     }
 }
 
-pub(super) fn item(id: &str, title: &'static str, icon: &str, shortcut: &str) -> MenuItem {
-    // Availability decides presence; a builtin item is never greyed out.
-    let mut item = MenuItem::action(id, crate::i18n::t(title));
+pub(super) fn item(
+    id: &str,
+    title: &'static str,
+    icon: &str,
+    shortcut: &str,
+) -> fiex_provider_contracts::MenuItem {
+    let mut item = fiex_provider_contracts::MenuItem::action(id, crate::i18n::t(title));
     item.icon = Some(icon.into());
     item.shortcut = (!shortcut.is_empty()).then(|| shortcut.into());
     item

@@ -3,8 +3,8 @@ use super::shared::*;
 use super::*;
 use fiex_provider_contracts::{
     ExportPreflight, ImportPreflight, MovePreflight, PreflightDecision, PreflightHandlers,
-    PreflightPhase, ProviderError, ProviderInvocation, RemoveMode, RemovePreflight,
-    RenamePreflight, VfsProvider,
+    PreflightPhase, ProviderError, ProviderInvocation, RemovePreflight, RenamePreflight,
+    VfsProvider,
 };
 use std::{
     io::{self, Write},
@@ -193,11 +193,6 @@ fn check_application_remove(
     if request.node_ids.len() != 1 || request.node_ids[0] != source.path {
         return Err(ProviderError::invalid_params(
             "remove IDs do not match the scoped resource",
-        ));
-    }
-    if request.mode != RemoveMode::Permanent {
-        return Ok(PreflightDecision::deny(
-            "Applications items must be permanently deleted",
         ));
     }
     if !applications::is_user(&source.path) {

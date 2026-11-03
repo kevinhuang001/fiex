@@ -113,7 +113,7 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
     {
         return Err("menu session expired or item was not offered".into());
     }
-    let ctx = builtin::Context::load(&session.directory, &session.paths)?;
+    let ctx = builtin::Context::load_for_menu(&session.directory, &session.paths, true)?;
     let request = ProviderRequest {
         method: "contextMenu.execute".into(),
         params: json!({

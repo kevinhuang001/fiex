@@ -178,6 +178,19 @@ pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String
     provider.remove(&request).map_err(provider_error_text)
 }
 
+pub fn trash_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String> {
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let invocation = shared::broker_invocation(
+        broker,
+        None,
+        "vfs.trash",
+        json!({"nodeId":broker.path.as_str()}),
+    );
+    let request = FsRequest::new(&invocation, FsOperation::Trash).map_err(provider_error_text)?;
+    provider.trash(&request).map_err(provider_error_text)
+}
+
 pub fn search_for(
     broker: &crate::core::fs::ResourceBroker,
     query: &str,

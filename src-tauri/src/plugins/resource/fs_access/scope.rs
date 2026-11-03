@@ -108,6 +108,7 @@ impl Scope {
                     | "host.fs.writeBuffer"
                     | "host.fs.commit"
                     | "host.fs.remove"
+                    | "host.fs.trash"
                     | "host.fs.rename"
                     | "host.process.run"
                     | "host.vfs.openView"

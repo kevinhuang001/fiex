@@ -16,6 +16,7 @@ pub(super) fn decorated_entry(path: &str, mut entry: Entry) -> Entry {
         FsOperation::Write,
         FsOperation::Mkdir,
         FsOperation::Rename,
+        FsOperation::Trash,
         FsOperation::Remove,
     ]
     .into_iter()

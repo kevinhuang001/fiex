@@ -192,10 +192,7 @@ pub(super) fn plan(
     let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(name);
     let relative_name = relative_target_name(policy_parent, &target, final_name);
     if action == TransferKind::Move {
-        source.review_remove(
-            crate::plugin_sdk::filesystem::RemoveMode::Permanent,
-            PreflightPhase::Execute,
-        )?;
+        source.review_remove(PreflightPhase::Execute)?;
     }
     if same_mount && action == TransferKind::Move {
         source.review_move(policy_parent, Some(&relative_name), PreflightPhase::Execute)?;

@@ -26,7 +26,7 @@ mod trash_provider;
 use application_provider::ApplicationView;
 pub use broker::{
     list_for, mkdir_for, preflight_for, read_for, remove_for, rename_for, require_for, search_for,
-    stat_for, write_sized_for,
+    stat_for, trash_for, write_sized_for,
 };
 pub(crate) use presentation::recent_reveal_source;
 pub use presentation::{default_view, icon_for, opaque, resource_entry};

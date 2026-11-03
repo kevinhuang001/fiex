@@ -1,6 +1,6 @@
 // Native menu DTO fixtures for browser tests. Never imported by desktop code.
 import { t } from '@/i18n'
-import { demoRemoteEntries, demoRemoteRoot, root } from '../data'
+import { demoRemoteEntries, demoRemoteRoot } from '../data'
 import { state } from '../handlers/shared'
 import { handleFiles } from '../handlers/files'
 import type { CoreMenu, CoreMenuItem } from '@/components/explorer/context-menu/useContextMenu'
@@ -13,12 +13,29 @@ const sessions = new Map<
 export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const paths = a.paths as string[]
   const directory = String(a.directory)
+  const recentView = directory === 'recent://' || directory === 'recent:'
+  const trashView = directory === 'trash://' || directory === 'recyclebin://'
   const allEntries = [...state.entries, ...demoRemoteEntries]
   const entries = paths.map((path) => allEntries.find((entry) => entry.path === path))
-  const remote = paths.every((path) => path.startsWith(demoRemoteRoot))
+  const remote = paths.length > 0 && paths.every((path) => path.startsWith(demoRemoteRoot))
   const selectedOps = entries.map((entry) => entry?.allowedOps || [])
+  const appOps = paths.map((path) =>
+    path.startsWith('applications://')
+      ? /^applications:\/\/(?:user\/|~)/.test(path)
+        ? ['stat', 'remove']
+        : ['stat']
+      : path.startsWith('trash://') || path.startsWith('recyclebin://')
+        ? ['stat', 'remove']
+        : [],
+  )
+  const ops = selectedOps.map((values, index) => {
+    const effective = values.length ? values : appOps[index]
+    return recentView
+      ? effective.filter((operation) => operation === 'stat' || operation === 'read')
+      : effective
+  })
   const permits = (operation: string) =>
-    selectedOps.length > 0 && selectedOps.every((ops) => ops.includes(operation))
+    ops.length > 0 && ops.every((allowed) => allowed.includes(operation))
   const platform = new URLSearchParams(location.search).get('platform') || ''
   // Mirrors Core: an unavailable operation is skipped, never emitted disabled.
   const item = (
@@ -30,15 +47,17 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const groups: [string, CoreMenuItem[]][] = [
     [
       'opening',
-      [
-        item('open', '打开', 'open'),
-        ...(paths.length === 1
-          ? [
-              item('preview', '快速查看', 'eye', 'quickLook'),
-              item('info', '显示简介', 'info', 'info'),
-            ]
-          : []),
-      ],
+      paths.length === 0
+        ? []
+        : [
+            item('open', '打开', 'open'),
+            ...(paths.length === 1
+              ? [
+                  ...(permits('read') ? [item('preview', '快速查看', 'eye', 'quickLook')] : []),
+                  item('info', '显示简介', 'info', 'info'),
+                ]
+              : []),
+          ],
     ],
   ]
   // Tags and the terminal are local-only in Core, and both need a writable item.
@@ -54,13 +73,11 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   groups.push([
     'clipboard',
     [
-      item('copy', '复制', 'copy', 'copy'),
-      ...(!permits('remove') && !permits('write')
-        ? []
-        : [
-            item('cut', '剪切', 'scissors', 'cut'),
-            item('duplicate', '创建副本', 'copy', 'duplicate'),
-          ]),
+      ...(permits('read') ? [item('copy', '复制', 'copy', 'copy')] : []),
+      ...(permits('read') && permits('remove') ? [item('cut', '剪切', 'scissors', 'cut')] : []),
+      ...(permits('read') && permits('write')
+        ? [item('duplicate', '创建副本', 'copy', 'duplicate')]
+        : []),
     ],
   ])
   groups.push(['copy-path', [item('copyPath', '复制路径', 'copy')]])
@@ -98,30 +115,67 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   if (trashGroup) {
     const canRemove = permits('remove')
     trashGroup[1] = (
-      directory.startsWith(root + '/.Trash')
-        ? [
-            item('restore', '放回原处', 'restore'),
+      trashView
+        ? paths.length === 0
+          ? [item('emptyTrash', '清空废纸篓', 'trash')]
+          : [
+              item('restore', '放回原处', 'restore'),
+              ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
+            ]
+        : [
+            ...(permits('trash') ? [item('trash', '移到废纸篓', 'trash', 'trash')] : []),
             ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
           ]
-        : canRemove
-          ? [item('trash', '移到废纸篓', 'trash', 'trash')]
-          : []
     ).map((item) => ({ ...item, placement: 'tail', danger: item.id !== 'restore' }))
   }
   for (const [id, session] of sessions)
     if (Date.now() - session.created >= 90000) sessions.delete(id)
-  return groups
-    .filter(([, items]) => items.length)
-    .map(([id, items]) => {
-      const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
-      sessions.set(menuSessionId, {
-        paths: [...paths],
-        directory,
-        actions: new Set(items.filter((item) => !item.disabled).map((item) => item.id)),
-        created: Date.now(),
-      })
-      return { kind: 'builtin', providerId: 'builtin:' + id, menuSessionId, items }
+  const providerForAction: Record<string, string> = {
+    open: 'builtin:open',
+    preview: 'builtin:preview',
+    info: 'builtin:info',
+    tags: 'builtin:tags',
+    rename: 'builtin:rename',
+    batchRename: 'builtin:batch-rename',
+    copy: 'builtin:copy',
+    cut: 'builtin:cut',
+    duplicate: 'builtin:duplicate',
+    copyPath: 'builtin:copy-path',
+    'remote.pin': 'builtin:pin',
+    'remote.unpin': 'builtin:unpin',
+    'remote.cache': 'builtin:cache',
+    'remote.uncache': 'builtin:uncache',
+    'remote.keepLocal': 'builtin:conflict-resolution',
+    'remote.keepRemote': 'builtin:conflict-resolution',
+    trash: 'builtin:move-to-trash',
+    delete: 'builtin:delete-permanently',
+    restore: 'builtin:restore',
+    emptyTrash: 'builtin:empty-trash',
+  }
+  const menus: CoreMenu[] = []
+  const addMenu = (providerId: string, items: CoreMenuItem[]) => {
+    const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
+    sessions.set(menuSessionId, {
+      paths: [...paths],
+      directory,
+      actions: new Set(items.filter((item) => !item.disabled).map((item) => item.id)),
+      created: Date.now(),
     })
+    menus.push({ kind: 'builtin', providerId, menuSessionId, items })
+  }
+  for (const [, items] of groups) {
+    const conflicts = items.filter(
+      (item) => item.id === 'remote.keepLocal' || item.id === 'remote.keepRemote',
+    )
+    if (conflicts.length) addMenu('builtin:conflict-resolution', conflicts)
+    for (const current of items) {
+      if (conflicts.includes(current)) continue
+      const providerId = providerForAction[current.id]
+      if (!providerId) throw new Error(`Unknown demo Core menu action: ${current.id}`)
+      addMenu(providerId, [current])
+    }
+  }
+  return menus
 }
 export async function executeDemoBuiltin(a: Record<string, unknown>) {
   const id = String(a.menuSessionId || '')

@@ -61,6 +61,7 @@ pub(super) fn intercept(
         "host.fs.beginWrite",
         "host.fs.mkdir",
         "host.fs.remove",
+        "host.fs.trash",
         "host.fs.rename",
     ];
     if TARGET_METHODS.contains(&method) && params.get("ref").is_none() {

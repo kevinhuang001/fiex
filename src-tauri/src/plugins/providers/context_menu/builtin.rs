@@ -3,7 +3,7 @@ use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{MenuExecuteResult, MenuItem};
+use fiex_provider_contracts::MenuExecuteResult;
 #[cfg(test)]
 use serde_json::Value;
 use std::sync::Arc;
@@ -20,8 +20,6 @@ pub(super) struct Context {
     all_local: bool,
     capabilities: FileCapabilities,
     pub(super) preflight: MenuPreflightAvailability,
-    native_view_providers: Vec<Resolver>,
-    claimed_actions: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -30,6 +28,7 @@ pub(super) struct MenuPreflightAvailability {
     pub new_folder: bool,
     pub rename: bool,
     pub batch_rename: bool,
+    pub trash: bool,
     pub remove: bool,
 }
 
@@ -44,10 +43,6 @@ fn plain_local(path: &str) -> bool {
 }
 
 impl Context {
-    pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
-        Self::load_internal(directory, paths, false)
-    }
-
     pub fn load_for_menu(
         directory: &str,
         paths: &[String],
@@ -147,8 +142,6 @@ impl Context {
             .map(|entry| ResourceSnapshot::from_entry(directory, entry));
         let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
-        let (native_view_providers, claimed_actions) =
-            super::native_views::resolve_snapshot(directory, paths);
         let mut context = Self {
             directory: directory.into(),
             paths: paths.to_vec(),
@@ -160,8 +153,6 @@ impl Context {
             all_local,
             capabilities,
             preflight: MenuPreflightAvailability::default(),
-            native_view_providers,
-            claimed_actions,
         };
         if resolve_preflight {
             context.preflight = file_ops::preflight_availability(&context);
@@ -180,10 +171,6 @@ impl Context {
 
     pub(super) fn capabilities(&self) -> FileCapabilities {
         self.capabilities
-    }
-
-    pub(super) fn has_unclaimed_action(&self, id: &str) -> bool {
-        !self.claimed_actions.iter().any(|claimed| claimed == id)
     }
 
     /// Tests build menus without touching the mount registry.
@@ -206,25 +193,40 @@ impl Context {
         entries: Vec<crate::core::files::Entry>,
         capabilities: FileCapabilities,
     ) -> Self {
-        let resources = Arc::new(
-            entries
-                .iter()
-                .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-                .collect::<Vec<_>>(),
-        );
-        let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
-        let directory_resource = None;
+        let mut resources = entries
+            .iter()
+            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+            .collect::<Vec<_>>();
+        for resource in &mut resources {
+            resource.operations = Some(capabilities);
+        }
+        let resources = Arc::new(resources);
+        let mut match_targets =
+            crate::plugins::events::matching::match_resources(resources.as_slice());
+        let allowed_operations = capabilities
+            .into_allowed_ops()
+            .iter()
+            .filter_map(|operation| fiex_provider_contracts::FsOperation::parse(operation))
+            .collect::<Vec<_>>();
+        for target in &mut match_targets {
+            target.capabilities.operations = allowed_operations.clone();
+        }
+        let mut directory_resource = Some(ResourceSnapshot::from_metadata(
+            directory,
+            crate::plugins::contracts::ResourceMetadata {
+                name: directory.into(),
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        ));
+        if let Some(resource) = directory_resource.as_mut() {
+            resource.operations = Some(capabilities);
+        }
         let mut directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         if let Some(target) = directory_target.as_mut() {
-            target.capabilities.operations = capabilities
-                .into_allowed_ops()
-                .iter()
-                .filter_map(|operation| fiex_provider_contracts::FsOperation::parse(operation))
-                .collect();
+            target.capabilities.operations = allowed_operations;
         }
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
-        let (native_view_providers, claimed_actions) =
-            super::native_views::resolve_snapshot(directory, &paths);
         Self {
             directory: directory.into(),
             paths,
@@ -240,29 +242,16 @@ impl Context {
                 new_folder: true,
                 rename: true,
                 batch_rename: true,
+                trash: true,
                 remove: true,
             },
-            native_view_providers,
-            claimed_actions,
         }
     }
 }
 
-/// Only groups this selection can actually use become menu providers.
-pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuItem> {
-    items
-        .into_iter()
-        .filter(|item| !ctx.claimed_actions.contains(&item.id))
-        .collect()
-}
-
-/// Native and plugin contributions participate in the same EventRouter.
-/// A native view claims only its OS-specific action identifiers, not the
-/// entire menu. Generic providers still contribute independent actions.
+/// All Core providers participate in one in-process resolver pass.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    let mut candidates = ctx.native_view_providers.clone();
-    candidates.extend(file_ops::providers(ctx));
-    candidates
+    file_ops::providers(ctx)
 }
 
 #[cfg(test)]

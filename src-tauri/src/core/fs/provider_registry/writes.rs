@@ -64,10 +64,7 @@ pub(in crate::core::fs) fn mkdir(resource: &ResourceBroker) -> Result<Value, FsE
 
 pub(in crate::core::fs) fn remove(resource: &ResourceBroker) -> Result<(), FsError> {
     require(resource, FsOperation::Remove, false)?;
-    resource.review_remove(
-        crate::plugin_sdk::filesystem::RemoveMode::Permanent,
-        PreflightPhase::Execute,
-    )?;
+    resource.review_remove(PreflightPhase::Execute)?;
     match resolve(&resource.path)? {
         Route::NativeProvider => native_vfs::remove_for(resource).map_err(FsError::from),
         Route::Plugin => {
@@ -140,6 +137,7 @@ pub(in crate::core::fs) fn preflight(
                 PreflightOperation::CreateFolder(args) => args.parent_id = node,
                 PreflightOperation::Import(args) => args.parent_id = node,
                 PreflightOperation::Rename(args) => args.node_id = node,
+                PreflightOperation::Trash(args) => args.node_ids = vec![node],
                 PreflightOperation::Export(args) => args.node_id = node,
                 PreflightOperation::Remove(args) => args.node_ids = vec![node],
                 PreflightOperation::Move(args) => {
@@ -166,12 +164,13 @@ pub(in crate::core::fs) fn preflight(
 }
 
 pub(in crate::core::fs) fn move_to_trash(resource: &ResourceBroker) -> Result<(), FsError> {
-    if native_vfs::shared_provider_id(&resource.path) == Some("core:local-fs") {
-        let mut result = crate::core::operations::recycle(std::slice::from_ref(&resource.path))?;
-        if let Some(error) = result.errors.pop() {
-            return Err(error.into());
+    require(resource, FsOperation::Trash, false)?;
+    resource.review_trash(PreflightPhase::Execute)?;
+    match resolve(&resource.path)? {
+        Route::NativeProvider => native_vfs::trash_for(resource).map_err(FsError::from),
+        Route::Plugin => {
+            let (mount, node) = plugin::plugin_node(resource)?;
+            mount.trash(&node).map_err(FsError::from)
         }
-        return Ok(());
     }
-    remove(resource)
 }

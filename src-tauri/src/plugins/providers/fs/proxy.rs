@@ -160,6 +160,11 @@ impl VfsProvider for IpcVfsProvider {
         Ok(())
     }
 
+    fn trash(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
+        self.invoke(request.ctx(), "vfs.trash", request.to_params()?)?;
+        Ok(())
+    }
+
     fn search(
         &self,
         request: &FsRequest<'_>,
@@ -225,6 +230,14 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
                 .map_err(|error| error.to_string())?;
             provider
                 .remove(&request)
+                .map_err(|error| error.to_string())?;
+            Ok(Value::Null)
+        }
+        "vfs.trash" => {
+            let request = FsRequest::new(&invocation, FsOperation::Trash)
+                .map_err(|error| error.to_string())?;
+            provider
+                .trash(&request)
                 .map_err(|error| error.to_string())?;
             Ok(Value::Null)
         }

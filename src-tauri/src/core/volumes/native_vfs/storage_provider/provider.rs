@@ -15,6 +15,7 @@ impl VfsProvider for StorageProvider {
             FsOperation::Write,
             FsOperation::Mkdir,
             FsOperation::Rename,
+            FsOperation::Trash,
             FsOperation::Remove,
         ]
     }
@@ -145,6 +146,22 @@ impl VfsProvider for StorageProvider {
             ));
         }
         fs_access::remove(&resource.scope, &resource.path).map_err(provider_error)
+    }
+
+    fn trash(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
+        let resource = self.validate_node(request)?;
+        self.authorize_storage(&resource, FsOperation::Trash, false)?;
+        if usbfs::route(&resource.path).is_some() {
+            return Err(ProviderError::invalid_params(
+                "Unsupported: USB filesystem fallback does not support Trash",
+            ));
+        }
+        let result = crate::core::operations::recycle(std::slice::from_ref(&resource.path))
+            .map_err(provider_error)?;
+        if let Some(error) = result.errors.into_iter().next() {
+            return Err(provider_error(error));
+        }
+        Ok(())
     }
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
