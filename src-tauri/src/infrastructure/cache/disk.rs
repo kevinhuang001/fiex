@@ -5,7 +5,11 @@ use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc::{self, SyncSender},
+        Arc, OnceLock,
+    },
 };
 
 const SCHEMA: u32 = 2;
@@ -13,6 +17,22 @@ const MAX_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DISK_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_FILES: usize = 2_000;
 static WRITES: AtomicUsize = AtomicUsize::new(0);
+type DiskJob = Box<dyn FnOnce() + Send + 'static>;
+
+fn writer() -> &'static SyncSender<DiskJob> {
+    static WRITER: OnceLock<SyncSender<DiskJob>> = OnceLock::new();
+    WRITER.get_or_init(|| {
+        let (sender, receiver) = mpsc::sync_channel::<DiskJob>(64);
+        let _ = std::thread::Builder::new()
+            .name("fiex-directory-cache".into())
+            .spawn(move || {
+                while let Ok(job) = receiver.recv() {
+                    job();
+                }
+            });
+        sender
+    })
+}
 
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
@@ -97,9 +117,40 @@ pub fn store<T: Serialize>(key: &str, value: &T) {
         prune(root);
     }
 }
+/// Queue optional snapshot persistence so a fresh VFS listing never waits for
+/// cache serialization, file IO, or disk pruning.
+pub(crate) fn store_shared_async<T, F>(key: String, value: Arc<T>, is_current: F)
+where
+    T: Serialize + Send + Sync + 'static,
+    F: Fn() -> bool + Send + 'static,
+{
+    let job: DiskJob = Box::new(move || {
+        if is_current() {
+            store(&key, value.as_ref());
+        }
+    });
+    if let Err(mpsc::TrySendError::Disconnected(job)) = writer().try_send(job) {
+        job();
+    }
+}
 pub fn remove(key: &str) {
     if let Some(path) = file(key) {
         let _ = fs::remove_file(path);
+    }
+}
+pub(crate) fn remove_many_async(keys: Vec<String>) {
+    if keys.is_empty() {
+        return;
+    }
+    let job: DiskJob = Box::new(move || {
+        for key in keys {
+            remove(&key);
+        }
+    });
+    // Mutations must be ordered after any accepted store jobs so an old
+    // snapshot cannot be recreated after invalidation.
+    if let Err(error) = writer().send(job) {
+        (error.0)();
     }
 }
 fn prune(root: &Path) {

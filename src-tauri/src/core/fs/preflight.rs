@@ -2,6 +2,7 @@
 //! flows. Capabilities remain the authorization boundary; Preflight can only
 //! add a dynamic restriction.
 use super::*;
+use crate::infrastructure::cache::lru::LruMap;
 use crate::plugin_sdk::filesystem::{
     CreateFilePreflight, CreateFolderPreflight, ExportPreflight, ImportPreflight, MovePreflight,
     PreflightOperation, PreflightPhase, PreflightRequest, RemovePreflight, RenamePreflight,
@@ -9,7 +10,6 @@ use crate::plugin_sdk::filesystem::{
 };
 use fiex_provider_contracts::TransferMetadata;
 use std::{
-    collections::HashMap,
     sync::{Arc, Condvar, Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -43,8 +43,8 @@ impl AvailabilityCell {
     }
 }
 
-fn availability_cache() -> &'static Mutex<HashMap<AvailabilityCacheKey, Arc<AvailabilityCell>>> {
-    static CACHE: OnceLock<Mutex<HashMap<AvailabilityCacheKey, Arc<AvailabilityCell>>>> =
+fn availability_cache() -> &'static Mutex<LruMap<AvailabilityCacheKey, Arc<AvailabilityCell>>> {
+    static CACHE: OnceLock<Mutex<LruMap<AvailabilityCacheKey, Arc<AvailabilityCell>>>> =
         OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
@@ -111,33 +111,45 @@ impl ResourceBroker {
             resource_revision: super::changes::revision(&self.path),
             request: request.clone(),
         };
-        let now = Instant::now();
-        let (cell, owns_check) = match availability_cache().lock() {
+        let (cell, owns_check, cache_full) = match availability_cache().lock() {
             Ok(mut cache) => {
-                cache.retain(|_, cell| {
-                    let status = cell
-                        .status
-                        .lock()
-                        .unwrap_or_else(|error| error.into_inner());
-                    match &*status {
-                        AvailabilityStatus::Pending => true,
-                        AvailabilityStatus::Ready { created, .. } => {
-                            now.duration_since(*created) < AVAILABILITY_CACHE_TTL
+                if let Some(cell) = cache.get_mut(&key) {
+                    (Some(Arc::clone(cell)), false, false)
+                } else {
+                    while cache.len() >= AVAILABILITY_CACHE_LIMIT {
+                        let evicted = cache
+                            .pop_lru_where(|_, cell| {
+                                let status = cell
+                                    .status
+                                    .lock()
+                                    .unwrap_or_else(|error| error.into_inner());
+                                matches!(&*status, AvailabilityStatus::Ready { .. })
+                            })
+                            .is_some();
+                        if !evicted {
+                            break;
                         }
                     }
-                });
-                if let Some(cell) = cache.get(&key) {
-                    (Arc::clone(cell), false)
-                } else {
                     if cache.len() >= AVAILABILITY_CACHE_LIMIT {
-                        cache.clear();
+                        (None, false, true)
+                    } else {
+                        let cell = Arc::new(AvailabilityCell::pending());
+                        let _ = cache.insert(key, Arc::clone(&cell));
+                        (Some(cell), true, false)
                     }
-                    let cell = Arc::new(AvailabilityCell::pending());
-                    cache.insert(key, Arc::clone(&cell));
-                    (cell, true)
                 }
             }
-            Err(_) => return self.check_preflight(None, request).is_ok(),
+            Err(_) => (None, false, true),
+        };
+
+        if cache_full {
+            let started = Instant::now();
+            let allowed = self.check_preflight(None, request).is_ok();
+            record_availability(request, false, started.elapsed(), allowed, &self.path);
+            return allowed;
+        }
+        let Some(cell) = cell else {
+            return self.check_preflight(None, request).is_ok();
         };
 
         if !owns_check {
@@ -145,7 +157,7 @@ impl ResourceBroker {
                 .status
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
-            loop {
+            let cached = loop {
                 match &*status {
                     AvailabilityStatus::Pending => {
                         status = cell
@@ -156,19 +168,18 @@ impl ResourceBroker {
                     AvailabilityStatus::Ready { created, allowed }
                         if created.elapsed() < AVAILABILITY_CACHE_TTL =>
                     {
-                        let allowed = *allowed;
-                        eprintln!(
-                            "vfs preflight availability op={} cacheHit=true decision={}",
-                            request.op().as_str(),
-                            if allowed { "allow" } else { "deny" }
-                        );
-                        return allowed;
+                        break Some(*allowed);
                     }
                     AvailabilityStatus::Ready { .. } => {
                         *status = AvailabilityStatus::Pending;
-                        break;
+                        break None;
                     }
                 }
+            };
+            if let Some(allowed) = cached {
+                drop(status);
+                record_availability(request, true, Duration::ZERO, allowed, &self.path);
+                return allowed;
             }
         }
 
@@ -182,19 +193,7 @@ impl ResourceBroker {
             allowed,
         };
         cell.ready.notify_all();
-        eprintln!(
-            "vfs preflight availability op={} transport={} elapsed_ms={} cacheHit=false decision={}",
-            request.op().as_str(),
-            if crate::core::fs::provider_registry::resource_access(&self.path)
-                .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::Provider)
-            {
-                "ipc"
-            } else {
-                "native"
-            },
-            started.elapsed().as_millis(),
-            if allowed { "allow" } else { "deny" }
-        );
+        record_availability(request, false, started.elapsed(), allowed, &self.path);
         allowed
     }
 
@@ -382,6 +381,39 @@ impl ResourceBroker {
             ),
         )
     }
+}
+
+fn record_availability(
+    request: &PreflightRequest,
+    cache_hit: bool,
+    elapsed: Duration,
+    allowed: bool,
+    path: &str,
+) {
+    static TRACE: OnceLock<bool> = OnceLock::new();
+    if !*TRACE.get_or_init(|| std::env::var_os("FIEX_TRACE_PREFLIGHT").is_some()) {
+        return;
+    }
+    let transport = if crate::core::fs::provider_registry::resource_access(path)
+        .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::Provider)
+    {
+        "ipc"
+    } else {
+        "native"
+    };
+    let event = serde_json::json!({
+        "operation": request.op().as_str(),
+        "phase": "availability",
+        "transport": transport,
+        "elapsedMs": elapsed.as_millis(),
+        "cacheHit": cache_hit,
+        "decision": if allowed { "allow" } else { "deny" },
+    });
+    crate::infrastructure::logging::record_core(
+        "debug",
+        "host.fs.preflight.availability",
+        &event.to_string(),
+    );
 }
 
 fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
