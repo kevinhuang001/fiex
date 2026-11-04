@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import { isVirtualResource } from '@/lib/files'
@@ -73,7 +74,6 @@ export function useOpenActions({
       async () => {
         const outcome = await runBeforeOpenHooks(e)
         if (outcome.handled) {
-          pane.reload()
           return
         }
         if (remote) await call('remote_open', { path: e.path, onProgress })
@@ -104,7 +104,7 @@ export function useOpenActions({
       async () => {
         await call('remote_download', { path: entry.path, onProgress })
         setPreview(entry)
-        pane.reload()
+        requestDirectoryRefresh([pane.path])
       },
       entry.name,
       true,
@@ -114,17 +114,13 @@ export function useOpenActions({
       },
     )
   }
-  const openTrash = () => {
-    const destination = 'trash://'
+  const openLocation = (destination: string) => {
     setPreview(null)
-    if (x.path === destination) x.reload()
+    if (x.path === destination) requestDirectoryRefresh([x.path])
     else x.navigate(destination)
   }
-  const openApplications = () => {
-    setPreview(null)
-    if (x.path === 'applications://') x.reload()
-    else x.navigate('applications://')
-  }
+  const openTrash = () => openLocation('trash://')
+  const openApplications = () => openLocation('applications://')
   const terminal = (id = prefs.terminal) => {
     if (isVirtualResource(x.path) || (first && isVirtualResource(first.path))) return
     if (id === 'builtin') {
@@ -164,7 +160,7 @@ export function useOpenActions({
     try {
       await call('set_tags', { paths: tagPaths, tags })
       setTagOpen(false)
-      x.reload()
+      requestDirectoryRefresh([x.path])
       notify(t('标签已更新'))
     } catch (error) {
       const message = String(error)

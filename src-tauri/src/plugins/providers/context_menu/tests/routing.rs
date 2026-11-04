@@ -104,10 +104,10 @@ fn recent_location_still_offers_open_without_a_filesystem_directory() {
 #[test]
 fn core_and_plugin_scopes_keep_their_owner() {
     let (_temp, directory, paths) = temp_selection();
-    let core = super::query_core(&directory, &paths[..1]).unwrap().menus;
+    let core = super::query_core(&directory, &paths[..1], None).unwrap();
     assert!(!core.is_empty());
     assert!(core.iter().all(|menu| menu["kind"] == "builtin"));
-    let plugins = super::query_plugins(&directory, &paths[..1]).unwrap();
+    let plugins = super::query_plugins(&directory, &paths[..1], None).unwrap();
     assert!(plugins.iter().all(|menu| menu["kind"] == "plugin"));
     // The one-batch contract stays available for callers that still need it.
     let all = super::query(&directory, &paths[..1]).unwrap();

@@ -16,7 +16,6 @@ export function restoreActions({ x, notify, run }: FileOpsContext) {
         if (restored === undefined) return
         notify(t('已复原 {0} 个项目', restored))
         x.setSelected([])
-        x.reload()
       },
       undefined,
       true,

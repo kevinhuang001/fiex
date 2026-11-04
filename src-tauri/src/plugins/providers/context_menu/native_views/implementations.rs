@@ -91,6 +91,48 @@ impl ContextMenuProvider for Reveal {
     }
 }
 
+pub(super) struct RemoveFromRecent;
+impl ContextMenuProvider for RemoveFromRecent {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        if ctx.method() != "contextMenu.resolve" {
+            return Err(ProviderError::method_not_found(ctx.method()));
+        }
+        let (_, paths) = selection(ctx)?;
+        if paths.is_empty() || paths.iter().any(|path| !path.starts_with("recent://")) {
+            return Ok(Vec::new());
+        }
+        let mut item = MenuItem::action(
+            "removeFromRecent",
+            crate::i18n::t(if paths.len() == 1 {
+                "从最近使用中移除"
+            } else {
+                "从最近使用中移除选中项"
+            }),
+        );
+        item.icon = Some("trash".into());
+        item.danger = true;
+        item.placement = Some(fiex_provider_contracts::MenuPlacement::Tail);
+        Ok(vec![item])
+    }
+
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        if ctx.method() != "contextMenu.execute" {
+            return Err(ProviderError::method_not_found(ctx.method()));
+        }
+        let (directory, paths) = selection(ctx)?;
+        let id = offered(ctx, &self.resolve(&resolve_invocation(ctx)?)?)?;
+        if id != "removeFromRecent" || paths.is_empty() {
+            return Err(ProviderError::invalid_params(
+                "remove from Recent requires one or more Recent aliases",
+            ));
+        }
+        let store = NativeProviderInvocation::storage(ctx, "history")?;
+        crate::core::recent::remove_aliases_with_storage(&paths, &store)
+            .map_err(ProviderError::internal)?;
+        Ok(core_action("removeFromRecent", paths, &directory))
+    }
+}
+
 pub(super) struct Restore;
 impl ContextMenuProvider for Restore {
     fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {

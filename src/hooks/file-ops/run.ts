@@ -1,5 +1,6 @@
 import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { Explorer } from '@/hooks/useExplorer'
 import { useRef } from 'react'
@@ -57,14 +58,14 @@ export function useRunner({
     try {
       const result = await fn()
       if (activity && !hold?.value) finishActivity(activity)
-      x.reload()
+      requestDirectoryRefresh([x.path])
       return result
     } catch (e) {
       const message = String(e)
       if (message.startsWith('Cancelled:')) {
         // Cancelling is the user's choice; the activity centre already says so.
         // Refresh because a stopped transfer may still have moved some files.
-        x.reload()
+        requestDirectoryRefresh([x.path])
       } else {
         const location = detail?.trim() || (x.selected.length ? x.selected.join('\n') : x.path)
         if (reportFilesystemPermissionError(message, `${label}\n${location}`)) {

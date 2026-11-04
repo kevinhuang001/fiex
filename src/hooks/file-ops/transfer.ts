@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { parentDirectoryOf, requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import type { ConflictResolution, OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
@@ -61,9 +62,9 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     }
     setConflict(null)
     if (moving) setClipboard(null)
-    // Virtual destinations (Applications) have no filesystem watcher; reload
-    // the current pane so imported shortcuts appear immediately.
-    if (destination === x.path) x.reload()
+    if (result.paths.length) {
+      requestDirectoryRefresh([destination, ...(moving ? paths.map(parentDirectoryOf) : [])])
+    }
     if (result.errors.length) {
       const message = t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n'))
       const context = t(

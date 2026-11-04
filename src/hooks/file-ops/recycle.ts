@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import type { OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
@@ -15,7 +16,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
     if (result.errors.length)
       throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
     x.setSelected([])
-    x.reload()
+    requestDirectoryRefresh(['trash://', 'recyclebin://'])
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
   const recycle = (selection = x.selected) => {
@@ -67,7 +68,6 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
           'delete',
         )
         x.setSelected([])
-        x.reload()
       },
     })
   }
@@ -86,7 +86,6 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
         )
         if (removed === undefined) return
         x.setSelected([])
-        x.reload()
       },
     })
   }

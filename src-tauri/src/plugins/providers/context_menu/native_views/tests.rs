@@ -5,7 +5,12 @@ use crate::core::volumes::{recycle, trash_vfs};
 fn only_view_specific_actions_have_native_view_providers() {
     assert_eq!(
         PROVIDER_IDS,
-        ["builtin:reveal", "builtin:restore", "builtin:empty-trash"]
+        [
+            "builtin:reveal",
+            "builtin:remove-from-recent",
+            "builtin:restore",
+            "builtin:empty-trash"
+        ]
     );
     assert!(providers("applications://", &["applications://system-app".into()]).is_empty());
 }
@@ -30,7 +35,23 @@ fn restore_is_single_selection_and_empty_trash_is_root_only() {
             "emptyTrash"
         );
     }
+    assert!(
+        resolve("builtin:empty-trash", "trash://nested", &[]).unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert!(providers("recent://", &[]).is_empty());
+    let recent = vec!["recent://one".into(), "recent://two".into()];
+    assert_eq!(
+        providers("recent://", &recent)[0].id,
+        "builtin:remove-from-recent"
+    );
+    let resolved = resolve("builtin:remove-from-recent", "recent://", &recent).unwrap();
+    assert_eq!(
+        resolved["items"].as_array().unwrap()[0]["id"],
+        "removeFromRecent"
+    );
     assert!(providers("/tmp", &[]).is_empty());
 }
 

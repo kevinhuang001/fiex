@@ -17,10 +17,15 @@ use serde_json::Value;
 use std::sync::Arc;
 
 mod implementations;
-use implementations::{EmptyTrash, Restore, Reveal};
+use implementations::{EmptyTrash, RemoveFromRecent, Restore, Reveal};
 
 #[cfg(test)]
-const PROVIDER_IDS: [&str; 3] = ["builtin:reveal", "builtin:restore", "builtin:empty-trash"];
+const PROVIDER_IDS: [&str; 4] = [
+    "builtin:reveal",
+    "builtin:remove-from-recent",
+    "builtin:restore",
+    "builtin:empty-trash",
+];
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     for (id, owner, selection, priority, implementation) in [
@@ -30,6 +35,13 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             "single",
             80,
             Arc::new(Reveal) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:remove-from-recent",
+            "core:recent",
+            "nonzero",
+            79,
+            Arc::new(RemoveFromRecent) as Arc<dyn ContextMenuProvider>,
         ),
         (
             "builtin:restore",

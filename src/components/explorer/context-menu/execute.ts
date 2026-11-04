@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { ContextMenuProps } from './types'
@@ -73,6 +74,9 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'emptyTrash':
       props.emptyTrash()
       break
+    case 'removeFromRecent':
+      requestDirectoryRefresh([effect.directory])
+      break
     case 'copyPath':
       return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))
     default:
@@ -88,7 +92,7 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
       onProgress,
     })
     if ('kind' in effect && effect.kind === 'coreAction') await applyCoreAction(effect, props)
-    else props.x.reload()
+    else requestDirectoryRefresh([props.x.path])
   }
   try {
     if (item.activity)

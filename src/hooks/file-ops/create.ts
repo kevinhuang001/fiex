@@ -14,11 +14,9 @@ export function createActions({ x, run }: FileOpsContext) {
     } catch (cause) {
       const message = String(cause)
       if (!reportFilesystemPermissionError(message, `stat\n${path}`)) x.setError(message)
-      x.reload()
       return
     }
     if (entry.allowedOps?.includes('rename')) x.beginRename(path, entry)
-    else x.reload()
   }
   const create = async () => {
     if (!x.directoryAllowedOps.includes('mkdir')) {

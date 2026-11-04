@@ -93,6 +93,32 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
     Ok(entries)
 }
 
+/// Reconstruct the metadata captured in an opaque Recycle Bin identity without
+/// enumerating the Shell namespace. The identity is only a menu/list snapshot;
+/// destructive operations still enumerate and validate the current item before
+/// invoking its Shell verb.
+#[cfg(target_os = "windows")]
+pub fn stat(uri: &str) -> Result<Entry, String> {
+    let encoded = uri
+        .strip_prefix(URI)
+        .filter(|encoded| !encoded.is_empty() && !encoded.contains('/'))
+        .ok_or("InvalidVfsUri: invalid Recycle Bin item")?;
+    let item: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)
+        .map_err(|_| crate::i18n::t("回收站项目无效").to_string())?;
+    Ok(entry(
+        item.name,
+        uri.to_owned(),
+        item.folder,
+        &item.original,
+        &item.deleted,
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn stat(_uri: &str) -> Result<Entry, String> {
+    Err("Unsupported: Recycle Bin item is unavailable".into())
+}
+
 #[cfg(target_os = "windows")]
 fn verb_script(encoded: &str, verbs: &[&str]) -> Result<(), String> {
     let item: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)

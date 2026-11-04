@@ -11,7 +11,7 @@ pub use icons::cached_icon;
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 
 pub const URI: &str = "applications://";
 
@@ -75,7 +75,43 @@ fn store_system_entries(entries: &[Entry]) {
         .unwrap_or_else(|error| error.into_inner()) = Some(entries.to_vec());
 }
 
+#[derive(Default)]
+struct EnumerationState {
+    running: bool,
+    last_result: Option<Result<Vec<Entry>, String>>,
+}
+
+fn enumeration_state() -> &'static (Mutex<EnumerationState>, Condvar) {
+    static STATE: OnceLock<(Mutex<EnumerationState>, Condvar)> = OnceLock::new();
+    STATE.get_or_init(|| (Mutex::new(EnumerationState::default()), Condvar::new()))
+}
+
 fn refresh_system_entries() -> Result<Vec<Entry>, String> {
+    let (state, completed) = enumeration_state();
+    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
+    if current.running {
+        while current.running {
+            current = completed
+                .wait(current)
+                .unwrap_or_else(|error| error.into_inner());
+        }
+        return current
+            .last_result
+            .clone()
+            .unwrap_or_else(|| Err("application enumeration did not produce a result".into()));
+    }
+    current.running = true;
+    drop(current);
+
+    let result = enumerate_system_entries();
+    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
+    current.last_result = Some(result.clone());
+    current.running = false;
+    completed.notify_all();
+    result
+}
+
+fn enumerate_system_entries() -> Result<Vec<Entry>, String> {
     let mut entries = platform::platform_list()?;
     let records = entries
         .iter()

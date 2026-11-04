@@ -6,52 +6,12 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { openDirectoryStream } from '@/lib/listing'
+import { sameListing, sameStringSet } from '@/lib/listingDiff'
 import { isVirtualResource } from '@/lib/files'
 import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
-function sameListing(previous: Entry[], next: Entry[]): boolean {
-  return (
-    previous.length === next.length &&
-    previous.every((entry, index) => {
-      const value = next[index]
-      return (
-        entry.path === value.path &&
-        entry.name === value.name &&
-        entry.isDir === value.isDir &&
-        entry.isSymlink === value.isSymlink &&
-        entry.size === value.size &&
-        entry.modified === value.modified &&
-        entry.created === value.created &&
-        entry.extension === value.extension &&
-        entry.mime === value.mime &&
-        entry.linkTarget === value.linkTarget &&
-        entry.hasCache === value.hasCache &&
-        entry.pinned === value.pinned &&
-        entry.uploaded === value.uploaded &&
-        entry.sync === value.sync &&
-        sameArray(entry.allowedOps, value.allowedOps) &&
-        entry.tags.length === value.tags.length &&
-        entry.tags.every(
-          (tag, tagIndex) =>
-            tag.name === value.tags[tagIndex].name &&
-            tag.color === value.tags[tagIndex].color &&
-            tag.hex === value.tags[tagIndex].hex,
-        )
-      )
-    })
-  )
-}
-
-function sameArray(previous: string[] | undefined, next: string[] | undefined): boolean {
-  return (
-    previous === next ||
-    (previous !== undefined &&
-      next !== undefined &&
-      previous.length === next.length &&
-      previous.every((value, index) => value === next[index]))
-  )
-}
+const MAX_PAINTED_DIRECTORIES = 32
 
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and current-directory capabilities. Path, history and tab
@@ -100,6 +60,9 @@ export function useListing(
   const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
+  const [renderedPath, setRenderedPath] = useState('')
+  const paintedByPath = useRef(new Map<string, Entry[]>())
+  const renderedPathRef = useRef('')
   const request = useRef(0)
   const locationsRequest = useRef(0)
   const searchRequest = useRef(0)
@@ -120,6 +83,15 @@ export function useListing(
       void stop.then((unlisten) => unlisten())
     }
   }, [enabled, connections, path, reload])
+  useEffect(() => {
+    if (!enabled || !path) return
+    const refresh = (event: Event) => {
+      const directories = (event as CustomEvent<{ directories?: unknown }>).detail?.directories
+      if (Array.isArray(directories) && directories.includes(path)) reload()
+    }
+    window.addEventListener('fiex:directory-mutated', refresh)
+    return () => window.removeEventListener('fiex:directory-mutated', refresh)
+  }, [enabled, path, reload])
   const locationsKey = useRef('')
   const locationsPending = useRef<Promise<Location[]> | null>(null)
   const refreshLocations = useCallback(
@@ -212,8 +184,20 @@ export function useListing(
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
-    let paintedEntries: Entry[] | null = null
-    setLoading(true)
+    let paintedEntries = paintedByPath.current.get(path) ?? null
+    if (paintedEntries) {
+      paintedByPath.current.delete(path)
+      paintedByPath.current.set(path, paintedEntries)
+      if (renderedPathRef.current !== path) {
+        renderedPathRef.current = path
+        setRenderedPath(path)
+        setEntries(paintedEntries)
+      }
+      setListedPath(path)
+      setLoading(false)
+    } else {
+      setLoading(renderedPathRef.current !== path)
+    }
     setError('')
     void openDirectoryStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
       if (!active || id !== request.current) return
@@ -264,7 +248,9 @@ export function useListing(
           return previous
         return Object.fromEntries(snapshot.decorations.map((value) => [value.path, value]))
       })
-      setDirectoryAllowedOps(l.allowedOps || [])
+      setDirectoryAllowedOps((previous) =>
+        sameStringSet(previous, l.allowedOps || []) ? previous : l.allowedOps || [],
+      )
       setVirtualVolume(Boolean(l.virtualVolume))
       setDefaultView(l.defaultView || null)
       setWarnings((previous) =>
@@ -273,9 +259,30 @@ export function useListing(
           ? previous
           : l.warnings,
       )
-      if (paintedEntries === null || !sameListing(paintedEntries, displayedEntries)) {
-        paintedEntries = displayedEntries
-        setEntries(displayedEntries)
+      const priorSnapshot = paintedByPath.current.get(path)
+      const previousPainted = paintedEntries
+      const stableEntries =
+        priorSnapshot && sameListing(priorSnapshot, displayedEntries)
+          ? priorSnapshot
+          : displayedEntries
+      paintedEntries = stableEntries
+      if (priorSnapshot !== stableEntries) {
+        paintedByPath.current.delete(path)
+        paintedByPath.current.set(path, stableEntries)
+        while (paintedByPath.current.size > MAX_PAINTED_DIRECTORIES) {
+          const oldest = paintedByPath.current.keys().next().value
+          if (oldest === undefined) break
+          paintedByPath.current.delete(oldest)
+        }
+      }
+      if (
+        renderedPathRef.current !== path ||
+        !previousPainted ||
+        !sameListing(previousPainted, stableEntries)
+      ) {
+        renderedPathRef.current = path
+        setRenderedPath(path)
+        setEntries(stableEntries)
         const paths = new Set(l.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((p) => paths.has(p)))
       }
@@ -468,9 +475,10 @@ export function useListing(
     },
     [entries, getLocale()],
   )
+  const pathEntries = renderedPath === path ? entries : (paintedByPath.current.get(path) ?? [])
   const visibleEntries = tagFilter
-    ? entries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
-    : entries
+    ? pathEntries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
+    : pathEntries
   const setTagFilter = (tag: string | null) => {
     setTagFilterState(tag)
     setSelected([])

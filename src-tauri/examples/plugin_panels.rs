@@ -56,6 +56,7 @@ fn main() {
             let menu = fiex_lib::plugins::providers::context_menu::query_plugins(
                 &directory_path,
                 &[file.to_string_lossy().into_owned()],
+                None,
             )
             .expect("dynamic menu resolve failed")
             .into_iter()

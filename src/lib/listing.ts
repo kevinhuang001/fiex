@@ -37,6 +37,32 @@ export interface DirectoryViewUpdate {
   presentationPending: boolean
 }
 
+/** Ask every visible pane showing one of these directories to apply its
+ * cache-first snapshot and complete the usual live-list reconciliation. */
+export function requestDirectoryRefresh(directories: string[]) {
+  const unique = [...new Set(directories.filter(Boolean))]
+  if (!unique.length || typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent('fiex:directory-mutated', { detail: { directories: unique } }),
+  )
+}
+
+export function parentDirectoryOf(path: string): string {
+  const scheme = path.indexOf('://')
+  if (scheme >= 0) {
+    const rootEnd = scheme + 3
+    const trimmed = path.replace(/\/+$/, '')
+    const separator = trimmed.lastIndexOf('/')
+    return separator < rootEnd ? path.slice(0, rootEnd) : trimmed.slice(0, separator)
+  }
+  const trimmed = path.replace(/[\\/]+$/, '')
+  const separator = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  if (separator < 0) return ''
+  if (separator === 0) return trimmed.slice(0, 1)
+  if (separator === 2 && /^[A-Za-z]:/.test(trimmed)) return trimmed.slice(0, 3)
+  return trimmed.slice(0, separator)
+}
+
 /** One logical navigation call. Core owns the cache, live revalidation and
  * presentation query; callers receive ordinary snapshots, not cache sources. */
 export function openDirectoryStream(

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getLocale } from '@/i18n'
 import type { ShortcutAction } from '@/lib/shortcuts'
 import { call } from '@/lib/api'
+import { validPluginMenuItems, type PluginMenu } from '@/components/plugins/PluginMenuNode'
 import type { ContextMenuProps } from './types'
 
 export interface CoreMenuItem {
@@ -26,21 +27,22 @@ interface CoreSnapshot {
   key: string
   menu: NonNullable<ContextMenuProps['menu']>
   menus: CoreMenu[]
-  hasEligiblePlugins: boolean
 }
-interface CoreMenuResolution {
-  menus: CoreMenu[]
-  hasEligiblePlugins: boolean
+interface PluginSnapshot {
+  key: string
+  menu: NonNullable<ContextMenuProps['menu']>
+  menus: PluginMenu[]
 }
-interface CoreFailure {
+interface MenuFailure {
   key: string
   menu: NonNullable<ContextMenuProps['menu']>
   error: string
 }
+const EMPTY_PLUGIN_MENUS: PluginMenu[] = []
 
-/** Resolve Core-owned rows only. Plugin contributions live in the lazy "插件"
- *  submenu, so the first visible top-level menu is complete and never grows
- *  when a plugin answers later. */
+/** Start Core and plugin resolution from the same right-click session. Core
+ *  readiness controls the first-level menu; plugin results update only its
+ *  fixed submenu entry and never change the first-level layout. */
 export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>) {
   const paths = menu?.entry
     ? [
@@ -52,21 +54,26 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     : []
   const selectionKey = JSON.stringify(paths)
   const key = JSON.stringify([menu?.x, menu?.y, x.path, selectionKey, getLocale()])
+  const sessionId = useMemo(() => crypto.randomUUID(), [key, menu])
   const [snapshot, setSnapshot] = useState<CoreSnapshot>()
-  const [failure, setFailure] = useState<CoreFailure>()
+  const [pluginSnapshot, setPluginSnapshot] = useState<PluginSnapshot>()
+  const [failure, setFailure] = useState<MenuFailure>()
+  const [pluginFailure, setPluginFailure] = useState<MenuFailure>()
+  const [pluginRetry, setPluginRetry] = useState(0)
+
   useEffect(() => {
     if (!menu) return
     let active = true
     setFailure(undefined)
-    void call<CoreMenuResolution>('plugin_context_menu_resolve', {
+    void call<CoreMenu[]>('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'core',
+      sessionId,
     })
       .then((result) => {
-        if (!result || !Array.isArray(result.menus))
-          throw new Error('Invalid Core context menu response')
-        if (active) setSnapshot({ key, menu, ...result })
+        if (!Array.isArray(result)) throw new Error('Invalid Core context menu response')
+        if (active) setSnapshot({ key, menu, menus: result })
       })
       .catch((error) => {
         if (active) setFailure({ key, menu, error: String(error) })
@@ -74,14 +81,56 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     return () => {
       active = false
     }
-  }, [key, menu])
+  }, [key, menu, sessionId])
+
+  useEffect(() => {
+    if (!menu) return
+    let active = true
+    setPluginFailure(undefined)
+    void call<PluginMenu[]>('plugin_context_menu_resolve', {
+      directory: x.path,
+      paths: JSON.parse(selectionKey),
+      source: 'plugins',
+      sessionId,
+    })
+      .then((result) => {
+        if (!Array.isArray(result)) throw new Error('Invalid plugin menu response')
+        const menus = result.filter(
+          (candidate): candidate is PluginMenu =>
+            !!candidate &&
+            typeof candidate.pluginId === 'string' &&
+            typeof candidate.menuSessionId === 'string' &&
+            validPluginMenuItems(candidate.items),
+        )
+        if (active) setPluginSnapshot({ key, menu, menus })
+      })
+      .catch((error) => {
+        if (active) setPluginFailure({ key, menu, error: String(error) })
+      })
+    return () => {
+      active = false
+    }
+  }, [key, menu, pluginRetry, sessionId])
+
   const current = snapshot && snapshot.key === key && snapshot.menu === menu ? snapshot : undefined
   const currentFailure =
     failure && failure.key === key && failure.menu === menu ? failure.error : ''
+  const currentPlugins =
+    pluginSnapshot && pluginSnapshot.key === key && pluginSnapshot.menu === menu
+      ? pluginSnapshot
+      : undefined
+  const currentPluginFailure =
+    pluginFailure && pluginFailure.key === key && pluginFailure.menu === menu
+      ? pluginFailure.error
+      : ''
+
   return {
     paths,
     menus: current?.menus ?? [],
-    hasEligiblePlugins: current?.hasEligiblePlugins ?? false,
+    pluginMenus: currentPlugins?.menus ?? EMPTY_PLUGIN_MENUS,
+    pluginLoading: Boolean(menu) && !currentPlugins && !currentPluginFailure,
+    pluginError: currentPluginFailure,
+    retryPlugins: () => setPluginRetry((value) => value + 1),
     ready: Boolean(current || currentFailure),
     error: currentFailure,
   }

@@ -21,17 +21,24 @@ import {
 interface Context {
   paths: string[]
   path: string
+  menus: PluginMenu[]
+  loading: boolean
+  error: string
+  onRetry: () => void
 }
 
 export function PluginContextActions({
   paths,
   path,
+  menus: resolvedMenus,
+  loading,
+  error,
+  onRetry,
   onClose,
   onError,
 }: Context & { onClose: () => void; onError: (error: string) => void }) {
   const plugins = usePluginCatalog()
   const [menus, setMenus] = useState<PluginMenu[]>([])
-  const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [openChild, setOpenChild] = useState<string | null>(null)
   const [flip, setFlip] = useState({ left: false, up: false })
@@ -41,9 +48,6 @@ export function PluginContextActions({
   const closeTimer = useRef<number | null>(null)
   const focusFirst = useRef(false)
   const selectionKey = JSON.stringify([path, paths])
-  const loadedKey = useRef('')
-  const loadingKey = useRef(false)
-  const requestVersion = useRef(0)
   const cancelClose = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
     closeTimer.current = null
@@ -59,17 +63,15 @@ export function PluginContextActions({
     if (!open) setOpenChild(null)
   }, [open])
   useEffect(() => {
-    // A new selection gets a fresh lazy request; stale responses are ignored.
-    requestVersion.current += 1
+    // A new selection invalidates any nested menus from the previous session.
     requestedSubmenus.current.clear()
-    loadedKey.current = ''
-    loadingKey.current = false
-    setMenus([])
-    setLoading(false)
     setOpen(false)
     setOpenChild(null)
     setFlip({ left: false, up: false })
   }, [selectionKey])
+  useEffect(() => {
+    setMenus((previous) => (previous === resolvedMenus ? previous : resolvedMenus))
+  }, [resolvedMenus])
   useLayoutEffect(() => {
     if (!open || !submenu.current) return
     if (focusFirst.current) {
@@ -90,47 +92,6 @@ export function PluginContextActions({
     const up = anchor.top - 6 + height > window.innerHeight - 8 && anchor.bottom + 6 - height >= 8
     setFlip((current) => (current.left === left && current.up === up ? current : { left, up }))
   }, [open, menus, loading])
-
-  // Plugin contributions are only requested when the submenu is actually
-  // opened, so they can never resize the top-level menu.
-  const loadPlugins = () => {
-    const key = selectionKey
-    if (loadedKey.current === key || loadingKey.current) return
-    loadingKey.current = true
-    setLoading(true)
-    const version = ++requestVersion.current
-    void call<PluginMenu[]>('plugin_context_menu_resolve', {
-      directory: path,
-      paths,
-      source: 'plugins',
-    })
-      .then((response) => {
-        if (version !== requestVersion.current) return
-        if (!Array.isArray(response)) throw new Error('Invalid plugin menu response')
-        setMenus(
-          response.filter(
-            (menu): menu is PluginMenu =>
-              !!menu &&
-              typeof menu.pluginId === 'string' &&
-              typeof menu.menuSessionId === 'string' &&
-              validPluginMenuItems(menu.items),
-          ),
-        )
-        loadedKey.current = key
-      })
-      .catch((error) => {
-        if (version === requestVersion.current) {
-          loadedKey.current = ''
-          onError(String(error))
-        }
-      })
-      .finally(() => {
-        if (version === requestVersion.current) {
-          loadingKey.current = false
-          setLoading(false)
-        }
-      })
-  }
 
   const resolveSubmenu = async (menu: PluginMenu, submenuId: string) => {
     const key = menu.menuSessionId + ':' + submenuId
@@ -240,7 +201,6 @@ export function PluginContextActions({
       onMouseEnter={() => {
         cancelClose()
         setOpen(true)
-        loadPlugins()
       }}
       onMouseLeave={scheduleClose}
     >
@@ -254,7 +214,6 @@ export function PluginContextActions({
           cancelClose()
           // Hover already opens the menu; a click must not immediately close it.
           setOpen(true)
-          loadPlugins()
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -262,7 +221,6 @@ export function PluginContextActions({
             event.stopPropagation()
             focusFirst.current = true
             setOpen(true)
-            loadPlugins()
           } else if (event.key === 'Escape' && open) {
             event.stopPropagation()
             setOpen(false)
@@ -292,6 +250,15 @@ export function PluginContextActions({
         >
           {loading ? (
             <p className="context-submenu-empty">{t('正在加载插件操作…')}</p>
+          ) : error ? (
+            <div className="context-submenu-empty">
+              <p>
+                {t('加载插件操作失败')}: {error}
+              </p>
+              <button role="menuitem" onClick={onRetry}>
+                {t('重试')}
+              </button>
+            </div>
           ) : hasItems ? (
             <SubmenuGroupContext.Provider value={{ openId: openChild, setOpenId: setOpenChild }}>
               {menus.flatMap((menu) =>
@@ -314,9 +281,7 @@ export function PluginContextActions({
               )}
             </SubmenuGroupContext.Provider>
           ) : (
-            <p className="context-submenu-empty">
-              {t('没有可用的插件操作，请确认插件已激活且是新版安装包。')}
-            </p>
+            <p className="context-submenu-empty">{t('无可用插件操作')}</p>
           )}
         </div>
       )}
