@@ -5,7 +5,6 @@ use super::builtin::{builtin_view, Builtin};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-#[cfg(test)]
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
     LocationMatch, MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
@@ -156,6 +155,15 @@ pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView,
 
 pub(super) fn provider(id: &str) -> Option<Arc<dyn PreviewProvider>> {
     registry().get_arc(id)
+}
+
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resource: &ResourceSnapshot,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
 }
 
 #[cfg(test)]

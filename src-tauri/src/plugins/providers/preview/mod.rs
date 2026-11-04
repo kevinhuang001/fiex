@@ -185,8 +185,20 @@ fn resolve_preview(
         "preview.open",
         providers,
         &invocation,
-        |_, provider, context| {
-            provider.open(context).map_err(|error| {
+        |resolver, provider, context| {
+            let result = if resolver.plugin.is_none() {
+                let native = native::invocation(
+                    &resolver.id,
+                    request.method.clone(),
+                    request.params.clone(),
+                    resource.as_ref(),
+                )?
+                .with_user_action_context(user_action);
+                provider.open(&native)
+            } else {
+                provider.open(context)
+            };
+            result.map_err(|error| {
                 if error.message == UNSUPPORTED {
                     UNSUPPORTED.to_string()
                 } else {

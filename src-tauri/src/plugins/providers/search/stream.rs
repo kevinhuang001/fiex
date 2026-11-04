@@ -68,12 +68,21 @@ pub fn run_stream(
             resolver: engine.resolver.clone(),
             implementation: engine.implementation.clone(),
         };
-        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
-            call.method.clone(),
-            call.params.clone(),
-            &resources,
-            None,
-        );
+        let invocation = if engine.resolver.plugin.is_none() {
+            super::native::invocation(
+                &engine.resolver.id,
+                call.method.clone(),
+                call.params.clone(),
+                &resources,
+            )?
+        } else {
+            crate::plugins::native_invocation::NativeProviderInvocation::new(
+                call.method.clone(),
+                call.params.clone(),
+                &resources,
+                None,
+            )
+        };
         let (page_truncated, next) = EventRouter::resolve_shared(
             "search.query",
             vec![candidate],

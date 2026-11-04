@@ -31,7 +31,7 @@ impl ConnectionContextMenuProvider for Edit {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
-        let item = available_action(self, invocation)?;
+        let item = available_action("builtin:connection-edit", self, invocation)?;
         if item != "connection.edit" {
             return Err(ProviderError::invalid_params(
                 "unknown connection edit action",
@@ -73,7 +73,7 @@ impl ConnectionContextMenuProvider for Session {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
-        let item = available_action(self, invocation)?;
+        let item = available_action("builtin:connection-session", self, invocation)?;
         if !matches!(
             item.as_str(),
             "connection.saveSession" | "connection.toggleAutostart"
@@ -110,7 +110,7 @@ impl ConnectionContextMenuProvider for SyncMenu {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
-        let item = available_action(self, invocation)?;
+        let item = available_action("builtin:connection-sync", self, invocation)?;
         if item != "connection.syncNow" {
             return Err(ProviderError::invalid_params(
                 "connection does not support sync action",
@@ -144,7 +144,7 @@ impl ConnectionContextMenuProvider for Close {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
-        let item = available_action(self, invocation)?;
+        let item = available_action("builtin:connection-close", self, invocation)?;
         if item != "connection.close" {
             return Err(ProviderError::invalid_params(
                 "unknown connection close action",

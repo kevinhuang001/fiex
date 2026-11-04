@@ -1,6 +1,7 @@
 //! Ref-only public file protocol. All host paths below this layer are Core
 //! implementation details and must never be accepted from a plugin payload.
 use super::{run, Actor, Running};
+use crate::plugins::{provider_registry::FsOperation, security::policy::Capability};
 use serde_json::{json, Value};
 
 pub(super) fn intercept(
@@ -34,6 +35,43 @@ pub(super) fn intercept(
             });
         }
         return Ok(Some(json!({"results":results})));
+    }
+    if method == "host.fs.resolveMapped" {
+        let scope = actor.scope.as_ref().ok_or("no operation scope")?;
+        let locator = params
+            .get("locator")
+            .and_then(Value::as_str)
+            .filter(|locator| !locator.is_empty() && locator.len() <= 4096)
+            .ok_or("invalid mapped resource locator")?;
+        let operation = params
+            .get("operation")
+            .and_then(Value::as_str)
+            .and_then(FsOperation::parse)
+            .ok_or("invalid mapped resource operation")?;
+        if operation == FsOperation::Search {
+            return Err("Unsupported: mapped search is unavailable through Host.fs".into());
+        }
+        let user_action = scope.user_action_context();
+        let bound = scope
+            .reference_for_path(locator)
+            .ok()
+            .and_then(|reference| scope.resource_bound(&reference).ok())
+            .unwrap_or(false);
+        if !bound && user_action.is_none() {
+            return Err("NeedsAuthorization: mapped resource requires a user action".into());
+        }
+        let snapshot =
+            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(locator)?;
+        running.ensure_permission(mapped_capability(operation, snapshot.is_dir))?;
+        let (resource, snapshot) = crate::core::fs::mapped_access::authorize_snapshot(
+            snapshot,
+            scope,
+            &actor.owner,
+            user_action,
+            operation,
+        )?;
+        scope.bind_mapped_resource(snapshot, operation)?;
+        return Ok(Some(json!({"ref":resource.reference})));
     }
     if method == "host.fs.child" {
         let scope = actor.scope.as_ref().ok_or("no operation scope")?;
@@ -83,6 +121,20 @@ pub(super) fn intercept(
         }
     }
     Ok(None)
+}
+
+fn mapped_capability(operation: FsOperation, is_dir: bool) -> Capability {
+    match operation {
+        FsOperation::List | FsOperation::Search => Capability::FoldersRead,
+        FsOperation::Stat => Capability::Metadata,
+        FsOperation::Read => Capability::FilesRead,
+        FsOperation::Write => Capability::FilesWrite,
+        FsOperation::Mkdir => Capability::FoldersCreate,
+        FsOperation::Rename if is_dir => Capability::FoldersRename,
+        FsOperation::Rename => Capability::FilesRename,
+        FsOperation::Trash | FsOperation::Remove if is_dir => Capability::FoldersDelete,
+        FsOperation::Trash | FsOperation::Remove => Capability::FilesDelete,
+    }
 }
 
 pub(super) fn metadata(value: &Value) -> Value {

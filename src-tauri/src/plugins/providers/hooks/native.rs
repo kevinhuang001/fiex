@@ -40,11 +40,12 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn HookProvider>> {
 }
 
 pub(super) fn invocation(
+    id: &str,
     method: impl Into<String>,
     params: serde_json::Value,
     targets: &[crate::plugins::resource::resource_context::ResourceSnapshot],
 ) -> Result<crate::plugins::native_invocation::NativeProviderInvocation, String> {
-    registry().invocation("core:recent.hook", method, params, targets, None)
+    registry().invocation(id, method, params, targets, None)
 }
 
 #[cfg(test)]
@@ -74,19 +75,23 @@ mod tests {
             .unwrap();
         let hook = crate::plugins::native_invocation::NativeProviderInvocation::storage(
             &invocation,
-            "core:recent.hook",
             "owner-binding-test",
         )
         .unwrap();
+        let unbound = crate::plugins::native_invocation::NativeProviderInvocation::new(
+            "hooks.invoke",
+            serde_json::json!({"event":"afterOpen"}),
+            &[],
+            None,
+        );
         assert!(
             crate::plugins::native_invocation::NativeProviderInvocation::storage(
-                &invocation,
-                "core:other.hook",
+                &unbound,
                 "owner-binding-test"
             )
             .is_err()
         );
-        let vfs = crate::core::volumes::native_vfs::storage_for_provider(
+        let vfs = crate::core::volumes::native_vfs::management_storage_for_provider(
             "core:recent",
             "owner-binding-test",
         )

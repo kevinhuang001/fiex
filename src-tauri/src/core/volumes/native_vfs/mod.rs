@@ -43,6 +43,10 @@ pub const APPLICATIONS_URI: &str = applications::URI;
 
 #[cfg(feature = "desktop")]
 type OpenHandler = fn(&str) -> Result<(), String>;
+type ValidateChildHandler = fn(&str, &str) -> Result<(), String>;
+type ChildPathHandler =
+    fn(&str, &str, crate::core::fs::provider_registry::ChildKind) -> Result<String, String>;
+type ParentPathHandler = fn(&str) -> Result<String, String>;
 type SameMountMoveHandler = fn(
     &[crate::core::fs::ResourceBroker],
     &crate::core::fs::ResourceBroker,
@@ -52,6 +56,9 @@ type SameMountMoveHandler = fn(
 struct NativeVfsExtensions {
     #[cfg(feature = "desktop")]
     open: Option<OpenHandler>,
+    validate_child: Option<ValidateChildHandler>,
+    child_path: Option<ChildPathHandler>,
+    parent_path: Option<ParentPathHandler>,
     same_mount_move: Option<SameMountMoveHandler>,
 }
 
@@ -71,7 +78,10 @@ fn registration() -> &'static RegisteredNativeVfs {
                 "core:recent",
                 CoreOwnerKey::new("recent"),
                 Arc::new(RecentView) as Arc<dyn VfsProvider>,
-                NativeVfsExtensions::default(),
+                NativeVfsExtensions {
+                    validate_child: Some(validate_recent_child),
+                    ..NativeVfsExtensions::default()
+                },
             ),
             (
                 "core:applications",
@@ -80,6 +90,9 @@ fn registration() -> &'static RegisteredNativeVfs {
                 NativeVfsExtensions {
                     #[cfg(feature = "desktop")]
                     open: Some(applications::open),
+                    validate_child: Some(applications::validate_child),
+                    child_path: Some(applications_child_path),
+                    parent_path: Some(applications::parent_uri),
                     same_mount_move: Some(application_provider::move_within_mount),
                 },
             ),
@@ -87,19 +100,29 @@ fn registration() -> &'static RegisteredNativeVfs {
                 "core:trash",
                 CoreOwnerKey::new("core"),
                 Arc::new(TrashView) as Arc<dyn VfsProvider>,
-                NativeVfsExtensions::default(),
+                NativeVfsExtensions {
+                    validate_child: Some(trash_vfs::validate_child),
+                    ..NativeVfsExtensions::default()
+                },
             ),
             (
                 "core:local-fs",
                 CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
-                NativeVfsExtensions::default(),
+                NativeVfsExtensions {
+                    child_path: Some(host_child_path),
+                    ..NativeVfsExtensions::default()
+                },
             ),
             (
                 "core:usb-fs",
                 CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
-                NativeVfsExtensions::default(),
+                NativeVfsExtensions {
+                    validate_child: Some(usb_validate_child),
+                    child_path: Some(usb_child_path),
+                    ..NativeVfsExtensions::default()
+                },
             ),
         ] {
             registry
@@ -251,17 +274,12 @@ pub fn is_tree_path(path: &str) -> bool {
 /// Ask the owning native view to validate a child identity. Ordinary host paths
 /// are validated by the enclosing operation scope in Core's VFS router.
 pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
-    if crate::usbfs::route(parent).is_some() {
-        return crate::usbfs::validate_child(parent, child);
-    }
-    match provider_id(parent) {
-        Some("core:recent") if parent == RECENT_URI => {
-            crate::core::recent::source_for(child).map(|_| ())
-        }
-        Some("core:applications") => applications::validate_child(parent, child),
-        Some("core:trash") => trash_vfs::validate_child(parent, child),
-        _ => Err("Unsupported: provider does not support child identities".into()),
-    }
+    let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
+    registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.validate_child)
+        .ok_or("Unsupported: provider does not support child identities")?(parent, child)
 }
 
 pub(crate) fn child_path(
@@ -269,30 +287,23 @@ pub(crate) fn child_path(
     name: &str,
     kind: crate::core::fs::provider_registry::ChildKind,
 ) -> Result<String, String> {
-    match shared_provider_id(parent) {
-        Some("core:local-fs") => Ok(PathBuf::from(parent)
-            .join(name)
-            .to_string_lossy()
-            .into_owned()),
-        Some("core:usb-fs") => {
-            crate::usbfs::route(parent).ok_or("invalid USB parent")?;
-            Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
-        }
-        Some("core:applications") => {
-            let is_directory = match kind {
-                crate::core::fs::provider_registry::ChildKind::Folder => true,
-                crate::core::fs::provider_registry::ChildKind::File
-                | crate::core::fs::provider_registry::ChildKind::Application => false,
-            };
-            applications::reserve_child(parent, name, is_directory)
-        }
-        _ => Err("Unsupported: provider does not support child creation".into()),
-    }
+    let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
+    registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.child_path)
+        .ok_or("Unsupported: provider does not support child creation")?(parent, name, kind)
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
-    if applications::is_app(path) || applications::is_folder(path) {
-        return applications::parent_uri(path);
+    if let Some(provider) = shared_provider_id(path) {
+        if let Some(parent_path) = registration()
+            .extensions
+            .get(provider)
+            .and_then(|extensions| extensions.parent_path)
+        {
+            return parent_path(path);
+        }
     }
     if opaque(path) {
         return Err("view has no writable parent".into());
@@ -301,6 +312,46 @@ pub fn parent_path(path: &str) -> Result<String, String> {
         .parent()
         .map(|path| path.to_string_lossy().into_owned())
         .ok_or_else(|| "item has no parent".into())
+}
+
+fn validate_recent_child(parent: &str, child: &str) -> Result<(), String> {
+    if parent != RECENT_URI {
+        return Err("recent view has no writable child identities".into());
+    }
+    crate::core::recent::source_for(child).map(|_| ())
+}
+
+fn host_child_path(
+    parent: &str,
+    name: &str,
+    _kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    Ok(PathBuf::from(parent)
+        .join(name)
+        .to_string_lossy()
+        .into_owned())
+}
+
+fn usb_validate_child(parent: &str, child: &str) -> Result<(), String> {
+    crate::usbfs::validate_child(parent, child)
+}
+
+fn usb_child_path(
+    parent: &str,
+    name: &str,
+    _kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    crate::usbfs::route(parent).ok_or("invalid USB parent")?;
+    Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
+}
+
+fn applications_child_path(
+    parent: &str,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    let is_directory = matches!(kind, crate::core::fs::provider_registry::ChildKind::Folder);
+    applications::reserve_child(parent, name, is_directory)
 }
 
 pub fn tree_path_key(path: &str) -> Option<String> {
@@ -317,11 +368,11 @@ fn shared_view_for(path: &str) -> Option<&'static dyn VfsProvider> {
 
 /// Resolve Core private storage through the same registration that owns the
 /// provider identity. Callers select a provider capability, never an owner.
-pub(crate) fn storage_for_provider(
+pub(crate) fn management_storage_for_provider(
     provider_id: &str,
     scope: &str,
 ) -> Result<crate::infrastructure::provider_storage::native::NativeScopedStorage, String> {
-    registry().storage_for(provider_id, scope)
+    registry().management_storage_for(provider_id, scope)
 }
 
 #[cfg(test)]

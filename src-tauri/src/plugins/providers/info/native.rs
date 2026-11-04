@@ -95,6 +95,15 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
 }
 
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resource: &ResourceSnapshot,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

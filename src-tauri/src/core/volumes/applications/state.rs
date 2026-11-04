@@ -88,7 +88,7 @@ fn pending_reservations() -> &'static Mutex<HashMap<String, PendingReservation>>
 }
 
 fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
-    super::super::native_vfs::storage_for_provider("core:applications", SCOPE)
+    super::super::native_vfs::management_storage_for_provider("core:applications", SCOPE)
         .expect("Applications provider registration binds its storage owner")
 }
 
@@ -123,7 +123,11 @@ where
         if state.schema != SCHEMA {
             return Err("unsupported Applications state schema".into());
         }
+        let previous = state.clone();
         mutate(&mut state)?;
+        if state == previous {
+            return Ok(state);
+        }
         state.revision = state.revision.wrapping_add(1);
         validate_state(&state)?;
         Ok(state)

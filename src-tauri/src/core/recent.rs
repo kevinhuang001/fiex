@@ -22,7 +22,7 @@ struct RecentRecord {
 }
 
 fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
-    crate::core::volumes::native_vfs::storage_for_provider("core:recent", SCOPE)
+    crate::core::volumes::native_vfs::management_storage_for_provider("core:recent", SCOPE)
         .expect("Recent provider registration binds its storage owner")
 }
 

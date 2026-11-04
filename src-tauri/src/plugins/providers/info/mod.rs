@@ -122,7 +122,22 @@ fn resolve_info_with_partial(
         "info.resolve",
         providers,
         &invocation,
-        |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let mut native = native::invocation(
+                    &resolver.id,
+                    request.method.clone(),
+                    request.params.clone(),
+                    resource.as_ref(),
+                )?;
+                if let Some(user_action) = user_action {
+                    native = native.with_user_action_context(user_action);
+                }
+                provider.resolve(&native).map_err(|error| error.to_string())
+            } else {
+                provider.resolve(context).map_err(|error| error.to_string())
+            }
+        },
         |provider, mut sections| {
             let value = json!({"sections": &sections});
             crate::plugins::events::validate_result("info.resolve", &value)?;
