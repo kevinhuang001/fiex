@@ -145,7 +145,9 @@ impl Operations {
                         fs::rename(backup.path().join("original"), path).map_err(|e| e.to_string())
                     }
                 }
-                Undo::Created(path) => trash::delete(path).map_err(|e| e.to_string()),
+                Undo::Created(path) => {
+                    crate::core::volumes::move_to_trash(path).map_err(|error| error.to_string())
+                }
             };
             if let Err(e) = result {
                 actions.push(action);

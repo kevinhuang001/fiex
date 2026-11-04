@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
+import { parentDirectoryOf } from '@/lib/listing'
 import type { ConflictResolution, OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
@@ -15,9 +16,28 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     /** Continue the activity row a pending conflict dialog is holding. */
     resume?: string,
   ) => {
-    const shown = paths.slice(0, 5)
+    const sourceDirectories = moving
+      ? await Promise.all(
+          paths.map((path) => call<string>('file_parent', { path }).catch(() => undefined)),
+        )
+      : []
+    const affectedSourceDirectories = moving
+      ? paths.map((path, index) => sourceDirectories[index] ?? parentDirectoryOf(path))
+      : []
+    const actionablePaths = moving
+      ? paths.filter(
+          (path, index) =>
+            path !== destination &&
+            (sourceDirectories[index] ?? parentDirectoryOf(path)) !== destination,
+        )
+      : paths
+    if (!actionablePaths.length) return
+
+    const shown = actionablePaths.slice(0, 5)
     const source = `${shown.join('\n')}${
-      paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
+      actionablePaths.length > shown.length
+        ? t('\n… 另有 {0} 项', actionablePaths.length - shown.length)
+        : ''
     }`
     let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     let activityId = resume
@@ -25,17 +45,11 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     // finishing it and the resolution reuses the same id instead of adding a
     // second "copy" record to the status centre.
     const hold = { value: false }
-    let sourceDirectories = [x.path]
     const result = await run(
       moving ? t('正在移动…') : t('正在复制…'),
       async () => {
-        sourceDirectories = moving
-          ? await Promise.all(
-              paths.map((path) => call<string>('file_parent', { path }).catch(() => x.path)),
-            )
-          : []
         const next = await call<OperationResult>('transfer', {
-          paths,
+          paths: actionablePaths,
           destination,
           moving,
           keepBoth: false,
@@ -59,7 +73,7 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
       resume,
       (next) => {
         if (next === undefined || next.paths.length > 0)
-          return [...new Set([destination, ...(moving ? sourceDirectories : [])])]
+          return [...new Set([destination, ...affectedSourceDirectories])]
         return []
       },
     )
@@ -67,7 +81,13 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     if (result.conflicts?.length) {
       if (activityId)
         updateActivity(activityId, { detail: t('等待解决冲突…'), indeterminate: true })
-      setConflict({ paths, destination, moving, items: result.conflicts, activityId })
+      setConflict({
+        paths: actionablePaths,
+        destination,
+        moving,
+        items: result.conflicts,
+        activityId,
+      })
       return
     }
     setConflict(null)

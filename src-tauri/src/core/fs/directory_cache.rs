@@ -296,7 +296,6 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
     }
     drop_subtree(entry_path);
     super::mutation_overlay::remove(path, entry_path);
-    super::decoration_cache::invalidate(&key(path));
     disk::remove_many_async(vec![key(path)]);
     update_cached(&key(path), |data| {
         data.listing
@@ -309,7 +308,6 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
         return;
     }
     super::mutation_overlay::upsert(path, entry.clone());
-    super::decoration_cache::invalidate(&key(path));
     disk::remove_many_async(vec![key(path)]);
     update_cached(&key(path), |data| {
         if let Some(item) = data
@@ -360,7 +358,6 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
     drop_subtree(old_path);
     super::mutation_overlay::remove(path, old_path);
     super::mutation_overlay::upsert(path, entry.clone());
-    super::decoration_cache::invalidate(&key(path));
     disk::remove_many_async(vec![key(path)]);
     update_cached(&key(path), |data| {
         data.listing.entries.retain(|item| item.path != old_path);

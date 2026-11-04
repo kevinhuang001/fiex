@@ -136,17 +136,25 @@ describe('virtual addresses', () => {
       ['trash:\\', 'trash://'],
     ])
       expect(normalizeAddress(input)).toBe(expected)
-    expect(normalizeAddress('applications:\\folder\\folder-1')).toBe(
-      'applications://folder/folder-1',
+    expect(normalizeAddress('applications:\\folder_folder-1')).toBe(
+      'applications://folder_folder-1',
     )
   })
 
   it('keeps stable application IDs as provider-owned URIs', () => {
-    const folder = normalizeAddress('applications:\\folder\\folder-1')
-    expect(folder).toBe('applications://folder/folder-1')
+    const folder = normalizeAddress('applications:\\folder_folder-1')
+    expect(folder).toBe('applications://folder_folder-1')
     expect(displayAddress(folder)).toBe(folder)
     expect(basename(folder)).toBe('folder-1')
     expect(pathCrumbs(folder).map((crumb) => crumb.path)).toEqual(['applications://', folder])
+    const nestedApp = 'applications://folder_folder-1/app_app-1'
+    expect(parent(nestedApp)).toBe(folder)
+    expect(basename(nestedApp)).toBe('app-1')
+    expect(pathCrumbs(nestedApp).map((crumb) => crumb.path)).toEqual([
+      'applications://',
+      folder,
+      nestedApp,
+    ])
   })
 
   it('keeps breadcrumb parents virtual instead of producing applications:\\', () => {
@@ -158,6 +166,6 @@ describe('virtual addresses', () => {
   })
 
   it('preserves application provider IDs without path aliases', () => {
-    expect(normalizeAddress('applications://app/app-1')).toBe('applications://app/app-1')
+    expect(normalizeAddress('applications://app_app-1')).toBe('applications://app_app-1')
   })
 })

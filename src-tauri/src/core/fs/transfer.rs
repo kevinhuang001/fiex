@@ -32,23 +32,49 @@ pub fn transfer(
     cancel: &AtomicBool,
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<OperationResult, String> {
+    let mut effective_paths = paths.to_vec();
+    let mut move_sources = Vec::new();
+    let mut move_target = None;
+    if moving && !paths.is_empty() {
+        let target = binding::destination(destination, "core:transfer")?;
+        let mut actionable = Vec::with_capacity(paths.len());
+        for path in paths {
+            let source = binding::trusted(path, "core:transfer")?;
+            if source.path == target.path {
+                continue;
+            }
+            let source_parent = binding::parent_path(&source.path)?;
+            if source.reference.mount_id == target.reference.mount_id
+                && source_parent == target.path
+            {
+                continue;
+            }
+            actionable.push(source.path.clone());
+            move_sources.push(source);
+        }
+        if actionable.is_empty() {
+            return Ok(OperationResult::default());
+        }
+        effective_paths = actionable;
+        move_target = Some(target);
+    }
+
     let applications = destination == crate::core::volumes::applications::URI
         || crate::core::volumes::applications::is_folder(destination);
     if !applications
-        && paths.iter().any(|path| {
+        && effective_paths.iter().any(|path| {
             crate::core::volumes::applications::is_system_app(path)
                 || crate::core::volumes::application_policy::protected(path)
         })
     {
         return Err(crate::i18n::t("系统应用不能移出应用程序视图").into());
     }
-    if moving && !paths.is_empty() {
-        let target = binding::destination(destination, "core:transfer")?;
-        let sources = paths
-            .iter()
-            .map(|path| binding::trusted(path, "core:transfer"))
-            .collect::<Result<Vec<_>, _>>()?;
-        if let Some(paths) = crate::core::volumes::native_vfs::move_within_mount(&sources, &target)?
+    if moving && !effective_paths.is_empty() {
+        let target = move_target
+            .as_ref()
+            .ok_or("missing scoped move destination")?;
+        if let Some(paths) =
+            crate::core::volumes::native_vfs::move_within_mount(&move_sources, target)?
         {
             return Ok(OperationResult {
                 paths,
@@ -58,7 +84,7 @@ pub fn transfer(
     }
     #[cfg(target_os = "macos")]
     if let Some(result) = mac_app_bundle::import(
-        paths,
+        &effective_paths,
         destination,
         moving,
         keep_both,
@@ -69,14 +95,15 @@ pub fn transfer(
         return Ok(result);
     }
     #[cfg(target_os = "linux")]
-    if let Some(result) = linux_app_links::import(paths, destination, keep_both, cancel)? {
+    if let Some(result) = linux_app_links::import(&effective_paths, destination, keep_both, cancel)?
+    {
         return Ok(result);
     }
     let parent = binding::destination(destination, "core:transfer")?;
     let mut result = OperationResult::default();
     let mut steps = Vec::new();
     let mut sources = Vec::new();
-    for path in paths {
+    for path in &effective_paths {
         check_cancelled(cancel)?;
         let source = binding::trusted(path, "core:transfer")?;
         if moving {
@@ -140,4 +167,34 @@ pub fn transfer(
         }
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::transfer;
+    use std::sync::atomic::AtomicBool;
+
+    #[test]
+    fn moving_an_entry_into_its_current_parent_is_a_noop() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("still-here.txt");
+        std::fs::write(&path, b"unchanged").unwrap();
+
+        let result = transfer(
+            &[path.to_string_lossy().into_owned()],
+            &directory.path().to_string_lossy(),
+            true,
+            false,
+            &[],
+            &[],
+            &AtomicBool::new(false),
+            &|_, _, _| {},
+        )
+        .unwrap();
+
+        assert!(result.paths.is_empty());
+        assert!(result.errors.is_empty());
+        assert!(result.conflicts.is_empty());
+        assert_eq!(std::fs::read(path).unwrap(), b"unchanged");
+    }
 }

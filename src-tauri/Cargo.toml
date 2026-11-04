@@ -92,6 +92,7 @@ arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e400
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]

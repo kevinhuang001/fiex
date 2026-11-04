@@ -24,7 +24,7 @@ describe('parentDirectoryOf', () => {
   it.each([
     ['/home/user/file.txt', '/home/user'],
     ['C:\\Users\\user\\file.txt', 'C:\\Users\\user'],
-    ['applications://folder/app.desktop', 'applications://folder'],
+    ['applications://folder_root/app_note', 'applications://folder_root'],
     ['trash://opaque-child', 'trash://'],
     ['fiex://mount/folder/item', 'fiex://mount/folder'],
   ])('resolves the parent of %s', (path, parent) => {

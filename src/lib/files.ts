@@ -54,9 +54,8 @@ function virtualRootName(root: VirtualRoot): string {
   if (root === 'trash://') return t('废纸篓')
   return t('回收站')
 }
-/** Address-bar input accepts `recent`, `recent:/`, `recent://`, localized view
- *  names and Windows/Unix paths. Virtual schemes always normalize to one root
- *  and a single opaque payload segment; literal Chinese paths are encoded. */
+/** Address-bar input accepts view roots, localized names and Windows/Unix
+ *  paths. Applications retain their hierarchy; Trash records stay opaque. */
 export function normalizeAddress(input: string): string {
   const text = input.trim()
   if (!text) return text
@@ -116,11 +115,11 @@ export function parent(path: string): string {
   if (virtual) {
     if (!virtual.payload || virtual.root === 'recent://' || virtual.root === 'recyclebin://')
       return virtual.root
-    // Applications nodes have stable opaque IDs and their parent is stored in
-    // the virtual tree, not encoded in the URI. URI-only helpers can only
-    // safely return the mount root; provider-aware navigation resolves deeper
-    // parent relationships.
-    if (virtual.root === 'applications://') return virtual.root
+    if (virtual.root === 'applications://') {
+      const segments = virtual.payload.split('/').filter(Boolean)
+      segments.pop()
+      return segments.length ? virtualHref(virtual.root, segments.join('/')) : virtual.root
+    }
     const relative = decodeBase64Url(virtual.payload)
     if (!relative || !relative.includes('/')) return virtual.root
     return virtualHref(virtual.root, encodeBase64Url(relative.slice(0, relative.lastIndexOf('/'))))
@@ -174,8 +173,12 @@ export function pathCrumbs(
     // Recycle-bin identities are opaque records, not navigable folders.
     if (virtual.payload && root !== 'recyclebin://') {
       if (root === 'applications://') {
-        const child = virtualHref(root, virtual.payload)
-        crumbs.push({ name: displayName(child) || basename(child), path: child })
+        let prefix = ''
+        for (const part of virtual.payload.split('/').filter(Boolean)) {
+          prefix = prefix ? `${prefix}/${part}` : part
+          const node = virtualHref(root, prefix)
+          crumbs.push({ name: displayName(node) || basename(node), path: node })
+        }
         return crumbs
       }
       const relative = opaquePayload(virtual.payload)
@@ -223,8 +226,10 @@ export function basename(path: string): string {
       const relative = decodeBase64Url(virtual.payload)
       if (relative) return relative.split('/').pop() || virtualRootName(virtual.root)
     }
-    if (virtual.root === 'applications://')
-      return virtual.payload.split('/').at(-1) || virtualRootName(virtual.root)
+    if (virtual.root === 'applications://') {
+      const segment = virtual.payload.split('/').at(-1) || ''
+      return segment.replace(/^(?:folder|app)_/, '') || virtualRootName(virtual.root)
+    }
     return virtual.payload
   }
   return (

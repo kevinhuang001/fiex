@@ -10,8 +10,8 @@ use std::{
     time::Instant,
 };
 
-pub const FOLDER_PREFIX: &str = "applications://folder/";
-pub const APP_PREFIX: &str = "applications://app/";
+const FOLDER_SEGMENT: &str = "folder_";
+const APP_SEGMENT: &str = "app_";
 const SCOPE: &str = "tree";
 const KEY: &str = "state";
 const SCHEMA: u32 = 1;
@@ -198,21 +198,81 @@ fn valid_extension(value: &str) -> bool {
 }
 
 pub fn folder_uri(id: &str) -> String {
-    format!("{FOLDER_PREFIX}{id}")
+    format!("{}{FOLDER_SEGMENT}{id}", super::URI)
 }
 
 pub fn app_uri(id: &str) -> String {
-    format!("{APP_PREFIX}{id}")
+    format!("{}{APP_SEGMENT}{id}", super::URI)
 }
 
 pub fn folder_id(uri: &str) -> Option<String> {
-    let id = uri.strip_prefix(FOLDER_PREFIX)?;
-    (valid_id(id) && !id.contains('/')).then(|| id.to_owned())
+    node_id(uri, FOLDER_SEGMENT)
 }
 
 pub fn app_id(uri: &str) -> Option<String> {
-    let id = uri.strip_prefix(APP_PREFIX)?;
-    (valid_id(id) && !id.contains('/')).then(|| id.to_owned())
+    node_id(uri, APP_SEGMENT)
+}
+
+fn node_id(uri: &str, leaf_prefix: &str) -> Option<String> {
+    let relative = uri.strip_prefix(super::URI)?;
+    let segments = relative.split('/');
+    let mut last = None;
+    for segment in segments {
+        if segment.is_empty() {
+            return None;
+        }
+        if let Some(previous) = last.replace(segment) {
+            let parent_id = previous.strip_prefix(FOLDER_SEGMENT)?;
+            if !valid_id(parent_id) {
+                return None;
+            }
+        }
+    }
+    let id = last?.strip_prefix(leaf_prefix)?;
+    valid_id(id).then(|| id.to_owned())
+}
+
+fn child_uri(parent_uri: &str, segment: &str) -> String {
+    if parent_uri == super::URI {
+        format!("{parent_uri}{segment}")
+    } else {
+        format!("{}/{segment}", parent_uri.trim_end_matches('/'))
+    }
+}
+
+fn folder_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
+    let mut segments = Vec::new();
+    let mut current = state.folders.get(id)?;
+    loop {
+        segments.push(format!("{FOLDER_SEGMENT}{}", current.id));
+        let Some(parent) = current.parent.as_deref() else {
+            break;
+        };
+        current = state.folders.get(parent)?;
+    }
+    segments.reverse();
+    Some(format!("{}{}", super::URI, segments.join("/")))
+}
+
+fn app_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
+    let app = state.apps.get(id)?;
+    let mut segments = Vec::new();
+    let mut parent = app.parent.as_deref();
+    while let Some(parent_id) = parent {
+        let folder = state.folders.get(parent_id)?;
+        segments.push(format!("{FOLDER_SEGMENT}{}", folder.id));
+        parent = folder.parent.as_deref();
+    }
+    segments.reverse();
+    segments.push(format!("{APP_SEGMENT}{id}"));
+    Some(format!("{}{}", super::URI, segments.join("/")))
+}
+
+fn parent_uri_matches(state: &ApplicationsState, uri: &str) -> bool {
+    if uri == super::URI {
+        return true;
+    }
+    folder_id(uri).is_some_and(|id| folder_uri_in(state, &id).as_deref() == Some(uri))
 }
 
 pub fn is_folder(uri: &str) -> bool {
@@ -224,32 +284,32 @@ pub fn is_app(uri: &str) -> bool {
 }
 
 pub fn is_user_app(uri: &str) -> bool {
-    app_id(uri).is_some_and(|id| {
-        snapshot()
-            .ok()
-            .and_then(|state| state.apps.get(&id).map(|app| app.source.clone()))
-            .is_some_and(|source| matches!(source, ApplicationSource::Imported { .. }))
-    })
+    source(uri).is_ok_and(|app| matches!(app.source, ApplicationSource::Imported { .. }))
 }
 
 pub fn reserve_child(parent_uri: &str, name: &str, kind: PendingKind) -> Result<String, String> {
     crate::core::files::validate_name(name)?;
     let parent = folder_id_or_root(parent_uri)?;
     let state = snapshot()?;
+    if !parent_uri_matches(&state, parent_uri) {
+        return Err("StaleRef: Applications parent moved".into());
+    }
     require_parent(&state, parent.as_deref())?;
     if let Some(folder) = state
         .folders
         .values()
         .find(|folder| folder.parent == parent && folder.name.eq_ignore_ascii_case(name))
     {
-        return Ok(folder_uri(&folder.id));
+        return folder_uri_in(&state, &folder.id)
+            .ok_or_else(|| "invalid Applications folder ancestry".into());
     }
     if let Some(app) = state
         .apps
         .values()
         .find(|app| app.parent == parent && app.display_name.eq_ignore_ascii_case(name))
     {
-        return Ok(app_uri(&app.id));
+        return app_uri_in(&state, &app.id)
+            .ok_or_else(|| "invalid Applications entry ancestry".into());
     }
     ensure_unique_name(&state, parent.as_deref(), name, None)?;
     let mut reservations = pending_reservations()
@@ -276,8 +336,8 @@ pub fn reserve_child(parent_uri: &str, name: &str, kind: PendingKind) -> Result<
     }
     let target = PendingTarget {
         uri: match kind {
-            PendingKind::Folder => folder_uri(&id),
-            PendingKind::Application => app_uri(&id),
+            PendingKind::Folder => child_uri(parent_uri, &format!("{FOLDER_SEGMENT}{id}")),
+            PendingKind::Application => child_uri(parent_uri, &format!("{APP_SEGMENT}{id}")),
         },
         parent_uri: parent_uri.to_owned(),
         name: name.to_owned(),
@@ -336,6 +396,9 @@ pub fn commit_reserved_folder(uri: &str) -> Result<Entry, String> {
     let parent = folder_id_or_root(&target.parent_uri)?;
     let state = update(|state| {
         require_parent(state, parent.as_deref())?;
+        if !parent_uri_matches(state, &target.parent_uri) {
+            return Err("StaleRef: Applications parent moved".into());
+        }
         ensure_unique_name(state, parent.as_deref(), &target.name, None)?;
         if state.folders.contains_key(&id) {
             return Err("Conflict: application folder already exists".into());
@@ -355,6 +418,7 @@ pub fn commit_reserved_folder(uri: &str) -> Result<Entry, String> {
     cancel_reservation(uri);
     Ok(folder_entry(
         state.folders.get(&id).expect("folder was inserted"),
+        &state,
     ))
 }
 
@@ -375,6 +439,9 @@ pub fn commit_reserved_application(uri: &str) -> Result<Entry, String> {
     let parent = folder_id_or_root(&target.parent_uri)?;
     let state = update(|state| {
         require_parent(state, parent.as_deref())?;
+        if !parent_uri_matches(state, &target.parent_uri) {
+            return Err("StaleRef: Applications parent moved".into());
+        }
         ensure_unique_name(state, parent.as_deref(), &target.name, None)?;
         if state.apps.contains_key(&id) {
             return Err("Conflict: application already exists".into());
@@ -399,6 +466,7 @@ pub fn commit_reserved_application(uri: &str) -> Result<Entry, String> {
     cancel_reservation(uri);
     Ok(app_entry(
         state.apps.get(&id).expect("application was inserted"),
+        &state,
     ))
 }
 
@@ -425,8 +493,8 @@ pub fn asset_path(uri: &str) -> Result<std::path::PathBuf, String> {
     }
 }
 
-pub fn folder_entry(folder: &VirtualFolder) -> Entry {
-    let uri = folder_uri(&folder.id);
+pub fn folder_entry(folder: &VirtualFolder, state: &ApplicationsState) -> Entry {
+    let uri = folder_uri_in(state, &folder.id).unwrap_or_else(|| folder_uri(&folder.id));
     // Remove is a supported operation for virtual folders. Whether a folder
     // is empty is checked by the Provider's remove preflight at execution.
     let operations = [
@@ -435,14 +503,14 @@ pub fn folder_entry(folder: &VirtualFolder) -> Entry {
     application_entry(folder.name.clone(), uri, true, &operations)
 }
 
-pub fn app_entry(app: &ApplicationNode) -> Entry {
+pub fn app_entry(app: &ApplicationNode, state: &ApplicationsState) -> Entry {
     let operations: &[&str] = match &app.source {
         ApplicationSource::System { .. } => &["stat"],
         ApplicationSource::Imported { .. } => &["stat", "read", "remove", "rename"],
     };
     let mut entry = application_entry(
         app.display_name.clone(),
-        app_uri(&app.id),
+        app_uri_in(state, &app.id).unwrap_or_else(|| app_uri(&app.id)),
         false,
         operations,
     );
@@ -488,6 +556,9 @@ pub fn create_folder(parent_uri: &str, name: &str) -> Result<Entry, String> {
     let id = random_id()?;
     let state = update(|state| {
         require_parent(state, parent.as_deref())?;
+        if !parent_uri_matches(state, parent_uri) {
+            return Err("StaleRef: Applications parent moved".into());
+        }
         ensure_unique_name(state, parent.as_deref(), name, None)?;
         state.folders.insert(
             id.clone(),
@@ -501,13 +572,16 @@ pub fn create_folder(parent_uri: &str, name: &str) -> Result<Entry, String> {
         Ok(())
     })?;
     let folder = state.folders.get(&id).expect("folder was inserted");
-    Ok(folder_entry(folder))
+    Ok(folder_entry(folder, &state))
 }
 
 pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
     crate::core::files::validate_name(name)?;
     let id = folder_id(uri).ok_or("Applications root cannot be renamed")?;
     let state = update(|state| {
+        if folder_uri_in(state, &id).as_deref() != Some(uri) {
+            return Err("StaleRef: Applications folder moved".into());
+        }
         let current = state
             .folders
             .get(&id)
@@ -517,13 +591,16 @@ pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
         state.folders.get_mut(&id).unwrap().name = name.to_owned();
         Ok(())
     })?;
-    Ok(folder_entry(state.folders.get(&id).unwrap()))
+    Ok(folder_entry(state.folders.get(&id).unwrap(), &state))
 }
 
 pub fn rename_imported(uri: &str, name: &str) -> Result<Entry, String> {
     crate::core::files::validate_name(name)?;
     let id = app_id(uri).ok_or("not an Applications app node")?;
     let state = update(|state| {
+        if app_uri_in(state, &id).as_deref() != Some(uri) {
+            return Err("StaleRef: Applications entry moved".into());
+        }
         let current = state
             .apps
             .get(&id)
@@ -536,7 +613,7 @@ pub fn rename_imported(uri: &str, name: &str) -> Result<Entry, String> {
         state.apps.get_mut(&id).unwrap().display_name = name.to_owned();
         Ok(())
     })?;
-    Ok(app_entry(state.apps.get(&id).unwrap()))
+    Ok(app_entry(state.apps.get(&id).unwrap(), &state))
 }
 
 pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, String> {
@@ -544,6 +621,12 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
     let target_parent = folder_id_or_root(parent_uri)?;
     if let Some(id) = folder_id(uri) {
         let state = update(|state| {
+            if folder_uri_in(state, &id).as_deref() != Some(uri) {
+                return Err("StaleRef: Applications folder moved".into());
+            }
+            if !parent_uri_matches(state, parent_uri) {
+                return Err("StaleRef: Applications parent moved".into());
+            }
             let current = state
                 .folders
                 .get(&id)
@@ -569,10 +652,16 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
             let _ = current;
             Ok(())
         })?;
-        return Ok(folder_entry(state.folders.get(&id).unwrap()));
+        return Ok(folder_entry(state.folders.get(&id).unwrap(), &state));
     }
     let id = app_id(uri).ok_or("not an Applications node")?;
     let state = update(|state| {
+        if app_uri_in(state, &id).as_deref() != Some(uri) {
+            return Err("StaleRef: Applications entry moved".into());
+        }
+        if !parent_uri_matches(state, parent_uri) {
+            return Err("StaleRef: Applications parent moved".into());
+        }
         let current = state
             .apps
             .get(&id)
@@ -590,7 +679,7 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
         app.order = order;
         Ok(())
     })?;
-    Ok(app_entry(state.apps.get(&id).unwrap()))
+    Ok(app_entry(state.apps.get(&id).unwrap(), &state))
 }
 
 pub fn remove_node(uri: &str) -> Result<(), String> {
@@ -603,8 +692,8 @@ pub fn remove_node(uri: &str) -> Result<(), String> {
 pub fn validate_remove(uri: &str) -> Result<(), String> {
     if let Some(id) = folder_id(uri) {
         let state = snapshot()?;
-        if !state.folders.contains_key(&id) {
-            return Err("NotFound: application folder".into());
+        if folder_uri_in(&state, &id).as_deref() != Some(uri) {
+            return Err("StaleRef: Applications folder moved".into());
         }
         if state
             .folders
@@ -630,6 +719,9 @@ pub fn validate_remove(uri: &str) -> Result<(), String> {
 pub fn remove_empty_folder(uri: &str) -> Result<(), String> {
     let id = folder_id(uri).ok_or("Applications root cannot be removed")?;
     update(|state| {
+        if folder_uri_in(state, &id).as_deref() != Some(uri) {
+            return Err("StaleRef: Applications folder moved".into());
+        }
         let folder = state
             .folders
             .get(&id)
@@ -656,28 +748,13 @@ pub fn parent_uri(uri: &str) -> Result<String, String> {
     if let Some(pending) = pending_target(uri) {
         return Ok(pending.parent_uri);
     }
-    if let Some(id) = folder_id(uri) {
-        let state = snapshot()?;
-        let folder = state
-            .folders
-            .get(&id)
-            .ok_or_else(|| "NotFound: application folder".to_string())?;
-        return Ok(folder
-            .parent
-            .as_deref()
-            .map(folder_uri)
-            .unwrap_or_else(|| super::URI.into()));
-    }
-    if let Some(id) = app_id(uri) {
-        let state = snapshot()?;
-        let app = state
-            .apps
-            .get(&id)
-            .ok_or_else(|| "NotFound: application".to_string())?;
-        return Ok(app
-            .parent
-            .as_deref()
-            .map(folder_uri)
+    if folder_id(uri).is_some() || app_id(uri).is_some() {
+        let relative = uri
+            .strip_prefix(super::URI)
+            .ok_or("invalid Applications node URI")?;
+        let separator = relative.rfind('/');
+        return Ok(separator
+            .map(|index| format!("{}{parent}", super::URI, parent = &relative[..index]))
             .unwrap_or_else(|| super::URI.into()));
     }
     Err("invalid Applications node URI".into())
@@ -687,26 +764,34 @@ pub fn validate_child(parent_uri: &str, child_uri: &str) -> Result<(), String> {
     if folder_id_or_root(parent_uri).is_err() {
         return Err("invalid Applications parent URI".into());
     }
+    let state = snapshot()?;
+    if !parent_uri_matches(&state, parent_uri) {
+        return Err("StaleRef: Applications parent moved".into());
+    }
     if folder_id(child_uri).is_some() || app_id(child_uri).is_some() {
         if let Some(pending) = pending_target(child_uri) {
             if pending.parent_uri == parent_uri {
                 return Ok(());
             }
         }
-        let state = snapshot()?;
         let expected_parent = parent_id(parent_uri)?;
-        let actual_parent = if let Some(id) = folder_id(child_uri) {
-            state
-                .folders
-                .get(&id)
-                .and_then(|folder| folder.parent.as_deref())
+        let (actual_parent, canonical_uri) = if let Some(id) = folder_id(child_uri) {
+            let folder = state.folders.get(&id);
+            (
+                folder.and_then(|folder| folder.parent.as_deref()),
+                folder_uri_in(&state, &id),
+            )
         } else {
-            state
-                .apps
-                .get(&app_id(child_uri).expect("validated app URI"))
-                .and_then(|app| app.parent.as_deref())
+            let id = app_id(child_uri).expect("validated app URI");
+            let app = state.apps.get(&id);
+            (
+                app.and_then(|app| app.parent.as_deref()),
+                app_uri_in(&state, &id),
+            )
         };
-        if actual_parent == expected_parent.as_deref() {
+        if actual_parent == expected_parent.as_deref()
+            && canonical_uri.as_deref() == Some(child_uri)
+        {
             return Ok(());
         }
     }
@@ -717,7 +802,7 @@ fn parent_id(uri: &str) -> Result<Option<String>, String> {
     folder_id_or_root(uri)
 }
 
-pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<(), String> {
+pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<Vec<String>, String> {
     let target = folder_id_or_root(target_uri)?;
     let mut ids = Vec::new();
     for uri in uris {
@@ -731,8 +816,19 @@ pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<(), String> {
     }
     ids.sort();
     ids.dedup();
-    update(|state| {
+    let state = update(|state| {
         require_parent(state, target.as_deref())?;
+        if !parent_uri_matches(state, target_uri) {
+            return Err("StaleRef: Applications destination moved".into());
+        }
+        for uri in uris {
+            let current = folder_id(uri)
+                .and_then(|id| folder_uri_in(state, &id))
+                .or_else(|| app_id(uri).and_then(|id| app_uri_in(state, &id)));
+            if current.as_deref() != Some(uri) {
+                return Err("StaleRef: Applications item moved".into());
+            }
+        }
         let moving_folders = ids
             .iter()
             .filter_map(|(id, is_folder)| is_folder.then_some(id.as_str()))
@@ -821,7 +917,16 @@ pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<(), String> {
         }
         Ok(())
     })?;
-    Ok(())
+    uris.iter()
+        .map(|uri| {
+            if let Some(id) = folder_id(uri) {
+                return folder_uri_in(&state, &id)
+                    .ok_or_else(|| "NotFound: application folder".into());
+            }
+            let id = app_id(uri).ok_or("invalid Applications node")?;
+            app_uri_in(&state, &id).ok_or_else(|| "NotFound: application".into())
+        })
+        .collect()
 }
 
 pub fn register_system_apps(
@@ -831,7 +936,7 @@ pub fn register_system_apps(
         .iter()
         .map(|(locator, _)| (system_id(locator), locator.clone()))
         .collect::<Vec<_>>();
-    update(|state| {
+    let state = update(|state| {
         for app in state.apps.values_mut() {
             if matches!(app.source, ApplicationSource::System { .. }) {
                 app.unavailable = true;
@@ -864,7 +969,10 @@ pub fn register_system_apps(
     })?;
     Ok(ids
         .into_iter()
-        .map(|(id, locator)| (locator, app_uri(&id)))
+        .map(|(id, locator)| {
+            let uri = app_uri_in(&state, &id).unwrap_or_else(|| app_uri(&id));
+            (locator, uri)
+        })
         .collect::<BTreeMap<_, _>>())
 }
 
@@ -908,6 +1016,9 @@ pub(super) fn applications_root_path() -> Result<std::path::PathBuf, String> {
 pub fn folder_children(uri: &str) -> Result<Vec<Entry>, String> {
     let parent = folder_id_or_root(uri)?;
     let state = snapshot()?;
+    if !parent_uri_matches(&state, uri) {
+        return Err("StaleRef: Applications folder moved".into());
+    }
     if let Some(id) = parent.as_deref() {
         require_parent(&state, Some(id))?;
     }
@@ -915,13 +1026,13 @@ pub fn folder_children(uri: &str) -> Result<Vec<Entry>, String> {
         .folders
         .values()
         .filter(|folder| folder.parent == parent)
-        .map(folder_entry)
+        .map(|folder| folder_entry(folder, &state))
         .chain(
             state
                 .apps
                 .values()
                 .filter(|app| app.parent == parent)
-                .map(app_entry),
+                .map(|app| app_entry(app, &state)),
         )
         .collect::<Vec<_>>();
     entries.sort_by_key(|entry| entry.name.to_lowercase());
@@ -941,25 +1052,37 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
     }
     let state = snapshot()?;
     if let Some(id) = folder_id(uri) {
-        return state
+        let entry = state
             .folders
             .get(&id)
-            .map(folder_entry)
-            .ok_or_else(|| "NotFound: application folder".into());
+            .map(|folder| folder_entry(folder, &state))
+            .ok_or_else(|| "NotFound: application folder".to_string())?;
+        if entry.path != uri {
+            return Err("StaleRef: Applications folder moved".into());
+        }
+        return Ok(entry);
     }
     if let Some(id) = app_id(uri) {
-        return state
+        let entry = state
             .apps
             .get(&id)
-            .map(app_entry)
-            .ok_or_else(|| "NotFound: application".into());
+            .map(|app| app_entry(app, &state))
+            .ok_or_else(|| "NotFound: application".to_string())?;
+        if entry.path != uri {
+            return Err("StaleRef: Applications entry moved".into());
+        }
+        return Ok(entry);
     }
     Err("invalid Applications URI".into())
 }
 
 pub fn source(uri: &str) -> Result<ApplicationNode, String> {
     let id = app_id(uri).ok_or("not an Applications app node")?;
-    snapshot()?
+    let state = snapshot()?;
+    if app_uri_in(&state, &id).as_deref() != Some(uri) {
+        return Err("StaleRef: Applications entry moved".into());
+    }
+    state
         .apps
         .get(&id)
         .cloned()
@@ -1100,7 +1223,71 @@ mod tests {
         let after_rename = folder_uri(&node.id);
         assert_eq!(before, after_rename);
         assert_eq!(folder_id(&before).as_deref(), Some(id));
-        assert!(folder_id("applications://folder/../escape").is_none());
+        assert!(folder_id("applications://folder_../escape").is_none());
+    }
+
+    #[test]
+    fn virtual_paths_follow_the_visible_folder_tree_without_type_directories() {
+        let mut state = ApplicationsState {
+            schema: SCHEMA,
+            ..Default::default()
+        };
+        state
+            .folders
+            .insert("root-folder".into(), folder("root-folder", None));
+        state.folders.insert(
+            "child-folder".into(),
+            folder("child-folder", Some("root-folder")),
+        );
+        state.apps.insert(
+            "root-app".into(),
+            ApplicationNode {
+                id: "root-app".into(),
+                parent: None,
+                display_name: "Root app".into(),
+                source: ApplicationSource::System {
+                    stable_locator: "root-app-locator".into(),
+                },
+                order: 0,
+                unavailable: false,
+            },
+        );
+        state.apps.insert(
+            "nested-app".into(),
+            ApplicationNode {
+                id: "nested-app".into(),
+                parent: Some("child-folder".into()),
+                display_name: "Nested app".into(),
+                source: ApplicationSource::System {
+                    stable_locator: "nested-app-locator".into(),
+                },
+                order: 0,
+                unavailable: false,
+            },
+        );
+
+        assert_eq!(
+            folder_uri_in(&state, "root-folder").as_deref(),
+            Some("applications://folder_root-folder")
+        );
+        assert_eq!(
+            folder_uri_in(&state, "child-folder").as_deref(),
+            Some("applications://folder_root-folder/folder_child-folder")
+        );
+        assert_eq!(
+            app_uri_in(&state, "root-app").as_deref(),
+            Some("applications://app_root-app")
+        );
+        assert_eq!(
+            app_uri_in(&state, "nested-app").as_deref(),
+            Some("applications://folder_root-folder/folder_child-folder/app_nested-app")
+        );
+        assert_eq!(
+            parent_uri("applications://folder_root-folder/folder_child-folder/app_nested-app")
+                .unwrap(),
+            "applications://folder_root-folder/folder_child-folder"
+        );
+        assert!(app_id("applications://app_root-app/app_nested-app").is_none());
     }
 
     #[test]

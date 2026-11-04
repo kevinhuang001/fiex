@@ -47,6 +47,8 @@ struct WindowsRecycleItem {
     original: String,
     #[serde(default)]
     deleted: String,
+    #[serde(default, rename = "deletedUnix")]
+    deleted_unix: i64,
     #[serde(default)]
     folder: bool,
 }
@@ -58,7 +60,10 @@ $bin=(New-Object -ComObject Shell.Application).Namespace(10)
 $items=@()
 $index=0
 foreach($item in $bin.Items()){
-  $items += [pscustomobject]@{ index=$index; name=$item.Name; original=[string]$item.ExtendedProperty('System.Recycle.DeletedFrom'); deleted=[string]$item.ExtendedProperty('System.Recycle.DateDeleted'); folder=[bool]$item.IsFolder }
+  $deleted=$item.ExtendedProperty('System.Recycle.DateDeleted')
+  $deletedUnix=0
+  try { if($deleted) { $deletedUnix=([DateTimeOffset]([datetime]$deleted)).ToUnixTimeSeconds() } } catch { }
+  $items += [pscustomobject]@{ index=$index; name=$item.Name; original=[string]$item.ExtendedProperty('System.Recycle.DeletedFrom'); deleted=[string]$deleted; deletedUnix=[long]$deletedUnix; folder=[bool]$item.IsFolder }
   $index++
 }
 ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
@@ -168,31 +173,78 @@ pub fn restore(encoded: &str) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 pub fn purge(encoded: &str) -> Result<(), String> {
-    verb_script(encoded, &["删除", "Delete", "Remove"])
+    let expected: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)
+        .map_err(|_| crate::i18n::t("回收站项目无效").to_string())?;
+    let current = list()?;
+    let uri = format!("{URI}{encoded}");
+    if !current.iter().any(|entry| entry.path == uri) {
+        return Err("StaleRef: recycle item changed since enumeration".into());
+    }
+
+    let items = trash::os_limited::list().map_err(|error| error.to_string())?;
+    let mut matches = items.into_iter().filter(|item| {
+        item.name.to_string_lossy() == expected.name
+            && (expected.original.is_empty()
+                || same_windows_path(&item.original_parent, &expected.original))
+            && (expected.deleted_unix == 0 || item.time_deleted == expected.deleted_unix)
+    });
+    let selected = matches
+        .next()
+        .ok_or_else(|| "StaleRef: recycle item changed since enumeration".to_owned())?;
+    if matches.next().is_some() {
+        return Err("StaleRef: recycle item identity is ambiguous; refresh the list".into());
+    }
+
+    trash::os_limited::purge_all([selected]).map_err(|error| error.to_string())?;
+    if trash::os_limited::list()
+        .map_err(|error| error.to_string())?
+        .iter()
+        .any(|item| recycle_item_matches(item, &expected))
+    {
+        return Err("Windows did not permanently delete the selected Recycle Bin item".into());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn recycle_item_matches(item: &trash::TrashItem, expected: &WindowsRecycleItem) -> bool {
+    item.name.to_string_lossy() == expected.name
+        && (expected.original.is_empty()
+            || same_windows_path(&item.original_parent, &expected.original))
+        && (expected.deleted_unix == 0 || item.time_deleted == expected.deleted_unix)
+}
+
+#[cfg(target_os = "windows")]
+fn same_windows_path(left: &std::path::Path, right: &str) -> bool {
+    fn normalized(value: &str) -> String {
+        let value = value.replace('/', "\\");
+        let value = if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{unc}")
+        } else if let Some(ordinary) = value.strip_prefix(r"\\?\") {
+            ordinary.to_owned()
+        } else {
+            value
+        };
+        let mut value = value.to_ascii_lowercase();
+        while value.ends_with('\\') && value.len() > 3 {
+            value.pop();
+        }
+        value
+    }
+    normalized(&left.to_string_lossy()) == normalized(right)
 }
 
 #[cfg(target_os = "windows")]
 pub fn empty() -> Result<usize, String> {
-    let count = list().map(|items| items.len()).unwrap_or(0);
+    let items = trash::os_limited::list().map_err(|error| error.to_string())?;
+    let count = items.len();
     if count == 0 {
         return Ok(0);
     }
-    // Clear-RecycleBin fails on some Windows installations even with a valid
-    // bin; the shell's own "Empty Recycle Bin" verb is the reliable fallback.
-    // It belongs to the bin root, so Explorer is never opened.
-    super::windows_shell::run(
-        r#"$ErrorActionPreference='Stop'
-try {
-  Clear-RecycleBin -Force -Confirm:$false
-  Write-Output 'cleared'
-} catch {
-  $bin=(New-Object -ComObject Shell.Application).Namespace(10)
-  $verb=$bin.Self.Verbs() | Where-Object { ($_.Name -replace '&','') -match 'Empty Recycle Bin|清空回收站' } | Select-Object -First 1
-  if(-not $verb){ throw 'recycle bin has no empty verb' }
-  $verb.DoIt()
-  Write-Output 'verb'
-}"#,
-    )?;
+    trash::os_limited::purge_all(items).map_err(|error| error.to_string())?;
+    if !trash::os_limited::is_empty().map_err(|error| error.to_string())? {
+        return Err("Windows did not empty the Recycle Bin".into());
+    }
     Ok(count)
 }
 
