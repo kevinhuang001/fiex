@@ -196,9 +196,7 @@ mod tests {
         let broker = ResourceBroker::resolve(&scope, "plugin:test", &reference).unwrap();
         let listing = broker.list().unwrap();
         let child_path = listing[0]["path"].as_str().unwrap();
-        let child_reference = scope
-            .issue_child(&reference, child_path, None)
-            .unwrap();
+        let child_reference = scope.issue_child(&reference, child_path, None).unwrap();
         let child =
             ResourceBroker::resolve(&scope, "plugin:test", &child_reference["ref"]).unwrap();
         let mut reader = child.open_read_handle().unwrap();
