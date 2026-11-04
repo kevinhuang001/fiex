@@ -8,6 +8,7 @@ pub(super) fn validate(steps: &[Step], cancel: &AtomicBool) -> Result<(), String
     for step in steps {
         step.review()?;
         step.source.require(FsOperation::Remove, false)?;
+        step.source.review_remove(PreflightPhase::Execute)?;
         if !same_version(&step.source.stat()?, &step.source_version) {
             return Err(format!(
                 "Conflict: source changed before move cleanup: {}",

@@ -18,6 +18,28 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     }
 }
 
+fn provider_error_section(provider: &crate::plugins::events::Resolver, error: &str) -> InfoSection {
+    InfoSection {
+        id: format!(
+            "{}.error",
+            provider.id.strip_prefix("plugin:").unwrap_or(&provider.id)
+        ),
+        title: provider.name.clone(),
+        provider: provider.name.clone(),
+        source: if provider.plugin.is_some() {
+            "plugin"
+        } else {
+            "core"
+        }
+        .into(),
+        plugin_id: provider.plugin.as_deref().map(|plugin| plugin.id.clone()),
+        rows: vec![row(
+            crate::i18n::t("错误"),
+            crate::infrastructure::redact::clean(error, 1500),
+        )],
+    }
+}
+
 mod media;
 mod metadata;
 mod native;
@@ -28,8 +50,33 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 
+#[cfg(feature = "desktop")]
+pub(crate) fn calculate_directory_size(
+    path: &std::path::Path,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<u64, String> {
+    metadata::directory_size_with_cancel(path, cancelled)
+}
+
+#[cfg(feature = "desktop")]
+pub(crate) fn file_info_snapshot_with_partial(
+    resource: ResourceSnapshot,
+    user_action: crate::core::fs::mapped_access::UserActionContext,
+    on_partial: impl FnMut(Vec<InfoSection>),
+) -> Vec<InfoSection> {
+    resolve_info_with_partial(resource, Some(user_action), on_partial)
+}
+
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
+    resolve_info_with_partial(resource, None, |_| {})
+}
+
+fn resolve_info_with_partial(
+    resource: ResourceSnapshot,
+    user_action: Option<crate::core::fs::mapped_access::UserActionContext>,
+    mut on_partial: impl FnMut(Vec<InfoSection>),
+) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, ProviderCandidate};
     let targets =
         crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
@@ -67,11 +114,30 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
         std::slice::from_ref(resource.as_ref()),
         None,
     );
-    EventRouter::resolve_shared(
+    let invocation = match user_action {
+        Some(user_action) => invocation.with_user_action_context(user_action),
+        None => invocation,
+    };
+    EventRouter::resolve_merge_parallel_with_partial(
         "info.resolve",
         providers,
         &invocation,
-        |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let mut native = native::invocation(
+                    &resolver.id,
+                    request.method.clone(),
+                    request.params.clone(),
+                    resource.as_ref(),
+                )?;
+                if let Some(user_action) = user_action {
+                    native = native.with_user_action_context(user_action);
+                }
+                provider.resolve(&native).map_err(|error| error.to_string())
+            } else {
+                provider.resolve(context).map_err(|error| error.to_string())
+            }
+        },
         |provider, mut sections| {
             let value = json!({"sections": &sections});
             crate::plugins::events::validate_result("info.resolve", &value)?;
@@ -91,31 +157,21 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
             }
             Ok(sections)
         },
-        |_| true,
+        |provider, result| {
+            let sections = match result {
+                Ok(sections) => sections.clone(),
+                Err(error) => vec![provider_error_section(provider, error)],
+            };
+            if !sections.is_empty() {
+                on_partial(sections);
+            }
+        },
         |outcomes| {
             outcomes
                 .into_iter()
                 .flat_map(|(provider, result)| match result {
                     Ok(sections) => sections,
-                    Err(error) => vec![InfoSection {
-                        id: format!(
-                            "{}.error",
-                            provider.id.strip_prefix("plugin:").unwrap_or(&provider.id)
-                        ),
-                        title: provider.name.clone(),
-                        provider: provider.name,
-                        source: if provider.plugin.is_some() {
-                            "plugin"
-                        } else {
-                            "core"
-                        }
-                        .into(),
-                        plugin_id: provider.plugin.as_deref().map(|plugin| plugin.id.clone()),
-                        rows: vec![row(
-                            crate::i18n::t("错误"),
-                            crate::infrastructure::redact::clean(&error, 1500),
-                        )],
-                    }],
+                    Err(error) => vec![provider_error_section(&provider, &error)],
                 })
                 .collect()
         },

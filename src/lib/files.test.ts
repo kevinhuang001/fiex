@@ -11,6 +11,7 @@ import {
   groupKey,
   uniqueName,
   corePath,
+  isVirtualResource,
 } from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
@@ -28,6 +29,12 @@ const e = (name: string, isDir = false): Entry => ({
   sync: null,
 })
 describe('file models', () => {
+  it('distinguishes virtual identities from host paths', () => {
+    for (const path of ['applications://', 'recent://id', 'trash://', 'fiex://mount/a/file'])
+      expect(isVirtualResource(path)).toBe(true)
+    for (const path of ['/home/user/file', 'C:\\Users\\file', '\\\\server\\share'])
+      expect(isVirtualResource(path)).toBe(false)
+  })
   it('handles roots and Windows paths', () => {
     expect(parent('/a/b')).toBe('/a')
     expect(parent('/')).toBe('/')
@@ -129,22 +136,17 @@ describe('virtual addresses', () => {
       ['trash:\\', 'trash://'],
     ])
       expect(normalizeAddress(input)).toBe(expected)
-    expect(normalizeAddress('applications:\\未命名文件夹')).toBe(
-      normalizeAddress('applications://未命名文件夹'),
-    )
-    expect(displayAddress(normalizeAddress('applications:\\工作\\文档'))).toBe(
-      'applications://工作/文档',
+    expect(normalizeAddress('applications:\\folder\\folder-1')).toBe(
+      'applications://folder/folder-1',
     )
   })
 
-  it('shows Chinese folder names while keeping one opaque segment', () => {
-    const encoded = normalizeAddress('applications://未命名文件夹')
-    expect(encoded.startsWith('applications://~')).toBe(true)
-    expect(encoded).not.toContain('/user/')
-    expect(displayAddress(encoded)).toBe('applications://未命名文件夹')
-    expect(basename(encoded)).toBe('未命名文件夹')
-    expect(parent(encoded)).toBe('applications://')
-    expect(pathCrumbs(encoded).map((crumb) => crumb.path)).toEqual(['applications://', encoded])
+  it('keeps stable application IDs as provider-owned URIs', () => {
+    const folder = normalizeAddress('applications:\\folder\\folder-1')
+    expect(folder).toBe('applications://folder/folder-1')
+    expect(displayAddress(folder)).toBe(folder)
+    expect(basename(folder)).toBe('folder-1')
+    expect(pathCrumbs(folder).map((crumb) => crumb.path)).toEqual(['applications://', folder])
   })
 
   it('keeps breadcrumb parents virtual instead of producing applications:\\', () => {
@@ -155,9 +157,7 @@ describe('virtual addresses', () => {
     expect(pathCrumbs(trash)[0].path).toBe('trash://')
   })
 
-  it('accepts legacy user prefixes and canonicalizes them', () => {
-    expect(normalizeAddress('applications://user/5pyq5ZG95ZCN5paH5Lu25aS5')).toBe(
-      'applications://~5pyq5ZG95ZCN5paH5Lu25aS5',
-    )
+  it('preserves application provider IDs without path aliases', () => {
+    expect(normalizeAddress('applications://app/app-1')).toBe('applications://app/app-1')
   })
 })

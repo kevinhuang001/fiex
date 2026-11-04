@@ -162,6 +162,7 @@ fn core_entry(entry: SearchEntry) -> Entry {
         has_cache: entry.has_cache,
         pinned: entry.pinned,
         uploaded: entry.uploaded,
+        storage_projection: Default::default(),
         sync: entry.sync,
     }
 }

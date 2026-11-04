@@ -43,10 +43,11 @@ impl StorageProvider {
                 .map_err(provider_error);
         }
         resource
-            .scope
+            .storage_scope
             .authorize(&resource.path)
             .map_err(provider_error)?;
-        let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
+        let value =
+            fs_access::stat(&resource.storage_scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(storage::decorated_entry(&resource.path, entry))
     }
@@ -94,7 +95,7 @@ impl StorageProvider {
             return usb::authorize(&route, operation, create);
         }
         resource
-            .scope
+            .storage_scope
             .authorize(&resource.path)
             .map_err(provider_error)?;
         if crate::core::volumes::application_policy::protected(&resource.path)
@@ -133,10 +134,11 @@ impl StorageProvider {
             usbfs::entry(&route).map_err(provider_error)
         } else {
             resource
-                .scope
+                .storage_scope
                 .authorize(&resource.path)
                 .map_err(provider_error)?;
-            let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
+            let value =
+                fs_access::stat(&resource.storage_scope, &resource.path).map_err(provider_error)?;
             storage::entry(value).map_err(provider_error)
         }
     }
@@ -145,7 +147,8 @@ impl StorageProvider {
         if let Some(route) = usbfs::route(&resource.path) {
             return usbfs::listing(&route).map_err(provider_error);
         }
-        let value = fs_access::list(&resource.scope, &resource.path).map_err(provider_error)?;
+        let value =
+            fs_access::list(&resource.storage_scope, &resource.path).map_err(provider_error)?;
         value
             .as_array()
             .ok_or_else(|| ProviderError::internal("invalid storage listing"))?

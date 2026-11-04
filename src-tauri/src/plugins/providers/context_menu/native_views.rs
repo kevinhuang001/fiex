@@ -1,51 +1,57 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
-use crate::plugins::{
-    events::Resolver, native_invocation::NativeProviderInvocation,
-    provider_registry::native::NativeProviderRegistry,
-    resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::native_invocation::NativeProviderInvocation;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+#[cfg(test)]
+use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
+use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, ProviderMatchRule};
+#[cfg(test)]
 use fiex_provider_contracts::{
-    ContextMenuProvider, LocationMatch, ProviderMatchRule, ResourceMetadata,
+    ProviderError, ProviderInvocation, ProviderMatcher, ResourceMetadata,
 };
 #[cfg(test)]
-use fiex_provider_contracts::{MatchResource, ProviderError, ProviderInvocation, ProviderMatcher};
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(test)]
+use serde_json::Value;
 use std::sync::Arc;
 
 mod implementations;
-use implementations::{ApplicationsMenu, RecentMenu, TrashMenu};
+use implementations::{EmptyTrash, Restore, Reveal};
 
-const PROVIDER_IDS: [&str; 3] = [
-    "core.recent.menu",
-    "core.applications.menu",
-    "core.trash.menu",
-];
+#[cfg(test)]
+const PROVIDER_IDS: [&str; 3] = ["builtin:reveal", "builtin:restore", "builtin:empty-trash"];
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    for (id, owner, implementation) in [
+    for (id, owner, selection, priority, implementation) in [
         (
-            "core.recent.menu",
+            "builtin:reveal",
             "core:recent",
-            Arc::new(RecentMenu) as Arc<dyn ContextMenuProvider>,
+            "single",
+            80,
+            Arc::new(Reveal) as Arc<dyn ContextMenuProvider>,
         ),
         (
-            "core.applications.menu",
-            "core:applications",
-            Arc::new(ApplicationsMenu) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
-            "core.trash.menu",
+            "builtin:restore",
             "core:trash",
-            Arc::new(TrashMenu) as Arc<dyn ContextMenuProvider>,
+            "single",
+            20,
+            Arc::new(Restore) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:empty-trash",
+            "core:trash",
+            "zero",
+            8,
+            Arc::new(EmptyTrash) as Arc<dyn ContextMenuProvider>,
         ),
     ] {
         values
             .register(
                 id,
-                100,
+                priority,
                 ProviderMatchRule {
+                    selection: Some(selection.into()),
                     view: Some(LocationMatch {
                         provider_ids: Some(vec![owner.into()]),
                         ..Default::default()
@@ -58,10 +64,12 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
     }
 }
 
+#[cfg(test)]
 fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
 }
 
+#[cfg(test)]
 fn context(
     directory: &str,
     paths: &[String],
@@ -90,6 +98,7 @@ fn context(
     NativeProviderInvocation::new(method, params, &targets, Some(&directory_resource))
 }
 
+#[cfg(test)]
 fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
     let snapshots = paths
         .iter()
@@ -112,29 +121,9 @@ fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
         .collect()
 }
 
-pub(super) fn resolve_snapshot(directory: &str, paths: &[String]) -> (Vec<Resolver>, Vec<String>) {
-    let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
-    let mut providers = Vec::new();
-    let mut claimed = Vec::new();
-    for candidate in matched(directory, paths) {
-        let Some(provider) = registry().get(&candidate.id) else {
-            continue;
-        };
-        let Ok(items) = provider.resolve(&invocation) else {
-            continue;
-        };
-        if items.is_empty() {
-            continue;
-        }
-        claimed.extend(items.into_iter().map(|item| item.id));
-        providers.push(candidate);
-    }
-    (providers, claimed)
-}
-
 #[cfg(test)]
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    resolve_snapshot(directory, paths).0
+    matched(directory, paths)
 }
 
 #[cfg(test)]

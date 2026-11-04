@@ -69,11 +69,13 @@ pub(crate) async fn preview_open(
     provider_id: Option<String>,
     provider_order: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::providers::preview::open_resource(
             &path,
             provider_id.as_deref(),
             provider_order.as_deref(),
+            user_action,
         )
     })
     .await
@@ -85,12 +87,15 @@ pub(crate) async fn plugin_context_menu_resolve(
     directory: String,
     paths: Vec<String>,
     source: Option<String>,
-) -> Result<Vec<serde_json::Value>, String> {
+) -> Result<serde_json::Value, String> {
     let source = source.unwrap_or_else(|| "all".into());
     tauri::async_runtime::spawn_blocking(move || match source.as_str() {
-        "core" => crate::plugins::providers::context_menu::query_core(&directory, &paths),
-        "plugins" => crate::plugins::providers::context_menu::query_plugins(&directory, &paths),
-        "" | "all" => crate::plugins::providers::context_menu::query(&directory, &paths),
+        "core" => crate::plugins::providers::context_menu::query_core(&directory, &paths)
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
+        "plugins" => crate::plugins::providers::context_menu::query_plugins(&directory, &paths)
+            .map(serde_json::Value::Array),
+        "" | "all" => crate::plugins::providers::context_menu::query(&directory, &paths)
+            .map(serde_json::Value::Array),
         other => Err(format!("unknown context menu source: {other}")),
     })
     .await

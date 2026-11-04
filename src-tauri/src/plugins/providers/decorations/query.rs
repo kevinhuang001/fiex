@@ -63,10 +63,14 @@ pub fn query_with_plugins(
     } else {
         builtins
     };
-    let manifests = plugin_host::installed_manifests()
-        .into_iter()
-        .map(|(m, f)| (m.id.clone(), (m, f)))
-        .collect::<HashMap<_, _>>();
+    let manifests = if providers.iter().any(|provider| provider.plugin.is_some()) {
+        plugin_host::installed_manifests()
+            .into_iter()
+            .map(|(m, f)| (m.id.clone(), (m, f)))
+            .collect::<HashMap<_, _>>()
+    } else {
+        HashMap::new()
+    };
     let entries = Arc::new(entries);
     let resources = Arc::new(resources);
     let providers = providers
@@ -95,22 +99,34 @@ pub fn query_with_plugins(
             }
         })
         .collect();
-    let invocation = super::invocation::CoreDecorationInvocation::native(
+    let invocation = super::invocation::CoreDecorationInvocation::unbound(
         directory.into(),
         entries.clone(),
         resources.clone(),
     );
-    let result = EventRouter::resolve_shared(
+    let resources_by_ref = super::dynamic::resource_path_index(resources.as_slice());
+    let result = EventRouter::resolve_merge_parallel(
         "decorations.resolve",
         providers,
         &invocation,
-        |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let native = super::invocation::CoreDecorationInvocation::native(
+                    &resolver.id,
+                    directory.into(),
+                    entries.clone(),
+                    resources.clone(),
+                )?;
+                provider.resolve(&native).map_err(|error| error.to_string())
+            } else {
+                provider.resolve(context).map_err(|error| error.to_string())
+            }
+        },
         |_, items| {
             let response = json!({"decorations": items});
             crate::plugins::events::validate_result("decorations.resolve", &response)?;
             Ok(items)
         },
-        |_| true,
         |outcomes| {
             let mut merged = HashMap::new();
             for (provider, result) in outcomes.into_iter().rev() {
@@ -122,13 +138,7 @@ pub fn query_with_plugins(
                         .get(&plugin.id)
                         .ok_or_else(|| "provider removed".to_owned())
                         .and_then(|(manifest, folder)| {
-                            decode(
-                                entries.as_ref(),
-                                resources.as_slice(),
-                                manifest,
-                                folder,
-                                items,
-                            )
+                            decode(entries.as_ref(), &resources_by_ref, manifest, folder, items)
                         })
                 } else {
                     Ok(items
@@ -137,7 +147,7 @@ pub fn query_with_plugins(
                             let path = path_for_target(
                                 &contribution.target,
                                 entries.as_ref(),
-                                resources.as_slice(),
+                                &resources_by_ref,
                             )?
                             .to_owned();
                             Some(Decoration {
@@ -204,8 +214,10 @@ mod ref_target_tests {
             "/authorized/matching-name",
             ResourceMetadata::default(),
         );
+        let resources = [target.clone()];
+        let resources_by_ref = super::super::dynamic::resource_path_index(&resources);
         assert_eq!(
-            path_for_target(&target.reference, &entries, &[target.clone()]),
+            path_for_target(&target.reference, &entries, &resources_by_ref),
             Some("/authorized/matching-name")
         );
         let forged = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
@@ -213,7 +225,7 @@ mod ref_target_tests {
             ResourceMetadata::default(),
         );
         assert_eq!(
-            path_for_target(&forged.reference, &entries, &[target]),
+            path_for_target(&forged.reference, &entries, &resources_by_ref),
             None
         );
     }

@@ -58,6 +58,7 @@ export function Preview({
   onNavigate: (delta: number) => void
   onOpen: (e: Entry) => void
 }) {
+  const allowedOpsKey = entry?.allowedOps?.join('\0') ?? ''
   const [candidates, setCandidates] = useState<PreviewCandidate[]>([])
   const [providerId, setProviderId] = useState<string | null>(null)
   const [providerAttempt, setProviderAttempt] = useState(0)
@@ -91,7 +92,8 @@ export function Preview({
         JSON.stringify([
           entry.path,
           entry.modified,
-          entry.allowedOps,
+          entry.size,
+          allowedOpsKey,
           entry.extension,
           entry.mime,
           entry.isDir,
@@ -114,14 +116,11 @@ export function Preview({
         setProviderId(allowed[0]?.id ?? null)
         if (!allowed.length) setError(t('没有可用的预览方式'))
         setReadyToShow(true)
-        // Warm every declared loading document as soon as the providers are
-        // known, before the first `preview.open` leaves the UI. The document is
-        // a local package file, so this is cheap and gives the selected
-        // provider a ready-to-paint loading page on the very next render.
-        for (const candidate of allowed) {
-          const pluginId = pluginPreviewId(candidate.id)
-          if (pluginId && candidate.loading) void loadingDocument(pluginId).catch(() => {})
-        }
+        // Only the first selected provider's package page is needed for this
+        // open. Preloading every candidate causes unnecessary disk reads.
+        const selected = allowed[0]
+        const pluginId = selected && pluginPreviewId(selected.id)
+        if (pluginId && selected.loading) void loadingDocument(pluginId).catch(() => {})
       })
       .catch((cause) => {
         if (active) {
@@ -135,7 +134,15 @@ export function Preview({
     return () => {
       active = false
     }
-  }, [entry?.path])
+  }, [
+    entry?.path,
+    entry?.modified,
+    entry?.size,
+    entry?.extension,
+    entry?.mime,
+    entry?.isDir,
+    allowedOpsKey,
+  ])
 
   useEffect(() => {
     if (!entry || !providerId) return

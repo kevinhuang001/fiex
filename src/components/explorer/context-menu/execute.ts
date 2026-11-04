@@ -58,16 +58,6 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'trash':
       props.recycle(effect.paths)
       break
-    case 'trashApplications':
-      return call('trash_application_entries', { paths: effect.paths }).then(() => {
-        props.x.setSelected([])
-        props.x.reload()
-      })
-    case 'removeApplications':
-      return call('remove_application_entries', { paths: effect.paths }).then(() => {
-        props.x.setSelected([])
-        props.x.reload()
-      })
     case 'newFolder':
       props.create()
       break
@@ -82,9 +72,6 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
       break
     case 'emptyTrash':
       props.emptyTrash()
-      break
-    case 'terminal':
-      props.terminal()
       break
     case 'copyPath':
       return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))

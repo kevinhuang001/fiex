@@ -1,7 +1,7 @@
 //! Platform, window, launch, terminal/IDE, tag, clipboard-adjacent and
 //! CI-driver commands plus the per-window start path state.
 
-use crate::{core::recent, core::tags, core::terminals};
+use crate::{core::tags, core::terminals};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::Manager;
 
@@ -133,27 +133,19 @@ pub(crate) fn open_terminal(path: String, id: String) -> Result<(), String> {
     terminals::launch(&path, &id)
 }
 #[tauri::command]
-pub(crate) async fn open_path(
-    path: String,
-    recent: tauri::State<'_, recent::Recent>,
-) -> Result<(), String> {
-    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:applications") {
-        return crate::core::volumes::applications::open(
-            path.strip_prefix(crate::core::volumes::applications::URI)
-                .unwrap_or(&path),
-        );
-    }
+pub(crate) async fn open_path(path: String) -> Result<(), String> {
     if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {
         return Err(crate::i18n::t("回收站项目请使用“放回原处”或“彻底删除”").into());
     }
-    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:recent") {
-        let source = crate::core::recent::source_for(&path)?;
-        return crate::core::terminals::open_path(&source);
-    }
-    recent::record(&recent, &path);
+    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
+    let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     tauri::async_runtime::spawn_blocking(move || {
-        let exported = crate::core::fs::export_for_external_drag(&[path])?;
-        terminals::open_path(exported.first().ok_or("missing export")?)
+        if !crate::core::volumes::native_vfs::open(&path)? {
+            let exported = crate::core::fs::export_for_external_drag(&[path], user_action)?;
+            terminals::open_path(exported.first().ok_or("missing export")?)?;
+        }
+        crate::plugins::providers::hooks::complete_open(&snapshot, true);
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -169,14 +161,6 @@ pub(crate) fn reveal_path(path: String) -> Result<(), String> {
     }
     crate::plugins::mounts::reject_local(&path)?;
     terminals::reveal(&path)
-}
-#[tauri::command]
-pub(crate) fn trash_application_entries(paths: Vec<String>) -> Result<(), String> {
-    crate::core::volumes::applications::trash_entries(&paths)
-}
-#[tauri::command]
-pub(crate) fn remove_application_entries(paths: Vec<String>) -> Result<(), String> {
-    crate::core::volumes::applications::remove_entries(&paths)
 }
 #[tauri::command]
 pub(crate) fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {

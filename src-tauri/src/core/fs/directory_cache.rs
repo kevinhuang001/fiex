@@ -6,38 +6,27 @@ use crate::core::{
     ignores::IgnoreSet,
 };
 use crate::infrastructure::cache::disk;
+use crate::infrastructure::cache::lru::LruMap;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     path::Path,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Mutex, OnceLock,
-    },
+    sync::{Arc, Mutex, OnceLock},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DirectorySnapshot {
     pub listing: Listing,
-    #[serde(skip)]
-    last_access: u64,
 }
 
-static ACCESS_CLOCK: AtomicU64 = AtomicU64::new(1);
-fn next_access() -> u64 {
-    ACCESS_CLOCK.fetch_add(1, Ordering::Relaxed)
-}
 fn snapshot(key: &str) -> Option<DirectorySnapshot> {
-    let memory = {
-        let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
-        cache.get_mut(key).map(|entry| {
-            entry.last_access = next_access();
-            entry.clone()
-        })
-    };
-    let data = memory.or_else(|| disk::load::<DirectorySnapshot>(key))?;
-    remember(key, &data);
+    let memory = cache().lock().unwrap_or_else(|e| e.into_inner()).get(key);
+    if let Some(data) = memory {
+        return Some(data.as_ref().clone());
+    }
+    let data = disk::load::<DirectorySnapshot>(key)?;
+    remember(key, Arc::new(data.clone()));
     Some(data)
 }
 pub(crate) fn read_snapshot(
@@ -60,6 +49,7 @@ pub(crate) fn read_snapshot(
 
 /// Find an item in a previously rendered directory snapshot. This is a UI
 /// hint only: callers still reauthorize every operation before execution.
+#[cfg(test)]
 pub(crate) fn cached_entry(directory: &str, path: &str) -> Result<Option<Entry>, String> {
     Ok(read_snapshot(directory, true, &[])?.and_then(|snapshot| {
         snapshot
@@ -72,44 +62,148 @@ pub(crate) fn cached_entry(directory: &str, path: &str) -> Result<Option<Entry>,
 
 const MAX_DIRECTORIES: usize = 10_000;
 const MAX_ENTRIES: usize = 500_000;
-fn cache() -> &'static Mutex<BTreeMap<String, DirectorySnapshot>> {
-    static CACHE: OnceLock<Mutex<BTreeMap<String, DirectorySnapshot>>> = OnceLock::new();
-    CACHE.get_or_init(Default::default)
+#[derive(Default)]
+struct DirectoryCache {
+    values: LruMap<String, Arc<DirectorySnapshot>>,
+    entry_count: usize,
 }
-fn remember(identity: &str, data: &DirectorySnapshot) {
-    let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
-    values.remove(identity);
-    let mut total: usize = values.values().map(|v| v.listing.entries.len()).sum();
-    while (values.len() >= MAX_DIRECTORIES
-        || total.saturating_add(data.listing.entries.len()) > MAX_ENTRIES)
-        && !values.is_empty()
-    {
-        let victim = values
-            .iter()
-            .min_by_key(|(_, v)| v.last_access)
-            .map(|(k, _)| k.clone())
-            .unwrap();
-        if let Some(value) = values.remove(&victim) {
-            total = total.saturating_sub(value.listing.entries.len());
+impl DirectoryCache {
+    fn get(&mut self, identity: &str) -> Option<Arc<DirectorySnapshot>> {
+        self.values.get_mut(identity).cloned()
+    }
+
+    fn remember(&mut self, identity: &str, data: Arc<DirectorySnapshot>) {
+        if let Some(previous) = self.values.remove(identity) {
+            self.entry_count = self
+                .entry_count
+                .saturating_sub(previous.listing.entries.len());
+        }
+        if data.listing.entries.len() > MAX_ENTRIES {
+            return;
+        }
+        while self.values.len() >= MAX_DIRECTORIES
+            || self.entry_count.saturating_add(data.listing.entries.len()) > MAX_ENTRIES
+        {
+            let Some((_, previous)) = self.values.pop_lru() else {
+                break;
+            };
+            self.entry_count = self
+                .entry_count
+                .saturating_sub(previous.listing.entries.len());
+        }
+        self.entry_count = self.entry_count.saturating_add(data.listing.entries.len());
+        let _ = self.values.insert(identity.to_owned(), data);
+    }
+
+    fn mutate(&mut self, identity: &str, update: impl FnOnce(&mut DirectorySnapshot)) {
+        let (previous_count, next_count) = match self.values.get_mut(identity) {
+            Some(snapshot) => {
+                let snapshot = Arc::make_mut(snapshot);
+                let previous_count = snapshot.listing.entries.len();
+                update(snapshot);
+                (previous_count, snapshot.listing.entries.len())
+            }
+            None => return,
+        };
+        self.entry_count = self
+            .entry_count
+            .saturating_sub(previous_count)
+            .saturating_add(next_count);
+        if next_count > MAX_ENTRIES {
+            self.remove(identity);
+        } else {
+            while self.entry_count > MAX_ENTRIES {
+                let Some((_, removed)) = self.values.pop_lru() else {
+                    break;
+                };
+                self.entry_count = self
+                    .entry_count
+                    .saturating_sub(removed.listing.entries.len());
+            }
         }
     }
-    if data.listing.entries.len() <= MAX_ENTRIES {
-        values.insert(identity.into(), data.clone());
+
+    fn remove(&mut self, identity: &str) {
+        if let Some(snapshot) = self.values.remove(identity) {
+            self.entry_count = self
+                .entry_count
+                .saturating_sub(snapshot.listing.entries.len());
+        }
+    }
+
+    fn remove_many(&mut self, identities: &HashSet<String>) {
+        for identity in identities {
+            self.remove(identity);
+        }
     }
 }
+fn cache() -> &'static Mutex<DirectoryCache> {
+    static CACHE: OnceLock<Mutex<DirectoryCache>> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+fn remember(identity: &str, data: Arc<DirectorySnapshot>) {
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remember(identity, data);
+}
+fn cached(identity: &str) -> Option<DirectorySnapshot> {
+    let snapshot = cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(identity);
+    snapshot.map(|snapshot| snapshot.as_ref().clone())
+}
+fn update_cached(identity: &str, update: impl FnOnce(&mut DirectorySnapshot)) {
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .mutate(identity, update);
+}
+fn remove_cached(identity: &str) {
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(identity);
+}
+fn remove_cached_many(identities: &HashSet<String>) {
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove_many(identities);
+}
+#[cfg(test)]
 pub(crate) fn store(path: &str, listing: &Listing) {
+    let revision = super::changes::revision(path);
+    store_at_revision(path, listing, revision);
+}
+
+pub(crate) fn store_at_revision(path: &str, listing: &Listing, revision: u64) {
     if !enabled(path) {
         return;
     }
     let identity = key(path);
+    if super::changes::revision(path) != revision {
+        return;
+    }
     let mut merged = listing.clone();
-    super::mutation_overlay::reconcile(path, &mut merged);
-    let data = DirectorySnapshot {
-        listing: merged,
-        last_access: next_access(),
-    };
-    remember(&identity, &data);
-    disk::store(&identity, &data);
+    if !super::mutation_overlay::reconcile_at_revision(path, &mut merged, revision) {
+        return;
+    }
+    let data = Arc::new(DirectorySnapshot { listing: merged });
+    {
+        let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
+        if super::changes::revision(path) != revision {
+            return;
+        }
+        values.remember(&identity, Arc::clone(&data));
+    }
+    let persistence_path = path.to_owned();
+    let persistence_identity = identity.clone();
+    disk::store_shared_async(identity, data, move || {
+        super::changes::revision(&persistence_path) == revision
+            && key(&persistence_path) == persistence_identity
+    });
 }
 pub(crate) fn filtered(mut listing: Listing, hidden: bool, ignores: &[String]) -> Listing {
     let filter = IgnoreSet::new(ignores);
@@ -193,16 +287,12 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
     drop_subtree(entry_path);
     super::mutation_overlay::remove(path, entry_path);
     super::decoration_cache::invalidate(&key(path));
-    disk::remove(&key(path));
-    if let Some(data) = cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_mut(&key(path))
-    {
+    disk::remove_many_async(vec![key(path)]);
+    update_cached(&key(path), |data| {
         data.listing
             .entries
             .retain(|entry| entry.path != entry_path);
-    }
+    });
 }
 pub(crate) fn add_entry(path: &str, entry: Entry) {
     if !enabled(path) {
@@ -210,12 +300,8 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
     }
     super::mutation_overlay::upsert(path, entry.clone());
     super::decoration_cache::invalidate(&key(path));
-    disk::remove(&key(path));
-    if let Some(data) = cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_mut(&key(path))
-    {
+    disk::remove_many_async(vec![key(path)]);
+    update_cached(&key(path), |data| {
         if let Some(item) = data
             .listing
             .entries
@@ -226,7 +312,7 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
         } else {
             data.listing.entries.push(entry);
         }
-    }
+    });
 }
 pub(crate) fn drop_subtree(path: &str) {
     if !enabled(path) {
@@ -241,11 +327,7 @@ pub(crate) fn drop_subtree(path: &str) {
         if !removed.insert(identity.clone()) {
             continue;
         }
-        let memory = cache()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&identity)
-            .cloned();
+        let memory = cached(&identity);
         if let Some(snapshot) = memory.or_else(|| disk::load::<DirectorySnapshot>(&identity)) {
             for entry in snapshot.listing.entries {
                 if entry.is_dir && !entry.is_symlink {
@@ -256,12 +338,9 @@ pub(crate) fn drop_subtree(path: &str) {
         // A deleted or renamed subtree must not resurrect old child overlays.
         super::mutation_overlay::discard(&current);
         super::decoration_cache::invalidate(&identity);
-        disk::remove(&identity);
     }
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .retain(|identity, _| !removed.contains(identity));
+    disk::remove_many_async(removed.iter().cloned().collect());
+    remove_cached_many(&removed);
 }
 pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
     // A folder rename changes every descendant URI/path in the old subtree.
@@ -272,12 +351,8 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
     super::mutation_overlay::remove(path, old_path);
     super::mutation_overlay::upsert(path, entry.clone());
     super::decoration_cache::invalidate(&key(path));
-    disk::remove(&key(path));
-    if let Some(data) = cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_mut(&key(path))
-    {
+    disk::remove_many_async(vec![key(path)]);
+    update_cached(&key(path), |data| {
         data.listing.entries.retain(|item| item.path != old_path);
         if let Some(item) = data
             .listing
@@ -289,7 +364,7 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
         } else {
             data.listing.entries.push(entry);
         }
-    }
+    });
 }
 
 #[cfg(test)]
@@ -301,10 +376,7 @@ pub(crate) fn invalidate_directory(path: &str) {
     }
     let identity = key(path);
     super::mutation_overlay::discard(path);
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove(&identity);
-    disk::remove(&identity);
+    remove_cached(&identity);
+    disk::remove_many_async(vec![identity.clone()]);
     super::decoration_cache::invalidate(&identity);
 }

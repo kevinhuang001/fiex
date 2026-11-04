@@ -19,6 +19,7 @@ use std::{
 
 /// The SDK and Core use the same operation vocabulary and wire mapping.
 pub use fiex_provider_contracts::FsOperation;
+pub use fiex_provider_contracts::PreflightOp;
 
 /// One plugin's declaration. `reported` distinguishes "declared nothing" from
 /// "never handshook": only the former is an authoritative empty set.
@@ -27,7 +28,7 @@ pub struct RegisteredProvider {
     pub plugin_id: String,
     pub operations: BTreeSet<FsOperation>,
     pub reported: bool,
-    pub preflight: bool,
+    pub preflight_ops: BTreeSet<PreflightOp>,
     instances: BTreeMap<String, vfs_instances::VfsInstance>,
 }
 
@@ -46,8 +47,8 @@ fn registry() -> &'static Mutex<HashMap<String, RegisteredProvider>> {
     REGISTRY.get_or_init(Default::default)
 }
 
-/// Record the `vfs` block of a `plugin.initialize` reply. Unknown operation
-/// names are ignored so a newer plugin cannot break an older Core.
+/// Record the `vfs` block of a `plugin.initialize` reply. Preflight support is
+/// negotiated per operation and every value must use the shared vocabulary.
 pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
     let mut provider = RegisteredProvider {
         plugin_id: plugin_id.to_string(),
@@ -65,10 +66,28 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
             }
         }
     }
-    provider.preflight = reply
-        .pointer("/vfs/preflight")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let preflight_values = reply.pointer("/vfs/preflightOps").and_then(Value::as_array);
+    if provider.reported && preflight_values.is_none() {
+        eprintln!("VFS capability handshake rejected for {plugin_id}: preflightOps is required");
+        provider.reported = false;
+        provider.operations.clear();
+    }
+    let mut preflight_valid = true;
+    if let Some(values) = preflight_values {
+        for value in values {
+            let Some(operation) = value.as_str().and_then(PreflightOp::parse) else {
+                preflight_valid = false;
+                break;
+            };
+            provider.preflight_ops.insert(operation);
+        }
+    }
+    if !preflight_valid {
+        eprintln!("VFS capability handshake rejected for {plugin_id}: unknown preflight operation");
+        provider.reported = false;
+        provider.operations.clear();
+        provider.preflight_ops.clear();
+    }
     let discovery = reply
         .pointer("/vfs/discovery")
         .and_then(Value::as_bool)
@@ -79,21 +98,22 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
         eprintln!("VFS capability handshake rejected for {plugin_id}: discovery is required");
         provider.reported = false;
         provider.operations.clear();
-        provider.preflight = false;
+        provider.preflight_ops.clear();
     }
-    match vfs_instances::read(reply, &provider.operations, provider.preflight) {
+    match vfs_instances::read(reply, &provider.operations, &provider.preflight_ops) {
         Ok(instances) => provider.instances = instances,
         Err(error) => {
             // A malformed handshake never grants the union capability set.
             eprintln!("VFS capability handshake rejected for {plugin_id}: {error}");
             provider.reported = false;
             provider.operations.clear();
-            provider.preflight = false;
+            provider.preflight_ops.clear();
         }
     }
     if let Ok(mut registry) = registry().lock() {
         registry.insert(plugin_id.to_string(), provider.clone());
     }
+    crate::core::fs::clear_preflight_availability_cache();
     provider
 }
 
@@ -101,6 +121,7 @@ pub fn forget(plugin_id: &str) {
     if let Ok(mut registry) = registry().lock() {
         registry.remove(plugin_id);
     }
+    crate::core::fs::clear_preflight_availability_cache();
 }
 
 pub fn get(plugin_id: &str) -> Option<RegisteredProvider> {
@@ -130,8 +151,8 @@ pub fn operations_mount(plugin_id: &str, mount_id: &str) -> Option<Vec<FsOperati
     vfs_instances::operations(plugin_id, mount_id)
 }
 
-pub fn preflight_mount(plugin_id: &str, mount_id: &str) -> bool {
-    vfs_instances::preflight(plugin_id, mount_id)
+pub fn preflight_mount(plugin_id: &str, mount_id: &str, operation: PreflightOp) -> bool {
+    vfs_instances::preflight(plugin_id, mount_id, operation)
 }
 
 /// Gate one outgoing method against the declaration. Non-file methods pass.
@@ -200,7 +221,7 @@ mod tests {
     fn declaration_follows_the_handshake() {
         let provider = register(
             "org.example.drive",
-            &json!({"pluginId":"org.example.drive","ready":true,"vfs":{"discovery":true,"operations":["list","stat","read"]}}),
+            &json!({"pluginId":"org.example.drive","ready":true,"vfs":{"discovery":true,"operations":["list","stat","read"],"preflightOps":[]}}),
         );
         assert!(provider.reported);
         assert_eq!(provider.operations.len(), 3);
@@ -214,7 +235,7 @@ mod tests {
     fn unknown_operations_are_ignored() {
         let provider = register(
             "org.example.future",
-            &json!({"vfs":{"discovery":true,"operations":["list","teleport"]}}),
+            &json!({"vfs":{"discovery":true,"operations":["list","teleport"],"preflightOps":[]}}),
         );
         assert_eq!(
             provider.operations.into_iter().collect::<Vec<_>>(),
@@ -239,7 +260,10 @@ mod tests {
     #[test]
     fn static_capability_handshakes_are_rejected_without_discovery() {
         let plugin = "org.example.static-vfs";
-        let provider = register(plugin, &json!({"vfs":{"operations":["list","read"]}}));
+        let provider = register(
+            plugin,
+            &json!({"vfs":{"operations":["list","read"],"preflightOps":[]}}),
+        );
         assert!(!provider.reported);
         assert!(provider.operations.is_empty());
         assert!(authorize_method(plugin, "vfs.list").is_err());
@@ -251,7 +275,7 @@ mod tests {
         let plugin = "org.example.discovery";
         register(
             plugin,
-            &json!({"vfs":{"operations":["read","write"],"discovery":true}}),
+            &json!({"vfs":{"operations":["read","write"],"discovery":true,"preflightOps":[]}}),
         );
         assert!(needs_discovery(plugin, "vfs.openRead"));
         assert!(needs_discovery(plugin, "vfs.beginWrite"));

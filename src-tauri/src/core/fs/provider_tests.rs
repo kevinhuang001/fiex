@@ -160,6 +160,7 @@ fn symlink_kind_survives_event_metadata_projection() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     use crate::core::volumes::applications;
@@ -168,34 +169,64 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     std::fs::write(&native, b"local").unwrap();
     let token = crate::plugins::mounts::new_id().unwrap();
     let mut directories = Vec::new();
+    let mut virtual_files = Vec::new();
     let mut inputs = vec![native.to_string_lossy().into_owned()];
+    let export_name = if cfg!(target_os = "windows") {
+        "same.exe"
+    } else {
+        "same.desktop"
+    };
+    let mut expected = vec![b"local".to_vec()];
     for index in 0..2 {
-        let dir = applications::create_stored(
+        let dir = applications::create_virtual_folder(
             applications::URI,
             &format!("export-{token}-{index}"),
-            true,
         )
-        .unwrap();
-        let item = applications::create_stored(&dir, "same.txt", false).unwrap();
-        std::fs::write(
-            applications::candidate_path(&item).unwrap(),
-            index.to_string(),
-        )
-        .unwrap();
+        .unwrap()
+        .path;
+        let item = applications::reserve_child(&dir, export_name, false).unwrap();
+        let contents = if cfg!(target_os = "windows") {
+            vec![b'M', b'Z', index as u8]
+        } else {
+            index.to_string().into_bytes()
+        };
+        let item_path = applications::asset_path(&item).unwrap();
+        std::fs::write(&item_path, &contents).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&item_path).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&item_path, permissions).unwrap();
+        }
+        applications::commit_reserved_application(&item).unwrap();
         inputs.push(item);
+        virtual_files.push(inputs.last().unwrap().clone());
         directories.push(dir);
+        expected.push(contents);
     }
-    let output = export_for_external_drag(&inputs).unwrap();
+    let output = export_for_external_drag(
+        &inputs,
+        crate::core::fs::mapped_access::UserActionContext::for_test(),
+    )
+    .unwrap();
     assert_eq!(output.len(), 3);
-    assert_eq!(std::fs::read(&output[0]).unwrap(), b"local");
-    assert_eq!(std::fs::read(&output[1]).unwrap(), b"0");
-    assert_eq!(std::fs::read(&output[2]).unwrap(), b"1");
+    for (path, bytes) in output.iter().zip(expected) {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
     assert_ne!(output[1], output[2]);
-    for path in &output {
-        assert_eq!(std::path::Path::new(path).file_name().unwrap(), "same.txt");
+    assert_eq!(
+        std::path::Path::new(&output[0]).file_name().unwrap(),
+        "same.txt"
+    );
+    for path in &output[1..] {
+        assert_eq!(std::path::Path::new(path).file_name().unwrap(), export_name);
+    }
+    for file in virtual_files {
+        applications::remove_node(&file).unwrap();
     }
     for directory in directories {
-        applications::remove_user(&directory).unwrap();
+        applications::remove_virtual_folder(&directory).unwrap();
     }
 }
 
@@ -238,13 +269,13 @@ fn desktop_create_rename_and_delete_use_the_owning_provider() {
 #[test]
 fn applications_root_creation_uses_the_same_broker_contract() {
     use crate::core::volumes::applications;
-    let name = format!(
-        "fiex-broker-{}.txt",
-        crate::plugins::mounts::new_id().unwrap()
+    let file = super::binding::create(
+        applications::URI,
+        "unsupported.txt",
+        false,
+        "core:test-app-create",
     );
-    let item =
-        super::binding::create(applications::URI, &name, false, "core:test-app-create").unwrap();
-    assert!(applications::is_user(&item));
+    assert!(file.is_err());
     let folder_name = format!(
         "fiex-broker-dir-{}",
         crate::plugins::mounts::new_id().unwrap()
@@ -256,17 +287,17 @@ fn applications_root_creation_uses_the_same_broker_contract() {
         "core:test-app-create",
     )
     .unwrap();
-    let child =
-        super::binding::create(&folder, "nested.txt", false, "core:test-app-create").unwrap();
-    assert!(applications::stored_entry(&child).is_ok());
-    super::binding::remove_path(&child, "core:test-app-delete").unwrap();
-    super::binding::remove_path(&folder, "core:test-app-delete").unwrap();
-    let renamed =
-        super::binding::rename_path(&item, &format!("{name}.moved"), "core:test-app-rename")
-            .unwrap();
-    assert!(applications::is_user(&renamed));
+    let child = super::binding::create(&folder, "nested.txt", false, "core:test-app-create");
+    assert!(child.is_err());
+    let renamed = super::binding::rename_path(
+        &folder,
+        &format!("{folder_name}.moved"),
+        "core:test-app-rename",
+    )
+    .unwrap();
+    assert!(applications::is_folder(&renamed));
     super::binding::remove_path(&renamed, "core:test-app-delete").unwrap();
-    assert!(applications::stored_entry(&renamed).is_err());
+    assert!(applications::entry_for_uri(&renamed).is_err());
 }
 
 #[test]

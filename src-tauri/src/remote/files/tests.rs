@@ -49,7 +49,7 @@ fn operations_are_per_node_and_provider_declaration() {
     let plugin = "org.example.capability-test";
     crate::plugins::provider_registry::register(
         plugin,
-        &serde_json::json!({"vfs":{"discovery":true,"operations":["list","stat","read","write","remove"]}}),
+        &serde_json::json!({"vfs":{"discovery":true,"operations":["list","stat","read","write","remove"],"preflightOps":[]}}),
     );
     let operations = entry_capabilities(plugin, None);
     assert!(operations.iter().any(|op| op == "remove"));

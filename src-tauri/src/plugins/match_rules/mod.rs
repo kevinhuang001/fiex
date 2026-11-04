@@ -9,6 +9,7 @@ use std::ops::Deref;
 
 mod location;
 pub use location::{directory_match_resource, typed_locations_for};
+pub(crate) use location::{projected_storage_for_source, typed_locations_for_snapshot};
 
 /// Core uses the SDK's one authoritative manifest predicate and DTO.
 /// This thin adapter only supplies a trusted directory snapshot for blank

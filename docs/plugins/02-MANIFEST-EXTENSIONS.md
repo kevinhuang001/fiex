@@ -56,9 +56,25 @@
 
 ## 各扩展点示例
 
-`match` 是 Core 在处理 provider 前检查的包含条件：不匹配时不查询该 provider 的权限或命令、不构造操作上下文、不发送事件 IPC。省略 `match` 或使用空对象表示匹配全部；格式错误的规则会拒绝加载，不能退化为匹配全部。
+`match` 是 Core 在处理 provider 前检查的声明式规则：包含条件都满足，并且没有任何目标命中 `exclude` 时才会查询该 provider 的权限或命令、构造操作上下文并发送事件 IPC。省略 `match` 或使用空对象表示匹配全部；格式错误的规则会拒绝加载，不能退化为匹配全部。
 
-不同条件之间为 AND，同一 `extensions` / `mimeTypes` / `kinds` 列表内为 OR。批量目标至少一个满足资源条件才会选择 provider；匹配成功后仍接收本次完整目标集合。`selection` 按完整选择数量判断。缺少目标、目录或类型信息时，不能跳过对应条件；`contains` 仅检查实际本地目录及其祖先。右键子菜单和执行操作使用原会话的目标重新检查。
+包含规则中不同条件之间为 AND，同一 `extensions` / `mimeTypes` / `kinds` 列表内为 OR；批量目标必须全部满足包含条件。`exclude` 中不同条件之间为 AND，同一维度列表内为 OR；批量目标只要有一项命中排除条件，就排除整个 Provider。空的 `exclude` 对象无效。
+
+空选区使用当前目录的可信 View/Storage 身份匹配。`selection` 按完整选择数量判断。缺少目标、目录或类型信息时，不能跳过对应条件；Provider 匹配不接受 `contains` 目录扫描条件。右键子菜单和执行操作使用原会话的目标重新检查。
+
+例如只在普通文件系统位置显示新建文件，可以把排除条件直接声明在 Provider 的匹配规则中：
+
+```json
+{
+  "match": {
+    "selection": "zero",
+    "requiredOps": ["write"],
+    "exclude": {
+      "view": { "providerIds": ["core:applications"] }
+    }
+  }
+}
+```
 
 ### Info
 

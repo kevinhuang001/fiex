@@ -1,9 +1,8 @@
-import { cachePresentations } from './entryPresentation'
+import { cachePresentationPatch, cachePresentations } from './entryPresentation'
 import { publishPresentationIcons } from './decorationIcons'
 import { call, native } from './api'
 import { Channel } from '@tauri-apps/api/core'
-import type { EntryDecoration } from './types'
-import type { Listing } from './types'
+import type { Entry, EntryDecoration, Listing } from './types'
 
 // Multiple panes, the column browser and the picker can ask for the same
 // directory concurrently. Share only in-flight work: a subsequent navigation
@@ -32,9 +31,10 @@ export function listDirectory(
 }
 
 export interface DirectoryViewUpdate {
-  listing: Listing
+  listing?: Listing
   decorations: EntryDecoration[]
   complete: boolean
+  presentationPending: boolean
 }
 
 /** One logical navigation call. Core owns the cache, live revalidation and
@@ -47,7 +47,7 @@ export function openDirectoryStream(
 ): Promise<void> {
   if (!native) {
     return listDirectory(path, hidden, ignores).then((listing) =>
-      onSnapshot({ listing, decorations: [], complete: true }),
+      onSnapshot({ listing, decorations: [], complete: true, presentationPending: false }),
     )
   }
   const channel = new Channel<DirectoryViewUpdate>()
@@ -61,9 +61,16 @@ export function openPresentedDirectory(
   ignores: string[],
   onListing: (listing: Listing) => void,
 ): Promise<void> {
+  let entries: Entry[] = []
   return openDirectoryStream(path, hidden, ignores, (snapshot) => {
-    cachePresentations(snapshot.listing.entries, snapshot.decorations)
-    publishPresentationIcons(snapshot.listing.entries)
-    onListing(snapshot.listing)
+    if (snapshot.listing) {
+      entries = snapshot.listing.entries
+      cachePresentations(entries, snapshot.decorations)
+      publishPresentationIcons(entries, snapshot.presentationPending)
+      onListing(snapshot.listing)
+    } else {
+      cachePresentationPatch(entries, snapshot.decorations)
+      publishPresentationIcons(entries, snapshot.presentationPending)
+    }
   })
 }

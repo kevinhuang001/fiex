@@ -26,12 +26,13 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
         extension,
         mime: String::new(),
         link_target: (!original.is_empty()).then(|| original.to_string()),
-        // Recycle Bin items expose metadata; shell restore/purge are not
-        // generic storage mutations and go through dedicated menu actions.
-        allowed_ops: vec!["stat".into()],
+        // Recycle Bin items expose metadata and generic Remove; Restore stays
+        // a dedicated action because it has no filesystem mutation equivalent.
+        allowed_ops: vec!["stat".into(), "remove".into()],
         tags: vec![],
         has_cache: false,
         pinned: false,
+        storage_projection: Default::default(),
         uploaded: false,
         sync: (!deleted.is_empty()).then(|| deleted.to_string()),
     }

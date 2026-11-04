@@ -135,11 +135,24 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
         "connectionContextMenu.resolve",
         providers,
         &invocation,
-        |_, implementation, invocation| {
-            implementation
-                .resolve(invocation)
-                .map(|items| Some(json!({"items":items})))
-                .map_err(|error| error.to_string())
+        |resolver, implementation, invocation| {
+            if resolver.plugin.is_none() {
+                let bound = native::invocation(
+                    &resolver.id,
+                    request.method.clone(),
+                    request.params.clone(),
+                )?
+                .with_local_data(Arc::new(ctx.clone()));
+                implementation
+                    .resolve(&bound)
+                    .map(|items| Some(json!({"items":items})))
+                    .map_err(|error| error.to_string())
+            } else {
+                implementation
+                    .resolve(invocation)
+                    .map(|items| Some(json!({"items":items})))
+                    .map_err(|error| error.to_string())
+            }
         },
         |provider, response| {
             let Some(response) = response else {
@@ -231,20 +244,36 @@ pub async fn execute(
     };
     let implementation = implementation_for(&owner, &ctx, &session);
     let candidate = ProviderCandidate {
-        resolver: owner,
+        resolver: owner.clone(),
         implementation,
     };
-    let invocation =
+    let invocation = if owner.plugin.is_none() {
+        native::invocation(&owner.id, request.method.clone(), request.params.clone())?
+            .with_local_data(Arc::new(ctx.clone()))
+    } else {
         NativeProviderInvocation::new(request.method.clone(), request.params.clone(), &[], None)
-            .with_local_data(Arc::new(ctx.clone()));
+            .with_local_data(Arc::new(ctx.clone()))
+    };
     let result = EventRouter::resolve_shared(
         "connectionContextMenu.execute",
         vec![candidate],
         &invocation,
-        |_, implementation, invocation| {
-            implementation
-                .execute(invocation)
-                .map_err(|error| error.to_string())
+        |resolver, implementation, invocation| {
+            if resolver.plugin.is_none() {
+                let bound = native::invocation(
+                    &resolver.id,
+                    request.method.clone(),
+                    request.params.clone(),
+                )?
+                .with_local_data(Arc::new(ctx.clone()));
+                implementation
+                    .execute(&bound)
+                    .map_err(|error| error.to_string())
+            } else {
+                implementation
+                    .execute(invocation)
+                    .map_err(|error| error.to_string())
+            }
         },
         |_, result| {
             let wire = serde_json::to_value(&result).map_err(|error| error.to_string())?;

@@ -26,6 +26,11 @@ interface CoreSnapshot {
   key: string
   menu: NonNullable<ContextMenuProps['menu']>
   menus: CoreMenu[]
+  hasEligiblePlugins: boolean
+}
+interface CoreMenuResolution {
+  menus: CoreMenu[]
+  hasEligiblePlugins: boolean
 }
 interface CoreFailure {
   key: string
@@ -53,13 +58,15 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setFailure(undefined)
-    void call<CoreMenu[]>('plugin_context_menu_resolve', {
+    void call<CoreMenuResolution>('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'core',
     })
-      .then((menus) => {
-        if (active) setSnapshot({ key, menu, menus })
+      .then((result) => {
+        if (!result || !Array.isArray(result.menus))
+          throw new Error('Invalid Core context menu response')
+        if (active) setSnapshot({ key, menu, ...result })
       })
       .catch((error) => {
         if (active) setFailure({ key, menu, error: String(error) })
@@ -74,6 +81,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
   return {
     paths,
     menus: current?.menus ?? [],
+    hasEligiblePlugins: current?.hasEligiblePlugins ?? false,
     ready: Boolean(current || currentFailure),
     error: currentFailure,
   }

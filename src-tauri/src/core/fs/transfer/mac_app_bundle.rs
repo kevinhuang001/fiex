@@ -2,7 +2,7 @@
 //! destructive move of an installed application. ditto preserves bundle links.
 use super::{
     binding,
-    planner::{collision, optional_stat, same_version, unique},
+    planner::{collision, optional_stat, same_version, unique_application},
     FsOperation,
 };
 use crate::core::volumes::applications;
@@ -10,7 +10,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::{Action, Resolution},
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 #[allow(clippy::too_many_arguments)]
@@ -23,7 +24,8 @@ pub(super) fn import(
     cancel: &AtomicBool,
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<Option<OperationResult>, String> {
-    if paths.is_empty() || !(destination == applications::URI || applications::is_user(destination))
+    if paths.is_empty()
+        || !(destination == applications::URI || applications::is_folder(destination))
     {
         return Ok(None);
     }
@@ -54,22 +56,12 @@ pub(super) fn import(
             .or_else(|_| source.require(FsOperation::List, false))?;
         let metadata = source.transfer_metadata()?;
         let name = metadata.name.clone();
-        let same_mount = source.reference.mount_id == parent.reference.mount_id;
-        source.review_transfer(
-            TransferDirection::Export,
-            TransferAction::Copy,
+        source.review_export(TransferKind::Copy, PreflightPhase::Execute)?;
+        let mut target = binding::child(
+            &parent,
             &name,
-            &metadata,
-            same_mount,
+            crate::core::fs::provider_registry::ChildKind::Application,
         )?;
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Copy,
-            &name,
-            &metadata,
-            same_mount,
-        )?;
-        let mut target = binding::child(&parent, &name)?;
         let source_version = source.stat()?;
         if let Some(existing) = optional_stat(&target)? {
             match collision(
@@ -86,13 +78,21 @@ pub(super) fn import(
                     result.skipped += 1;
                     continue;
                 }
-                Some(Action::KeepBoth) => target = unique(&parent, &name, true)?,
+                Some(Action::KeepBoth) => target = unique_application(&parent, &name)?,
                 Some(Action::Replace) => {
                     return Err(crate::i18n::t("应用已存在，请重命名或选择保留两者").into())
                 }
             }
         }
-        target.require(FsOperation::Mkdir, true)?;
+        target.require(FsOperation::Write, true)?;
+        parent.require(FsOperation::Write, true)?;
+        let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(&name);
+        parent.review_import(
+            TransferKind::Copy,
+            final_name,
+            &metadata,
+            PreflightPhase::Execute,
+        )?;
         planned.push((source, target, metadata, source_version));
     }
     if !result.conflicts.is_empty() {
@@ -100,11 +100,15 @@ pub(super) fn import(
     }
     for (index, (source, target, metadata, version)) in planned.iter().enumerate() {
         check_cancelled(cancel)?;
-        let folder = applications::candidate_path(&target.path)?;
-        let store = folder.parent().ok_or("missing application store")?;
+        let folder = applications::asset_path(&target.path)?;
+        let staging_root = dirs::home_dir()
+            .ok_or("cannot locate home directory")?
+            .join(".fiex")
+            .join("application-staging");
+        std::fs::create_dir_all(&staging_root).map_err(|error| error.to_string())?;
         let staging = tempfile::Builder::new()
             .prefix(".app-import-")
-            .tempdir_in(store)
+            .tempdir_in(&staging_root)
             .map_err(|e| e.to_string())?;
         let staged = staging.path().join("bundle.app");
         let mut child = std::process::Command::new("/usr/bin/ditto")
@@ -131,21 +135,26 @@ pub(super) fn import(
         if !same_version(&source.stat()?, version) {
             return Err("Conflict: application changed during import".into());
         }
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Copy,
-            &metadata.name,
+        let final_name = target
+            .path
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&metadata.name);
+        parent.review_import(
+            TransferKind::Copy,
+            final_name,
             metadata,
-            source.reference.mount_id == parent.reference.mount_id,
+            PreflightPhase::Execute,
         )?;
-        target.require(FsOperation::Mkdir, true)?;
+        target.require(FsOperation::Write, true)?;
         // Reserve an empty destination atomically. rename only replaces this
         // empty directory; newly added content makes the rename fail safely.
         std::fs::create_dir(&folder).map_err(|e| e.to_string())?;
         if let Err(error) = std::fs::rename(&staged, &folder) {
-            let _ = std::fs::remove_dir(&folder);
+            let _ = std::fs::remove_dir_all(&folder);
             return Err(error.to_string());
         }
+        applications::commit_reserved_application(&target.path)?;
         super::super::changes::committed(&target.path);
         result.paths.push(target.path.clone());
         progress(index as u64 + 1, planned.len() as u64, Some(&metadata.name));

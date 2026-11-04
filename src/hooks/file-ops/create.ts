@@ -45,7 +45,7 @@ export function createActions({ x, run }: FileOpsContext) {
     }
     const name = uniqueName(
       x.entries.map((e) => e.name),
-      t('未命名文件'),
+      `${t('未命名文件')}.txt`,
     )
     const path = await run(t('正在新建文件…'), () =>
       call<string>('create_file_entry', { path: x.path, name }),

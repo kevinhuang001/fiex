@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 
 /** Path, history, tab state and the transient per-pane view state every
@@ -179,9 +180,17 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     forward,
     canBack: cursor > 0,
     canForward: cursor < history.length - 1,
-    up: () => {
-      const upPath = parent(path)
-      if (upPath !== path) navigate(upPath)
+    up: async () => {
+      const uriParent = parent(path)
+      if (uriParent === path) return
+      try {
+        const upPath = path.startsWith('applications://')
+          ? await call<string>('file_parent', { path })
+          : uriParent
+        if (upPath !== path) navigate(upPath)
+      } catch (cause) {
+        setError(String(cause))
+      }
     },
     tabs,
     tab,

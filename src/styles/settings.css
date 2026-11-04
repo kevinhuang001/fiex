@@ -593,6 +593,20 @@
   background: var(--canvas);
   color: var(--text);
 }
+.file-info-action {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.file-info-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
 .file-info-status {
   margin: -4px 0 0;
   font-size: 11px;

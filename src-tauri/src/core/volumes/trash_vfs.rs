@@ -122,9 +122,14 @@ pub fn list(uri: &str) -> Result<Vec<Entry>, String> {
                 );
                 entry.link_target = None;
                 entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
-                    vec!["stat".into(), "list".into(), "search".into()]
+                    vec![
+                        "stat".into(),
+                        "list".into(),
+                        "search".into(),
+                        "remove".into(),
+                    ]
                 } else {
-                    vec!["stat".into()]
+                    vec!["stat".into(), "remove".into()]
                 };
                 Ok(entry)
             })
@@ -137,6 +142,30 @@ pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err("ScopeDenied: child is not listed by the selected Trash directory".into())
+    }
+}
+
+/// Permanently delete one opaque node from Core's Trash view. The root itself
+/// is never a removable resource.
+pub fn purge(uri: &str) -> Result<(), String> {
+    if uri == URI {
+        return Err("ScopeDenied: Trash root cannot be permanently removed".into());
+    }
+    check_access()?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        let path = physical(uri)?;
+        let metadata = std::fs::symlink_metadata(&path).map_err(failure)?;
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            std::fs::remove_dir_all(path).map_err(failure)
+        } else {
+            std::fs::remove_file(path).map_err(failure)
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = uri;
+        Err("InvalidVfsUri: use the issued Recycle Bin node identity".into())
     }
 }
 pub fn entry(uri: &str) -> Result<Entry, String> {
@@ -164,9 +193,14 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         // Native VFS items state their actual supported operations. Never
         // inherit mutations from the physical file or its filesystem ACL.
         entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
-            vec!["stat".into(), "list".into(), "search".into()]
+            vec![
+                "stat".into(),
+                "list".into(),
+                "search".into(),
+                "remove".into(),
+            ]
         } else {
-            vec!["stat".into()]
+            vec!["stat".into(), "remove".into()]
         };
         Ok(entry)
     }

@@ -155,46 +155,6 @@ pub(crate) fn connection_domain(
     None
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fiex_provider_contracts::ProviderInput;
-    use serde_json::json;
-
-    #[test]
-    fn effective_network_allowlist_stays_inside_typed_connection_config() {
-        let connection = StoredConnection {
-            id: "connection-fixture".into(),
-            mount_id: "mount-fixture".into(),
-            cache_revision: "revision-fixture".into(),
-            name: "fixture".into(),
-            kind: "fixture".into(),
-            plugin_id: "missing.fixture".into(),
-            settings: json!({"networkDomains": ["untrusted.example"]})
-                .as_object()
-                .unwrap()
-                .clone(),
-            secret_keys: Vec::new(),
-            saved: true,
-            autostart: false,
-        };
-        let params = json!({
-            "connection": provider_config(&connection),
-            "connectionId": connection.id,
-        });
-
-        let decoded = ProviderInput::decode("connection.validate", &params).unwrap();
-        let ProviderInput::Connection(request) = decoded else {
-            panic!("connection.validate must decode to ConnectionRequest");
-        };
-        let config = request.connection.unwrap().to_value().unwrap();
-        assert_eq!(config["networkDomains"], json!([]));
-        assert!(
-            ProviderInput::decode("connection.validate", &json!({"networkDomains": []})).is_err()
-        );
-    }
-}
-
 pub fn is_remote(path: &str) -> bool {
     connection_for_path(path).is_some()
 }
@@ -302,4 +262,44 @@ pub(crate) fn check_cache_path(conn: &StoredConnection, path: &Path) -> Result<(
 
 pub(crate) fn connection_by_mount(id: &str) -> Option<StoredConnection> {
     load_stored().into_iter().find(|c| c.mount_id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fiex_provider_contracts::ProviderInput;
+    use serde_json::json;
+
+    #[test]
+    fn effective_network_allowlist_stays_inside_typed_connection_config() {
+        let connection = StoredConnection {
+            id: "connection-fixture".into(),
+            mount_id: "mount-fixture".into(),
+            cache_revision: "revision-fixture".into(),
+            name: "fixture".into(),
+            kind: "fixture".into(),
+            plugin_id: "missing.fixture".into(),
+            settings: json!({"networkDomains": ["untrusted.example"]})
+                .as_object()
+                .unwrap()
+                .clone(),
+            secret_keys: Vec::new(),
+            saved: true,
+            autostart: false,
+        };
+        let params = json!({
+            "connection": provider_config(&connection),
+            "connectionId": connection.id,
+        });
+
+        let decoded = ProviderInput::decode("connection.validate", &params).unwrap();
+        let ProviderInput::Connection(request) = decoded else {
+            panic!("connection.validate must decode to ConnectionRequest");
+        };
+        let config = request.connection.unwrap().to_value().unwrap();
+        assert_eq!(config["networkDomains"], json!([]));
+        assert!(
+            ProviderInput::decode("connection.validate", &json!({"networkDomains": []})).is_err()
+        );
+    }
 }

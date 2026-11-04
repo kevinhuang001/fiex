@@ -2,20 +2,34 @@
 use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use fiex_provider_contracts::{MenuExecuteResult, MenuItem};
+use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::MenuExecuteResult;
 #[cfg(test)]
 use serde_json::Value;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub(super) struct Context {
     pub directory: String,
-    pub directory_entry: Option<crate::core::files::Entry>,
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
+    pub resources: Arc<Vec<ResourceSnapshot>>,
+    pub match_targets: Vec<fiex_provider_contracts::MatchResource>,
+    pub directory_resource: Option<ResourceSnapshot>,
+    pub directory_target: Option<fiex_provider_contracts::MatchResource>,
     all_local: bool,
     capabilities: FileCapabilities,
-    native_view_providers: Vec<Resolver>,
-    claimed_actions: Vec<String>,
+    pub(super) preflight: MenuPreflightAvailability,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct MenuPreflightAvailability {
+    pub new_file: bool,
+    pub new_folder: bool,
+    pub rename: bool,
+    pub batch_rename: bool,
+    pub trash: bool,
+    pub remove: bool,
 }
 
 /// Host-only actions require a direct local FS resource. A location type
@@ -29,76 +43,121 @@ fn plain_local(path: &str) -> bool {
 }
 
 impl Context {
-    pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
-        // Provider-backed UI hints come from the current authorized directory
-        // snapshot, so the first Core menu never performs remote stat IPC.
-        // Every actual action still reauthorizes through ResourceBroker.
-        fn entry(path: &str) -> Result<crate::core::files::Entry, String> {
-            if crate::core::fs::provider_registry::is_plugin_mount(path) {
-                let parent = crate::core::fs::provider_registry::parent_path(path)?;
-                return crate::core::fs::directory_cache::cached_entry(&parent, path)?.ok_or_else(
-                    || "selected VFS item is not in the current directory snapshot".into(),
-                );
-            }
+    pub fn load_for_menu(
+        directory: &str,
+        paths: &[String],
+        resolve_preflight: bool,
+    ) -> Result<Self, String> {
+        Self::load_internal(directory, paths, resolve_preflight)
+    }
+
+    fn load_internal(
+        directory: &str,
+        paths: &[String],
+        resolve_preflight: bool,
+    ) -> Result<Self, String> {
+        // Capture the displayed directory once. This is a presentation hint;
+        // execution still reauthorizes every selected resource.
+        let snapshot = crate::core::fs::directory_cache::read_snapshot(directory, true, &[])?;
+        let cached = snapshot
+            .as_ref()
+            .map(|snapshot| {
+                snapshot
+                    .listing
+                    .entries
+                    .iter()
+                    .map(|entry| (entry.path.as_str(), entry))
+                    .collect::<std::collections::HashMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let local_entry = |path: &str| {
             crate::core::fs::trusted(path, "core:context-menu")?
                 .desktop_entry()
                 .map_err(String::from)
-        }
-
-        fn directory_entry(path: &str) -> Result<crate::core::files::Entry, String> {
-            if !crate::core::fs::provider_registry::is_plugin_mount(path) {
-                return entry(path);
-            }
-            if let Ok(parent) = crate::core::fs::provider_registry::parent_path(path) {
-                if let Some(entry) = crate::core::fs::directory_cache::cached_entry(&parent, path)?
-                {
-                    return Ok(entry);
-                }
-            }
-            let snapshot = crate::core::fs::directory_cache::read_snapshot(path, true, &[])?
-                .ok_or_else(|| {
-                    "current VFS directory is not in the directory snapshot".to_owned()
-                })?;
-            let uri = crate::plugins::mounts::parse(path)?;
-            let name = uri
-                .relative
-                .rsplit('/')
-                .next()
-                .filter(|name| !name.is_empty())
-                .unwrap_or("Connection")
-                .to_owned();
-            Ok(crate::core::files::Entry {
-                path: path.into(),
-                name,
-                is_dir: true,
-                allowed_ops: snapshot.listing.allowed_ops,
-                ..Default::default()
-            })
-        }
-
+        };
         let entries = paths
             .iter()
-            .map(|path| entry(path))
+            .map(|path| {
+                if matches!(
+                    crate::core::fs::provider_registry::owner(path),
+                    Ok(crate::core::fs::provider_registry::ResourceOwner::LocalFs)
+                ) {
+                    return local_entry(path);
+                }
+                cached
+                    .get(path.as_str())
+                    .map(|entry| (**entry).clone())
+                    .ok_or_else(|| {
+                        "selected VFS item is not in the current directory snapshot".into()
+                    })
+            })
             .collect::<Result<Vec<_>, _>>()?;
-        let directory_entry = directory_entry(directory)?;
+        let directory_entry = if matches!(
+            crate::core::fs::provider_registry::owner(directory),
+            Ok(crate::core::fs::provider_registry::ResourceOwner::LocalFs)
+        ) {
+            Some(local_entry(directory)?)
+        } else {
+            snapshot.as_ref().map(|snapshot| {
+                let uri_name = crate::plugins::mounts::parse(directory)
+                    .map(|uri| uri.relative)
+                    .unwrap_or_else(|_| {
+                        directory
+                            .split_once("://")
+                            .map(|(_, relative)| relative.to_owned())
+                            .unwrap_or_default()
+                    })
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .find(|name| !name.is_empty())
+                    .or_else(|| directory.split_once("://").map(|(scheme, _)| scheme))
+                    .unwrap_or("Connection")
+                    .to_owned();
+                crate::core::files::Entry {
+                    path: directory.into(),
+                    name: uri_name,
+                    is_dir: true,
+                    allowed_ops: snapshot.listing.allowed_ops.clone(),
+                    ..Default::default()
+                }
+            })
+        };
         let capabilities = if paths.is_empty() {
-            crate::plugins::resource::file_capabilities::for_path(directory)
+            directory_entry.as_ref().map_or_else(
+                || crate::plugins::resource::file_capabilities::for_path(directory),
+                |entry| crate::plugins::resource::file_capabilities::for_entry(directory, entry),
+            )
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
+        let resources = Arc::new(
+            entries
+                .iter()
+                .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+                .collect::<Vec<_>>(),
+        );
+        let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
+        let directory_resource = directory_entry
+            .as_ref()
+            .map(|entry| ResourceSnapshot::from_entry(directory, entry));
+        let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
-        let (native_view_providers, claimed_actions) =
-            super::native_views::resolve_snapshot(directory, paths);
-        Ok(Self {
+        let mut context = Self {
             directory: directory.into(),
-            directory_entry: Some(directory_entry),
             paths: paths.to_vec(),
             entries,
+            resources,
+            match_targets,
+            directory_resource,
+            directory_target,
             all_local,
             capabilities,
-            native_view_providers,
-            claimed_actions,
-        })
+            preflight: MenuPreflightAvailability::default(),
+        };
+        if resolve_preflight {
+            context.preflight = file_ops::preflight_availability(&context);
+        }
+        Ok(context)
     }
 
     pub(super) fn selection(&self) -> Selection<'_> {
@@ -106,6 +165,7 @@ impl Context {
             paths: &self.paths,
             entries: &self.entries,
             all_local: self.all_local,
+            preflight: self.preflight,
         }
     }
 
@@ -133,37 +193,65 @@ impl Context {
         entries: Vec<crate::core::files::Entry>,
         capabilities: FileCapabilities,
     ) -> Self {
+        let mut resources = entries
+            .iter()
+            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+            .collect::<Vec<_>>();
+        for resource in &mut resources {
+            resource.operations = Some(capabilities);
+        }
+        let resources = Arc::new(resources);
+        let mut match_targets =
+            crate::plugins::events::matching::match_resources(resources.as_slice());
+        let allowed_operations = capabilities
+            .into_allowed_ops()
+            .iter()
+            .filter_map(|operation| fiex_provider_contracts::FsOperation::parse(operation))
+            .collect::<Vec<_>>();
+        for target in &mut match_targets {
+            target.capabilities.operations = allowed_operations.clone();
+        }
+        let mut directory_resource = Some(ResourceSnapshot::from_metadata(
+            directory,
+            crate::plugins::contracts::ResourceMetadata {
+                name: directory.into(),
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        ));
+        if let Some(resource) = directory_resource.as_mut() {
+            resource.operations = Some(capabilities);
+        }
+        let mut directory_target = crate::plugins::match_rules::directory_match_resource(directory);
+        if let Some(target) = directory_target.as_mut() {
+            target.capabilities.operations = allowed_operations;
+        }
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
-        let (native_view_providers, claimed_actions) =
-            super::native_views::resolve_snapshot(directory, &paths);
         Self {
             directory: directory.into(),
-            directory_entry: None,
             paths,
             entries,
+            resources,
+            match_targets,
+            directory_resource,
+            directory_target,
             all_local,
             capabilities,
-            native_view_providers,
-            claimed_actions,
+            preflight: MenuPreflightAvailability {
+                new_file: true,
+                new_folder: true,
+                rename: true,
+                batch_rename: true,
+                trash: true,
+                remove: true,
+            },
         }
     }
 }
 
-/// Only groups this selection can actually use become menu providers.
-pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuItem> {
-    items
-        .into_iter()
-        .filter(|item| !ctx.claimed_actions.contains(&item.id))
-        .collect()
-}
-
-/// Native and plugin contributions participate in the same EventRouter.
-/// A native view claims only its OS-specific action identifiers, not the
-/// entire menu. Generic providers still contribute independent actions.
+/// All Core providers participate in one in-process resolver pass.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    let mut candidates = ctx.native_view_providers.clone();
-    candidates.extend(file_ops::providers(ctx));
-    candidates
+    file_ops::providers(ctx)
 }
 
 #[cfg(test)]

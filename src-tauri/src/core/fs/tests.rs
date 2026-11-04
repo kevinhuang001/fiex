@@ -97,32 +97,28 @@ fn resource_identity_is_stable_across_fresh_snapshots() {
 }
 
 #[test]
-fn application_user_children_use_builtin_broker_and_streamed_writes() {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+fn application_user_children_cannot_create_files() {
     let root = crate::core::volumes::applications::URI;
     let parent = super::binding::trusted(root, "core:test-app").unwrap();
     let name = format!(
         "fiex-test-{}.txt",
         crate::plugins::mounts::new_id().unwrap()
     );
-    let child = super::binding::child(&parent, &name).unwrap();
+    let child =
+        super::binding::child(&parent, &name, super::provider_registry::ChildKind::File).unwrap();
     assert!(child.stat().is_err());
-    let handle = child.begin_write(true).unwrap();
-    let request = json!({"handle":handle,"base64":STANDARD.encode(b"broker")});
-    stream_call("core:test-app", "host.fs.writeChunk", &request).unwrap();
-    stream_call("core:test-app", "host.fs.commit", &request).unwrap();
-    assert_eq!(child.preview_prefix(32).unwrap(), b"broker");
-    child.remove().unwrap();
+    assert!(child.begin_write(true).is_err());
     assert!(child.stat().is_err());
 }
 
 #[test]
-fn trash_view_denies_regular_storage_mutations() {
+fn trash_view_root_denies_remove_and_trash_operations() {
     let view = super::binding::trusted("trash://", "core:test-trash").unwrap();
     let write = view.require(FsOperation::Write, false).unwrap_err();
     assert_eq!(write.kind, FsErrorKind::PermissionDenied);
     let remove = view.require(FsOperation::Remove, false).unwrap_err();
-    assert_eq!(remove.kind, FsErrorKind::PermissionDenied);
+    assert_eq!(remove.kind, FsErrorKind::Unsupported);
+    assert!(view.require(FsOperation::Trash, false).is_err());
     // Read-only Trash operations remain available.
     view.require(FsOperation::Stat, false).unwrap();
     view.require(FsOperation::List, false).unwrap();

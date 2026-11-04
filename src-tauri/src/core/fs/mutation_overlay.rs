@@ -4,7 +4,7 @@
 //! the bounded reconciliation window expires.
 use crate::core::files::{Entry, Listing};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicU64, Ordering},
         Mutex, OnceLock,
@@ -21,15 +21,15 @@ enum Kind {
     Upsert(Box<Entry>),
     Remove,
 }
+#[derive(Clone)]
 struct Pending {
-    path: String,
     change: Kind,
     at: Instant,
 }
 #[derive(Default)]
 struct Directory {
     generation: u64,
-    pending: Vec<Pending>,
+    pending: HashMap<String, Pending>,
 }
 fn registry() -> &'static Mutex<HashMap<String, Directory>> {
     static REGISTRY: OnceLock<Mutex<HashMap<String, Directory>>> = OnceLock::new();
@@ -49,14 +49,22 @@ fn record(parent: &str, path: &str, change: Kind) {
     let mut directories = registry().lock().unwrap_or_else(|error| error.into_inner());
     let directory = directories.entry(identity(parent)).or_default();
     directory.generation = CLOCK.fetch_add(1, Ordering::AcqRel);
-    directory.pending.retain(|pending| pending.path != path);
-    directory.pending.push(Pending {
-        path: path.into(),
-        change,
-        at: Instant::now(),
-    });
+    let _ = directory.pending.insert(
+        path.into(),
+        Pending {
+            change,
+            at: Instant::now(),
+        },
+    );
     if directory.pending.len() > MAX_PENDING_PER_DIRECTORY {
-        directory.pending.remove(0);
+        if let Some(oldest) = directory
+            .pending
+            .iter()
+            .min_by_key(|(_, pending)| pending.at)
+            .map(|(path, _)| path.clone())
+        {
+            let _ = directory.pending.remove(&oldest);
+        }
     }
 }
 pub(super) fn upsert(parent: &str, entry: Entry) {
@@ -72,21 +80,39 @@ pub(super) fn discard(parent: &str) {
     directory.generation = CLOCK.fetch_add(1, Ordering::AcqRel);
     directory.pending.clear();
 }
-fn apply(listing: &mut Listing, pending: &Pending) {
-    match &pending.change {
-        Kind::Upsert(entry) => {
-            if let Some(current) = listing
-                .entries
-                .iter_mut()
-                .find(|item| item.path == entry.path)
-            {
-                *current = entry.as_ref().clone();
-            } else {
-                listing.entries.push(entry.as_ref().clone());
+fn apply(listing: &mut Listing, pending: &HashMap<String, Pending>) {
+    if pending.is_empty() {
+        return;
+    }
+    let mut positions: HashMap<String, usize> = listing
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| (entry.path.clone(), index))
+        .collect();
+    let mut removed = HashSet::new();
+    for (path, change) in pending {
+        match &change.change {
+            Kind::Upsert(entry) => {
+                if let Some(index) = positions.get(path).copied() {
+                    listing.entries[index] = entry.as_ref().clone();
+                } else {
+                    positions.insert(path.clone(), listing.entries.len());
+                    listing.entries.push(entry.as_ref().clone());
+                }
+                removed.remove(path.as_str());
+            }
+            Kind::Remove => {
+                removed.insert(path.as_str());
             }
         }
-        Kind::Remove => listing.entries.retain(|entry| entry.path != pending.path),
     }
+    if !removed.is_empty() {
+        listing
+            .entries
+            .retain(|entry| !removed.contains(entry.path.as_str()));
+    }
+    order(listing);
 }
 fn order(listing: &mut Listing) {
     listing
@@ -98,34 +124,38 @@ fn order(listing: &mut Listing) {
 pub(super) fn paint(path: &str, listing: &mut Listing) {
     let directories = registry().lock().unwrap_or_else(|error| error.into_inner());
     if let Some(directory) = directories.get(&identity(path)) {
-        for pending in &directory.pending {
-            if pending.at.elapsed() < RECONCILE_WINDOW {
-                apply(listing, pending);
-            }
-        }
-        if !directory.pending.is_empty() {
-            order(listing);
-        }
+        let active: HashMap<_, _> = directory
+            .pending
+            .iter()
+            .filter(|(_, pending)| pending.at.elapsed() < RECONCILE_WINDOW)
+            .map(|(path, pending)| (path.clone(), pending.clone()))
+            .collect();
+        apply(listing, &active);
     }
 }
 /// Only a *live* provider listing can acknowledge a mutation. Old provider
 /// data is merged with the overlay; changed rows are replaced in-place.
-pub(super) fn reconcile(path: &str, listing: &mut Listing) {
+pub(super) fn reconcile_at_revision(path: &str, listing: &mut Listing, revision: u64) -> bool {
     let mut directories = registry().lock().unwrap_or_else(|error| error.into_inner());
     let Some(directory) = directories.get_mut(&identity(path)) else {
-        return;
+        return revision == 0;
     };
-    directory.pending.retain(|pending| {
+    if directory.generation != revision {
+        return false;
+    }
+    let current: HashMap<_, _> = listing
+        .entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect();
+    directory.pending.retain(|path, pending| {
         if pending.at.elapsed() >= RECONCILE_WINDOW {
             return false;
         }
-        let current = listing
-            .entries
-            .iter()
-            .find(|entry| entry.path == pending.path);
+        let entry = current.get(path.as_str()).copied();
         let confirmed = match &pending.change {
-            Kind::Remove => current.is_none(),
-            Kind::Upsert(expected) => current.is_some_and(|entry| {
+            Kind::Remove => entry.is_none(),
+            Kind::Upsert(expected) => entry.is_some_and(|entry| {
                 entry.name == expected.name
                     && entry.is_dir == expected.is_dir
                     && entry.size == expected.size
@@ -135,14 +165,19 @@ pub(super) fn reconcile(path: &str, listing: &mut Listing) {
         if confirmed {
             return false;
         }
-        apply(listing, pending);
         true
     });
-    order(listing);
+    apply(listing, &directory.pending);
+    true
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn reconcile(path: &str, listing: &mut Listing) {
+        let revision = generation(path);
+        let _ = reconcile_at_revision(path, listing, revision);
+    }
+
     fn listing(path: &str, entries: Vec<Entry>) -> Listing {
         Listing {
             path: path.into(),
@@ -168,7 +203,7 @@ mod tests {
     }
     #[test]
     fn stale_live_listing_does_not_erase_committed_create() {
-        let dir = "applications://user/overlay-test-create";
+        let dir = "applications://app/overlay-test-create";
         let node = format!("{dir}/new");
         upsert(dir, entry(&node));
         let mut old = listing(dir, vec![]);
@@ -181,7 +216,7 @@ mod tests {
     }
     #[test]
     fn removed_entry_stays_hidden_until_confirmed() {
-        let dir = "applications://user/overlay-test-remove";
+        let dir = "applications://app/overlay-test-remove";
         let node = format!("{dir}/old");
         remove(dir, &node);
         let mut old = listing(dir, vec![entry(&node)]);
@@ -191,11 +226,36 @@ mod tests {
     }
     #[test]
     fn mutations_are_directory_scoped() {
-        let first = "applications://user/overlay-test-a";
-        let second = "applications://user/overlay-test-b";
+        let first = "applications://app/overlay-test-a";
+        let second = "applications://app/overlay-test-b";
         let before = generation(second);
         upsert(first, entry(&format!("{first}/new")));
         assert_eq!(generation(second), before);
         discard(first);
+    }
+
+    #[test]
+    fn indexed_reconciliation_applies_distinct_changes_once() {
+        let dir = "applications://folder/overlay-indexed-reconcile";
+        let updated_path = format!("{dir}/updated");
+        let removed_path = format!("{dir}/removed");
+        let added_path = format!("{dir}/added");
+        let mut updated = entry(&updated_path);
+        updated.size = 42;
+        upsert(dir, updated);
+        remove(dir, &removed_path);
+        upsert(dir, entry(&added_path));
+
+        let mut stale = listing(dir, vec![entry(&updated_path), entry(&removed_path)]);
+        reconcile(dir, &mut stale);
+
+        assert_eq!(stale.entries.len(), 2);
+        assert!(stale.entries.iter().any(|item| item.path == added_path));
+        assert!(stale
+            .entries
+            .iter()
+            .any(|item| { item.path == updated_path && item.size == 42 }));
+        assert!(!stale.entries.iter().any(|item| item.path == removed_path));
+        discard(dir);
     }
 }

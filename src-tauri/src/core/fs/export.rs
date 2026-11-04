@@ -12,11 +12,15 @@ const MAX_ITEMS: usize = 100_000;
 mod lease;
 use lease::{leases, prune_leases, root_dir, staging_lock, Lease};
 
+#[cfg(feature = "desktop")]
 pub fn initialize() {
     prune_leases();
 }
 
-pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
+pub(crate) fn export(
+    paths: &[String],
+    user_action: super::mapped_access::UserActionContext,
+) -> Result<Vec<String>, String> {
     if paths.is_empty() {
         return Err("empty export".into());
     }
@@ -26,16 +30,8 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     let mut result = vec![String::new(); paths.len()];
     let mut fresh = Vec::new();
     for (index, path) in paths.iter().enumerate() {
-        let resource = super::trusted(path, "core:export")?;
+        let resource = super::trusted_with_user_action(path, "core:export", user_action)?;
         let info = resource.stat()?;
-        let metadata = resource.transfer_metadata()?;
-        resource.review_transfer(
-            crate::plugin_sdk::filesystem::TransferDirection::Export,
-            crate::plugin_sdk::filesystem::TransferAction::Export,
-            &metadata.name,
-            &metadata,
-            false,
-        )?;
         if info["symlink"] == true {
             return Err("Unsupported: exporting symlinks requires an explicit policy".into());
         }
@@ -46,6 +42,10 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
                 FsOperation::Read
             },
             false,
+        )?;
+        resource.review_export(
+            crate::plugin_sdk::filesystem::TransferKind::Copy,
+            crate::plugin_sdk::filesystem::PreflightPhase::Execute,
         )?;
         let native = provider_registry::native_export_path(&resource);
         if let Some(local) = native {
@@ -160,19 +160,15 @@ fn export_node(
     }
     *count += 1;
     let stat = source.stat()?;
-    let metadata = source.transfer_metadata()?;
-    source.review_transfer(
-        crate::plugin_sdk::filesystem::TransferDirection::Export,
-        crate::plugin_sdk::filesystem::TransferAction::Export,
-        &metadata.name,
-        &metadata,
-        false,
-    )?;
     if stat["symlink"] == true {
         return Err("Unsupported: exporting symlinks requires an explicit policy".into());
     }
     if stat["isDir"] == true {
         source.require(FsOperation::List, false)?;
+        source.review_export(
+            crate::plugin_sdk::filesystem::TransferKind::Copy,
+            crate::plugin_sdk::filesystem::PreflightPhase::Execute,
+        )?;
         std::fs::create_dir(target).map_err(|e| e.to_string())?;
         let listing = source.list()?;
         let children = listing.as_array().ok_or("invalid listing")?;
@@ -194,6 +190,10 @@ fn export_node(
     // Export is a read operation, not merely a metadata lookup. Check the
     // current node capability before opening the provider stream.
     source.require(FsOperation::Read, false)?;
+    source.review_export(
+        crate::plugin_sdk::filesystem::TransferKind::Copy,
+        crate::plugin_sdk::filesystem::PreflightPhase::Execute,
+    )?;
     let mut read = source.open_read_handle()?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)

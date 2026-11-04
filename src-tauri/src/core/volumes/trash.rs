@@ -228,13 +228,8 @@ pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize
             removed += 1;
             continue;
         }
-        if super::applications::is_user(path) {
-            super::applications::remove_user(path)?;
-            removed += 1;
-            continue;
-        }
         if path.starts_with(super::applications::URI) {
-            return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
+            return Err(crate::i18n::t("Applications 项目不支持 Trash").into());
         }
         crate::plugins::mounts::reject_local(path)?;
         remove_entry(Path::new(path))?;

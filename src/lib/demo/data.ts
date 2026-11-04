@@ -21,8 +21,8 @@ export function item(
     extension: isDir ? '' : path.split('.').pop()!,
     mime,
     allowedOps: isDir
-      ? ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove']
-      : ['stat', 'read', 'write', 'rename', 'remove'],
+      ? ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'trash', 'remove']
+      : ['stat', 'read', 'write', 'rename', 'trash', 'remove'],
     linkTarget: null,
     tags: [],
     sync: null,

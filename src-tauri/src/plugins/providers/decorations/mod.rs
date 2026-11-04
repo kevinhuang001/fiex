@@ -16,7 +16,9 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 }
 
 pub use query::{query, query_with_plugins};
-pub use types::{Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle};
+pub use types::{
+    Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle, DecorationTag,
+};
 
 #[cfg(test)]
 mod tests;

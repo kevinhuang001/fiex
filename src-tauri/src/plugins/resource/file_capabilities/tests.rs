@@ -23,6 +23,7 @@ fn absent_paths_fail_closed() {
             write: true,
             rename: true,
             remove: true,
+            trash: true,
             ..FileCapabilities::default()
         }
     );

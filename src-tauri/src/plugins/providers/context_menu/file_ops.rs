@@ -1,43 +1,20 @@
-//! Capability-gated builtin context-menu providers.
-//!
-//! The menu is composed from small native providers. A group exists only when its
-//! capability exists, so an unsupported rename/delete group is absent from the
-//! resolver list instead of appearing with an empty item array.
-//! The capability matrix is:
-//!
-//! - `opening`: always; `open` is omitted for a file entry without `read`
-//!   (a directory opens by navigation and needs no read), `preview` requires
-//!   `read`, `info` only reads Core metadata.
-//! - `rename` / `batch-rename`: require `rename` for the selected nodes.
-//! - `clipboard`: `copy` requires `read`, `cut` requires `rename`, and
-//!   `duplicate` requires `read && write`.
-//! - `trash`: requires `remove`. View-specific
-//!   restore, purge and empty actions belong only to the registered view provider.
-//! - `terminal` / `tags`: local selections only, because Core has no remote
-//!   terminal or tag path.
-//! - `copy-path`: always; it only uses the location Core already knows.
-//! - `connection-cache`: remote selections only, unchanged otherwise.
-//!
-//! Folder creation is not a menu group: the toolbar owns the single
-//! "new folder" affordance from the directory's `allowedOps`.
-//!
-//! Presence decides availability: an unsupported operation is absent from the
-//! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
-//! re-checks the same call on execute.
+//! Atomic Core context-menu providers and their shared trusted selection data.
 use super::builtin::Context;
 use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 #[cfg(test)]
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::ContextMenuProvider;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
-use fiex_provider_contracts::{ContextMenuProvider, MatchResource};
 #[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
-use serde_json::{json, Value};
-use std::sync::Arc;
+use rayon::prelude::*;
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
+use std::sync::{Arc, OnceLock};
 
 mod providers;
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
@@ -53,17 +30,29 @@ pub(super) fn item(
     providers::item(id, title, icon, shortcut)
 }
 
-const PROVIDER_IDS: [&str; 10] = [
-    "builtin:opening",
+const PROVIDER_IDS: [&str; 22] = [
+    "builtin:open",
+    "builtin:preview",
+    "builtin:info",
     "builtin:tags",
-    "builtin:create",
-    "builtin:connection-cache",
+    "builtin:new-folder",
+    "builtin:new-file",
     "builtin:rename",
     "builtin:batch-rename",
-    "builtin:clipboard",
-    "builtin:terminal",
+    "builtin:copy",
+    "builtin:cut",
+    "builtin:duplicate",
     "builtin:copy-path",
-    "builtin:trash",
+    "builtin:pin",
+    "builtin:unpin",
+    "builtin:cache",
+    "builtin:uncache",
+    "builtin:conflict-resolution",
+    "builtin:move-to-trash",
+    "builtin:delete-permanently",
+    "builtin:reveal",
+    "builtin:restore",
+    "builtin:empty-trash",
 ];
 
 /// The selection a menu is resolved for.
@@ -71,6 +60,7 @@ pub(super) struct Selection<'a> {
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) all_local: bool,
+    pub(super) preflight: super::builtin::MenuPreflightAvailability,
 }
 
 impl Selection<'_> {
@@ -88,44 +78,137 @@ pub(super) fn invocation(
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
-    let targets = context
-        .entries
-        .iter()
-        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-        .collect::<Vec<_>>();
-    let directory = context
-        .directory_entry
-        .as_ref()
-        .map(|entry| ResourceSnapshot::from_entry(&context.directory, entry));
-    NativeProviderInvocation::new(method, params, &targets, directory.as_ref())
-        .with_local_data(Arc::new(context.clone()))
+    NativeProviderInvocation::new(
+        method,
+        params,
+        context.resources.as_slice(),
+        context.directory_resource.as_ref(),
+    )
+    .with_local_data(Arc::new(context.clone()))
 }
 
-fn matcher_targets(context: &Context) -> Vec<MatchResource> {
-    let targets = context
-        .entries
-        .iter()
-        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-        .collect::<Vec<_>>();
-    crate::plugins::events::matching::match_resources(&targets)
+pub(super) fn invocation_for(
+    provider_id: &str,
+    context: &Context,
+    method: &str,
+    params: Value,
+) -> Result<NativeProviderInvocation, String> {
+    registry()
+        .invocation(
+            provider_id,
+            method,
+            params,
+            context.resources.as_slice(),
+            context.directory_resource.as_ref(),
+        )
+        .map(|invocation| invocation.with_local_data(Arc::new(context.clone())))
 }
 
 pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
-    let targets = matcher_targets(context);
-    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
-    let invocation = invocation(context, "contextMenu.resolve", json!({}));
     registry()
-        .matched_candidates(&targets, directory.as_ref(), context.paths.len())
+        .matched_candidates(
+            &context.match_targets,
+            context.directory_target.as_ref(),
+            context.paths.len(),
+        )
         .into_iter()
         .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
-        .filter(|candidate| {
-            registry().get(&candidate.id).is_some_and(|provider| {
-                provider
-                    .resolve(&invocation)
-                    .is_ok_and(|items| !items.is_empty())
-            })
-        })
         .collect()
+}
+
+/// Resolve dynamic eligibility only for menu providers that passed their
+/// static match and basic capability filters. The menu waits for these results
+/// so its first-level contents are stable when displayed.
+pub(super) fn preflight_availability(
+    context: &Context,
+) -> super::builtin::MenuPreflightAvailability {
+    let matched = registry()
+        .matched_candidates(
+            &context.match_targets,
+            context.directory_target.as_ref(),
+            context.paths.len(),
+        )
+        .into_iter()
+        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .map(|candidate| candidate.id)
+        .collect::<std::collections::HashSet<_>>();
+    let capabilities = context.capabilities();
+    let mut result = super::builtin::MenuPreflightAvailability::default();
+
+    if context.paths.is_empty() {
+        let check_file = capabilities.write && matched.contains("builtin:new-file");
+        let check_folder = capabilities.create && matched.contains("builtin:new-folder");
+        if check_file || check_folder {
+            if let Ok(parent) = crate::core::fs::trusted(&context.directory, "core:context-menu") {
+                result.new_file = check_file && parent.review_create_available(false);
+                result.new_folder = check_folder && parent.review_create_available(true);
+            }
+        }
+        return result;
+    }
+
+    let check_rename = capabilities.rename
+        && ((context.paths.len() == 1 && matched.contains("builtin:rename"))
+            || (context.paths.len() > 1 && matched.contains("builtin:batch-rename")));
+    let check_trash = capabilities.trash && matched.contains("builtin:move-to-trash");
+    let check_remove = capabilities.remove && matched.contains("builtin:delete-permanently");
+    if !(check_rename || check_trash || check_remove) {
+        return result;
+    }
+
+    let availability = preflight_for_paths(&context.paths, check_rename, check_trash, check_remove);
+    let all_checked = !availability.is_empty();
+    if context.paths.len() == 1 {
+        result.rename =
+            check_rename && all_checked && availability.iter().all(|value| value.rename);
+    } else {
+        result.batch_rename =
+            check_rename && all_checked && availability.iter().all(|value| value.rename);
+    }
+    result.trash = check_trash && all_checked && availability.iter().all(|value| value.trash);
+    result.remove = check_remove && all_checked && availability.iter().all(|value| value.remove);
+    result
+}
+
+#[derive(Default)]
+struct ResourceAvailability {
+    rename: bool,
+    trash: bool,
+    remove: bool,
+}
+
+/// Reuse one trusted resource and run all applicable checks on one bounded
+/// worker lane per selected path.
+fn preflight_for_paths(
+    paths: &[String],
+    rename: bool,
+    trash: bool,
+    remove: bool,
+) -> Vec<ResourceAvailability> {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    let pool = POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .thread_name(|index| format!("menu-preflight-{index}"))
+            .build()
+            .expect("menu preflight pool configuration is valid")
+    });
+    let unique = paths.iter().collect::<std::collections::HashSet<_>>();
+    pool.install(|| {
+        unique
+            .par_iter()
+            .map(|path| {
+                let Ok(resource) = crate::core::fs::trusted(path, "core:context-menu") else {
+                    return ResourceAvailability::default();
+                };
+                ResourceAvailability {
+                    rename: rename && resource.review_rename_available(),
+                    trash: trash && resource.review_trash_available(),
+                    remove: remove && resource.review_remove_available(),
+                }
+            })
+            .collect::<Vec<_>>()
+    })
 }
 
 #[cfg(test)]
@@ -137,12 +220,10 @@ pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
     let descriptor = registry()
         .descriptor(id)
         .ok_or("missing native menu descriptor")?;
-    let targets = matcher_targets(context);
-    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
     if !fiex_provider_contracts::ProviderMatcher::matches(
         &descriptor.r#match,
-        &targets,
-        directory.as_ref(),
+        &context.match_targets,
+        context.directory_target.as_ref(),
         context.paths.len(),
     ) {
         return Err("native ContextMenuProvider does not match selection".into());
@@ -210,7 +291,7 @@ mod registry_tests {
             .descriptors()
             .filter(|descriptor| descriptor.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
-        assert_eq!(generic.len(), 10);
+        assert_eq!(generic.len(), 22);
         for descriptor in generic {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();
@@ -220,8 +301,8 @@ mod registry_tests {
             .into_iter()
             .filter(|candidate| candidate.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
-        assert_eq!(sorted[0].id, "builtin:opening");
-        assert_eq!(sorted.last().unwrap().id, "builtin:trash");
+        assert_eq!(sorted[0].id, "builtin:open");
+        assert_eq!(sorted.last().unwrap().id, "builtin:empty-trash");
         assert!(sorted
             .windows(2)
             .all(|pair| pair[0].priority >= pair[1].priority));
@@ -240,7 +321,10 @@ mod registry_tests {
                 .into_iter()
                 .map(|provider| provider.id)
                 .collect::<Vec<_>>(),
-            vec!["builtin:create".to_owned()]
+            vec![
+                "builtin:new-folder".to_owned(),
+                "builtin:new-file".to_owned(),
+            ]
         );
     }
 }

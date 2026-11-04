@@ -1,9 +1,7 @@
 //! Remote connection commands and the volume locations survey.
 
 use super::files::{byte_progress_emitter, progress_emitter, OperationProgress};
-use crate::{
-    core::operations::OperationCancel, core::recent, core::terminals, core::volumes, remote,
-};
+use crate::{core::operations::OperationCancel, core::terminals, core::volumes, remote};
 use tauri::ipc::Channel;
 
 #[tauri::command]
@@ -110,8 +108,8 @@ pub(crate) fn remote_cached(path: String) -> Result<bool, String> {
 pub(crate) async fn remote_open(
     path: String,
     on_progress: Channel<OperationProgress>,
-    recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
+    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
     let emit = byte_progress_emitter(on_progress);
     let step = std::path::Path::new(&path)
         .file_name()
@@ -123,11 +121,14 @@ pub(crate) async fn remote_open(
             emit(done, total, step.as_deref())
         })),
     };
-    recent::record(&recent, &path);
     let local = remote::ensure_downloaded(&path, &options).await?;
-    tauri::async_runtime::spawn_blocking(move || terminals::open_path(&local))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        terminals::open_path(&local)?;
+        crate::plugins::providers::hooks::complete_open(&snapshot, true);
+        Ok(())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 pub(crate) async fn remote_download_dir(

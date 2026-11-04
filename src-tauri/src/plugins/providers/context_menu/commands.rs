@@ -113,7 +113,7 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
     {
         return Err("menu session expired or item was not offered".into());
     }
-    let ctx = builtin::Context::load(&session.directory, &session.paths)?;
+    let ctx = builtin::Context::load_for_menu(&session.directory, &session.paths, true)?;
     let request = ProviderRequest {
         method: "contextMenu.execute".into(),
         params: json!({
@@ -133,7 +133,19 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
         "contextMenu.execute",
         vec![candidate],
         &invocation,
-        |resolver, provider, invocation| execute_provider(resolver, provider, invocation),
+        |resolver, provider, invocation| {
+            if resolver.plugin.is_none() {
+                let bound = file_ops::invocation_for(
+                    &resolver.id,
+                    &ctx,
+                    &request.method,
+                    request.params.clone(),
+                )?;
+                execute_provider(resolver, provider, &bound)
+            } else {
+                execute_provider(resolver, provider, invocation)
+            }
+        },
         |_, result| {
             let wire = serde_json::to_value(&result).map_err(|error| error.to_string())?;
             crate::plugins::events::validate_result("contextMenu.execute", &wire)?;

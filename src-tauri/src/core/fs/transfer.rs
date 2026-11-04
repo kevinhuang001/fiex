@@ -5,7 +5,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::Resolution,
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::sync::atomic::AtomicBool;
 
 mod cleanup;
@@ -32,7 +33,7 @@ pub fn transfer(
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<OperationResult, String> {
     let applications = destination == crate::core::volumes::applications::URI
-        || crate::core::volumes::applications::is_user(destination);
+        || crate::core::volumes::applications::is_folder(destination);
     if !applications
         && paths.iter().any(|path| {
             crate::core::volumes::applications::is_system_app(path)
@@ -40,6 +41,20 @@ pub fn transfer(
         })
     {
         return Err(crate::i18n::t("系统应用不能移出应用程序视图").into());
+    }
+    if moving && !paths.is_empty() {
+        let target = binding::destination(destination, "core:transfer")?;
+        let sources = paths
+            .iter()
+            .map(|path| binding::trusted(path, "core:transfer"))
+            .collect::<Result<Vec<_>, _>>()?;
+        if let Some(paths) = crate::core::volumes::native_vfs::move_within_mount(&sources, &target)?
+        {
+            return Ok(OperationResult {
+                paths,
+                ..Default::default()
+            });
+        }
     }
     #[cfg(target_os = "macos")]
     if let Some(result) = mac_app_bundle::import(
@@ -56,75 +71,6 @@ pub fn transfer(
     #[cfg(target_os = "linux")]
     if let Some(result) = linux_app_links::import(paths, destination, keep_both, cancel)? {
         return Ok(result);
-    }
-    // Installed applications are not host files. Moving them into/out of an
-    // Applications folder only rewrites the persisted mapping; user-store
-    // entries in the same selection still go through the regular engine.
-    if moving {
-        let system: Vec<String> = paths
-            .iter()
-            .filter(|path| {
-                crate::core::volumes::applications::is_system_app(path)
-                    && crate::core::volumes::applications::system_entry(path).is_ok()
-            })
-            .cloned()
-            .collect();
-        if !system.is_empty() {
-            if destination != crate::core::volumes::applications::URI
-                && !crate::core::volumes::applications::is_user(destination)
-            {
-                return Err(
-                    "system applications can only be moved inside the Applications view".into(),
-                );
-            }
-            let rest: Vec<String> = paths
-                .iter()
-                .filter(|path| !system.iter().any(|candidate| candidate == *path))
-                .cloned()
-                .collect();
-            let parent = binding::destination(destination, "core:transfer")?;
-            for path in &system {
-                let source = binding::trusted(path, "core:transfer")?;
-                let metadata = source.transfer_metadata()?;
-                source.review_transfer(
-                    TransferDirection::Export,
-                    TransferAction::Move,
-                    &metadata.name,
-                    &metadata,
-                    true,
-                )?;
-                parent.review_transfer(
-                    TransferDirection::Import,
-                    TransferAction::Move,
-                    &metadata.name,
-                    &metadata,
-                    true,
-                )?;
-            }
-            crate::core::volumes::applications::move_system_apps(&system, destination)?;
-            let mut result = OperationResult {
-                paths: system,
-                ..Default::default()
-            };
-            if rest.is_empty() {
-                return Ok(result);
-            }
-            let mut other = transfer(
-                &rest,
-                destination,
-                moving,
-                keep_both,
-                ignores,
-                resolutions,
-                cancel,
-                progress,
-            )?;
-            result.paths.append(&mut other.paths);
-            result.errors.append(&mut other.errors);
-            result.skipped += other.skipped;
-            result.conflicts.append(&mut other.conflicts);
-            return Ok(result);
-        }
     }
     let parent = binding::destination(destination, "core:transfer")?;
     let mut result = OperationResult::default();
@@ -152,9 +98,9 @@ pub fn transfer(
             &mut steps,
             0,
             if moving {
-                TransferAction::Move
+                TransferKind::Move
             } else {
-                TransferAction::Copy
+                TransferKind::Copy
             },
             &parent,
         )?;

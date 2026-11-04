@@ -4,7 +4,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::{Action, Conflict, FileVersion, Resolution},
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn same_version(a: &serde_json::Value, b: &serde_json::Value) -> bool {
@@ -72,6 +73,35 @@ pub(super) fn unique(
     name: &str,
     directory: bool,
 ) -> Result<ResourceBroker, String> {
+    unique_with_kind(
+        parent,
+        name,
+        if directory {
+            crate::core::fs::provider_registry::ChildKind::Folder
+        } else {
+            crate::core::fs::provider_registry::ChildKind::File
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn unique_application(
+    parent: &ResourceBroker,
+    name: &str,
+) -> Result<ResourceBroker, String> {
+    unique_with_kind(
+        parent,
+        name,
+        crate::core::fs::provider_registry::ChildKind::Application,
+    )
+}
+
+fn unique_with_kind(
+    parent: &ResourceBroker,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<ResourceBroker, String> {
+    let directory = kind == crate::core::fs::provider_registry::ChildKind::Folder;
     let path = std::path::Path::new(name);
     let stem = if directory {
         name
@@ -89,12 +119,26 @@ pub(super) fn unique(
             .unwrap_or_default()
     };
     for index in 2..=10_000 {
-        let target = binding::child(parent, &format!("{stem} ({index}){extension}"))?;
+        let target = binding::child(parent, &format!("{stem} ({index}){extension}"), kind)?;
         if optional_stat(&target)?.is_none() {
             return Ok(target);
         }
     }
     Err("no free destination name".into())
+}
+
+pub(super) fn relative_target_name(
+    policy_parent: &ResourceBroker,
+    target: &ResourceBroker,
+    fallback: &str,
+) -> String {
+    let prefix = format!("{}/", policy_parent.path.trim_end_matches(['/', '\\']));
+    target
+        .path
+        .strip_prefix(&prefix)
+        .filter(|relative| !relative.is_empty())
+        .unwrap_or(fallback)
+        .to_owned()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -109,7 +153,7 @@ pub(super) fn plan(
     result: &mut OperationResult,
     steps: &mut Vec<Step>,
     depth: usize,
-    action: TransferAction,
+    action: TransferKind,
     policy_parent: &ResourceBroker,
 ) -> Result<(), String> {
     check_cancelled(cancel)?;
@@ -136,7 +180,15 @@ pub(super) fn plan(
         },
         false,
     )?;
-    let mut target = binding::child(parent, name)?;
+    let mut target = binding::child(
+        parent,
+        name,
+        if directory {
+            crate::core::fs::provider_registry::ChildKind::Folder
+        } else {
+            crate::core::fs::provider_registry::ChildKind::File
+        },
+    )?;
     if source.path == target.path
         || (directory
             && target
@@ -174,21 +226,25 @@ pub(super) fn plan(
     }
     let metadata = source.transfer_metadata()?;
     let same_mount = source.reference.mount_id == parent.reference.mount_id;
-    source.review_transfer(
-        TransferDirection::Export,
-        action,
-        name,
-        &metadata,
-        same_mount,
-    )?;
     let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(name);
-    policy_parent.review_transfer(
-        TransferDirection::Import,
-        action,
-        final_name,
-        &metadata,
-        same_mount,
-    )?;
+    let relative_name = relative_target_name(policy_parent, &target, final_name);
+    if action == TransferKind::Move {
+        source.review_remove(PreflightPhase::Execute)?;
+    }
+    if same_mount && action == TransferKind::Move {
+        source.review_move(policy_parent, Some(&relative_name), PreflightPhase::Execute)?;
+    } else {
+        source.review_export(action, PreflightPhase::Execute)?;
+        policy_parent.require(
+            if directory {
+                FsOperation::Mkdir
+            } else {
+                FsOperation::Write
+            },
+            true,
+        )?;
+        policy_parent.review_import(action, &relative_name, &metadata, PreflightPhase::Execute)?;
+    }
     let had_target = existing.is_some();
     let directory_source = source.clone_binding();
     steps.push(Step {
@@ -205,7 +261,11 @@ pub(super) fn plan(
         let listing = directory_source.list()?;
         for entry in listing.as_array().ok_or("invalid directory listing")? {
             let child_name = entry["name"].as_str().ok_or("missing child name")?;
-            let child_source = binding::child(&directory_source, child_name)?;
+            let child_source = binding::child(
+                &directory_source,
+                child_name,
+                crate::core::fs::provider_registry::ChildKind::Folder,
+            )?;
             // Descendant scopes are shared with their selected root. The
             // destination may not exist yet, but its ref is already confined.
             plan(

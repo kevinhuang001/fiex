@@ -206,19 +206,30 @@ pub(super) fn merge(
 pub(super) fn path_for_target<'a>(
     target: &ResourceRef,
     entries: &HashMap<String, DecorationEntry>,
-    resources: &'a [ResourceSnapshot],
+    resources_by_ref: &HashMap<(&'a str, &'a str), &'a str>,
 ) -> Option<&'a str> {
-    let resource = resources
+    let path = resources_by_ref.get(&(target.mount_id.as_str(), target.node_id.as_str()))?;
+    entries.contains_key(*path).then_some(*path)
+}
+
+pub(super) fn resource_path_index(resources: &[ResourceSnapshot]) -> HashMap<(&str, &str), &str> {
+    resources
         .iter()
-        .find(|resource| &resource.reference == target)?;
-    entries
-        .contains_key(&resource.display)
-        .then_some(resource.display.as_str())
+        .map(|resource| {
+            (
+                (
+                    resource.reference.mount_id.as_str(),
+                    resource.reference.node_id.as_str(),
+                ),
+                resource.display.as_str(),
+            )
+        })
+        .collect()
 }
 
 pub(super) fn decode(
     entries: &HashMap<String, DecorationEntry>,
-    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+    resources_by_ref: &HashMap<(&str, &str), &str>,
     manifest: &PluginManifest,
     folder: &std::path::Path,
     contributions: Vec<DecorationContribution>,
@@ -231,11 +242,10 @@ pub(super) fn decode(
         if !item.native_badges.is_empty() || item.icon_path.is_some() {
             return Err("plugins cannot set Core-owned decoration fields".into());
         }
-        let target = resources
-            .iter()
-            .find(|resource| resource.reference == item.target)
-            .ok_or("decoration target is outside the scoped request")?;
-        let path = target.display.clone();
+        let path = resources_by_ref
+            .get(&(item.target.mount_id.as_str(), item.target.node_id.as_str()))
+            .ok_or("decoration target is outside the scoped request")?
+            .to_string();
         if !entries.contains_key(&path) || result.contains_key(&path) {
             return Err("invalid or duplicate decoration target".into());
         }

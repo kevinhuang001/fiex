@@ -92,12 +92,19 @@ fn match_predicates_are_scoped_by_extension_point() {
     }))
     .is_ok());
     assert!(validate_extensions(&serde_json::json!({
+        "contextMenus": {"match": {
+            "exclude": {"view": {"providerIds": ["core:applications"]}}
+        }}
+    }))
+    .is_ok());
+    assert!(validate_extensions(&serde_json::json!({
         "info": {"match": {"mimeTypes": ["text/*"]}}
     }))
     .is_ok());
     for invalid in [
         serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
         serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
+        serde_json::json!({"info": {"match": {"exclude": {}}}}),
         serde_json::json!({"info": {"match": {"contains": [".git"]}}}),
         serde_json::json!({"info": [{"id": "x"}]}),
         serde_json::json!({"info": {"title": "X"}}),
@@ -140,15 +147,25 @@ fn preview_loading_pages_are_optional_and_package_local() {
 
 #[test]
 fn hooks_and_search_validate_match_instead_of_ignoring_bad_rules() {
-    for feature in ["hooks", "search"] {
-        assert!(validate_extensions(&json!({feature:{"match":{"extensions":["zip"]}}})).is_ok());
+    assert!(validate_extensions(&json!({"hooks":{
+        "event":"afterOpen",
+        "match":{"extensions":["zip"]}
+    }}))
+    .is_ok());
+    assert!(validate_extensions(&json!({"search":{"match":{"extensions":["zip"]}}})).is_ok());
+    for (feature, required) in [
+        ("hooks", json!({"event":"afterOpen"})),
+        ("search", json!({})),
+    ] {
         for predicate in [
             json!({"extensions":"zip"}),
             json!({"selection":"single"}),
             json!({"contains":[".git"]}),
             json!({"extension":["zip"]}),
         ] {
-            assert!(validate_extensions(&json!({feature:{"match":predicate}})).is_err());
+            let mut value = required.clone();
+            value["match"] = predicate;
+            assert!(validate_extensions(&json!({feature:value})).is_err());
         }
     }
 }

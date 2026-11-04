@@ -1,12 +1,14 @@
 use super::*;
 
 fn basename(path: &str) -> Result<String, String> {
-    let path = if applications::is_user(path) {
-        applications::candidate_path(path)?
-    } else {
-        PathBuf::from(path)
-    };
-    path.file_name()
+    if let Some(target) = applications::pending_target(path) {
+        return Ok(target.name);
+    }
+    if applications::is_app(path) || applications::is_folder(path) {
+        return applications::entry_for_uri(path).map(|entry| entry.name);
+    }
+    PathBuf::from(path)
+        .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .filter(|name| !name.is_empty())
         .ok_or_else(|| "InvalidVfsUri: node has no name".into())
@@ -65,20 +67,32 @@ pub fn require_for(
 
 pub fn preflight_for(
     broker: &crate::core::fs::ResourceBroker,
-    request: &TransferPreflight,
+    destination: Option<&crate::core::fs::ResourceBroker>,
+    request: &fiex_provider_contracts::PreflightRequest,
 ) -> Result<(), String> {
     let provider =
         shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
-    let invocation = shared::broker_invocation(broker, None, "vfs.preflight", json!({}));
-    let result = provider
-        .preflight(&invocation, request)
-        .map_err(provider_error_text)?;
-    if result.allowed {
+    let params = serde_json::to_value(request).map_err(|error| error.to_string())?;
+    let invocation = shared::broker_invocation(broker, destination, "vfs.preflight", params);
+    let handlers = provider.preflight_handlers().map_err(provider_error_text)?;
+    if !handlers.supports(request.op()) {
         Ok(())
     } else {
-        Err(result
-            .reason
-            .unwrap_or_else(|| "PermissionDenied: transfer denied by provider".into()))
+        let decision = handlers
+            .dispatch(&invocation, request)
+            .map_err(provider_error_text)?;
+        if decision.allowed {
+            Ok(())
+        } else {
+            Err(format!(
+                "{}: {}",
+                decision.code.as_deref().unwrap_or("PermissionDenied"),
+                decision
+                    .reason
+                    .as_deref()
+                    .unwrap_or("denied by provider policy")
+            ))
+        }
     }
 }
 
@@ -150,7 +164,11 @@ pub fn rename_for(
         json!({"nodeId":source.path.as_str(),"parentId":parent,"name":name}),
     );
     let request = FsRequest::new(&invocation, FsOperation::Rename).map_err(provider_error_text)?;
-    provider.rename(&request).map_err(provider_error_text)
+    let entry = provider.rename(&request).map_err(provider_error_text)?;
+    if source_id == "core:applications" {
+        applications::cancel_reservation(&destination.path);
+    }
+    Ok(entry)
 }
 
 pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String> {
@@ -164,6 +182,19 @@ pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String
     );
     let request = FsRequest::new(&invocation, FsOperation::Remove).map_err(provider_error_text)?;
     provider.remove(&request).map_err(provider_error_text)
+}
+
+pub fn trash_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String> {
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let invocation = shared::broker_invocation(
+        broker,
+        None,
+        "vfs.trash",
+        json!({"nodeId":broker.path.as_str()}),
+    );
+    let request = FsRequest::new(&invocation, FsOperation::Trash).map_err(provider_error_text)?;
+    provider.trash(&request).map_err(provider_error_text)
 }
 
 pub fn search_for(

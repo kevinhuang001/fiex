@@ -1,32 +1,19 @@
 //! The "Applications" virtual folder. Core enumerates installed applications
 //! itself so opening the entry never has to launch Finder or Explorer.
 
-pub mod folders;
 mod icons;
 mod launch;
 mod platform;
-mod store;
+mod state;
 use crate::core::files::Entry;
-use crate::core::fs::directory_cache;
 pub use icons::cached_icon;
 #[cfg(any(target_os = "windows", test))]
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
-use std::collections::HashSet;
+pub use state::{PendingKind, PendingTarget};
 use std::sync::{Mutex, OnceLock};
-use store::list_user;
-pub use store::{
-    after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
-    stored_entry, stored_path, stored_uri, validate_child,
-};
-#[cfg(test)]
-pub(super) use store::{folder_listing, user_encoded};
 
 pub const URI: &str = "applications://";
-/// User-created application-store nodes live directly under the view root.
-/// The `~` marker keeps them distinct from system application identities,
-/// which are base64-encoded host paths.
-pub const USER_PREFIX: &str = "applications://~";
 
 fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
     Entry {
@@ -45,23 +32,26 @@ fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
         has_cache: false,
         pinned: false,
         uploaded: false,
+        storage_projection: Default::default(),
         sync: None,
     }
 }
 
 pub fn list() -> Result<Vec<Entry>, String> {
-    let system = refresh_system_entries()?;
-    let mapped = folders::mapped_apps();
-    Ok(root_listing(system, list_user(), &mapped))
+    refresh_system_entries()?;
+    list_at(URI)
 }
 
-fn root_listing(system: Vec<Entry>, user: Vec<Entry>, mapped: &HashSet<String>) -> Vec<Entry> {
-    let mut entries: Vec<Entry> = system
-        .into_iter()
-        .filter(|entry| !mapped.contains(&entry.path))
-        .collect();
-    entries.extend(user);
-    entries
+pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
+    system_entries()?;
+    let mut entries = state::folder_children(uri)?;
+    let cached = cached_system_entries().unwrap_or_default();
+    for entry in &mut entries {
+        if let Some(system) = cached.iter().find(|system| system.path == entry.path) {
+            *entry = system.clone();
+        }
+    }
+    Ok(entries)
 }
 
 /// System applications live in the platform's installed-app namespace, not in
@@ -86,13 +76,31 @@ fn store_system_entries(entries: &[Entry]) {
 }
 
 fn refresh_system_entries() -> Result<Vec<Entry>, String> {
-    let entries = platform::platform_list()?;
-    store_system_entries(&entries);
-    let ids = entries
+    let mut entries = platform::platform_list()?;
+    let records = entries
         .iter()
-        .map(|entry| entry.path.clone())
-        .collect::<Vec<_>>();
-    folders::refresh(&ids);
+        .map(|entry| {
+            let encoded = entry
+                .path
+                .strip_prefix(URI)
+                .ok_or("platform application has an invalid identity")?;
+            let locator = decode(encoded)?;
+            Ok((locator, entry.name.clone()))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let identities = state::register_system_apps(&records)?;
+    for entry in &mut entries {
+        let encoded = entry
+            .path
+            .strip_prefix(URI)
+            .ok_or("platform application has an invalid identity")?;
+        let locator = decode(encoded)?;
+        entry.path = identities
+            .get(&locator)
+            .cloned()
+            .ok_or("platform application identity was not persisted")?;
+    }
+    store_system_entries(&entries);
     Ok(entries)
 }
 
@@ -101,118 +109,174 @@ pub fn system_entries() -> Result<Vec<Entry>, String> {
     if let Some(entries) = cached_system_entries() {
         return Ok(entries);
     }
-    let entries = platform::platform_list()?;
-    store_system_entries(&entries);
-    Ok(entries)
+    refresh_system_entries()
 }
 
 pub fn is_system_app(path: &str) -> bool {
-    path != URI && path.starts_with(URI) && !is_user(path)
+    state::app_id(path).is_some_and(|id| {
+        state::snapshot().ok().is_some_and(|state| {
+            state
+                .apps
+                .get(&id)
+                .is_some_and(|app| matches!(app.source, state::ApplicationSource::System { .. }))
+        })
+    })
 }
 
-pub fn is_mapped(path: &str) -> bool {
-    folders::is_mapped(path)
+/// Whether a stored user node is a platform-verified launch target.
+pub fn is_user_application(path: &str) -> bool {
+    is_user(path)
+        && state::source(path)
+            .is_ok_and(|app| matches!(app.source, state::ApplicationSource::Imported { .. }))
 }
 
-pub fn folder_for(path: &str) -> Option<String> {
-    folders::folder_for(path)
+/// Classify a trusted host resource for Applications transfer policy.
+pub(crate) fn classify_host_application(path: &str, target: Option<&str>) -> bool {
+    platform::classify_host_application(std::path::Path::new(path), target)
+}
+
+pub fn validate_import_asset(path: &std::path::Path, display_name: &str) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Only regular application assets can be imported".into());
+    }
+    let extension = std::path::Path::new(display_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let supported = match std::env::consts::OS {
+        "windows" => {
+            matches!(extension.as_str(), "exe" | "lnk")
+                && (extension == "lnk"
+                    || crate::core::volumes::application_policy::executable_file(
+                        &path.to_string_lossy(),
+                    ))
+        }
+        "linux" => {
+            matches!(extension.as_str(), "desktop" | "appimage")
+                && classify_host_application(&path.to_string_lossy(), None)
+        }
+        "macos" => false,
+        _ => false,
+    };
+    if supported {
+        Ok(())
+    } else {
+        Err("The file is not a supported application asset".into())
+    }
 }
 
 pub fn system_entry(path: &str) -> Result<Entry, String> {
-    if !is_system_app(path) {
+    let node = state::source(path)?;
+    if !matches!(node.source, state::ApplicationSource::System { .. }) {
         return Err("not a system application".into());
     }
-    system_entries()?
-        .into_iter()
-        .find(|entry| entry.path == path)
-        .ok_or_else(|| crate::i18n::t("应用不存在").to_string())
-}
-
-/// Move system applications into a folder (or back to the root). User-store
-/// files use the regular filesystem transfer instead.
-pub fn move_system_apps(paths: &[String], destination: &str) -> Result<(), String> {
-    if paths.is_empty() {
-        return Ok(());
-    }
-    let mut entries = Vec::with_capacity(paths.len());
-    let mut previous = Vec::with_capacity(paths.len());
-    for path in paths {
-        if !is_system_app(path) {
-            return Err("not a system application".into());
-        }
-        entries.push(system_entry(path)?);
-        previous.push(folders::folder_for(path));
-    }
-    folders::move_apps(paths, destination)?;
-    for ((app, entry), previous) in paths.iter().zip(entries).zip(previous) {
-        directory_cache::remove_entry(URI, app);
-        if let Some(folder) = previous {
-            directory_cache::remove_entry(&folder, app);
-        }
-        if destination == URI {
-            directory_cache::add_entry(URI, entry);
-        } else {
-            directory_cache::add_entry(destination, entry);
-        }
-    }
-    Ok(())
-}
-
-/// Context-menu delete for an application entry. Mapped system apps return to
-/// the root; user-store files are removed through the normal store rules.
-pub fn remove_entries(paths: &[String]) -> Result<(), String> {
-    // Review the whole selection before any mutation; mixed selections cannot
-    // accidentally remove user data before hitting a protected system app.
-    if paths.iter().any(|path| !is_user(path)) {
-        return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
-    }
-    for path in paths {
-        remove_user(path)?;
-    }
-    Ok(())
-}
-
-/// Move user-store entries to the platform Trash. Mapped system apps in a
-/// trashed folder return to the root.
-pub fn trash_entries(paths: &[String]) -> Result<(), String> {
-    // Review the whole selection before any mutation; mixed selections cannot
-    // accidentally remove user data before hitting a protected system app.
-    if paths.iter().any(|path| !is_user(path)) {
-        return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
-    }
-    for path in paths {
-        trash_user(path)?;
-    }
-    Ok(())
-}
-
-fn trash_user(uri: &str) -> Result<(), String> {
-    let target = stored_path(uri)?;
-    let parent = target.parent().ok_or("application item has no parent")?;
-    let root = stored_path(URI)?;
-    let parent_uri = if parent == root {
-        URI.to_string()
-    } else {
-        stored_uri(parent)?
-    };
-    let directory = target.is_dir();
-    let path = target.to_string_lossy().into_owned();
-    let result = crate::core::operations::recycle(std::slice::from_ref(&path))?;
-    if let Some(error) = result.errors.into_iter().next() {
-        return Err(error);
-    }
-    directory_cache::remove_entry(&parent_uri, uri);
-    directory_cache::remove_entry(URI, uri);
-    if directory {
-        let returned = folders::forget_folder(uri)?;
-        directory_cache::drop_subtree(uri);
-        for app in returned {
-            if let Ok(entry) = system_entry(&app) {
-                directory_cache::add_entry(URI, entry);
+    match system_entries() {
+        Ok(entries) => {
+            if let Some(entry) = entries.into_iter().find(|entry| entry.path == path) {
+                return Ok(entry);
             }
         }
+        Err(error) if !node.unavailable => return Err(error),
+        Err(_) => {}
     }
-    Ok(())
+    if node.unavailable {
+        return Ok(state::app_entry(&node));
+    }
+    Err(crate::i18n::t("应用不存在").to_string())
+}
+
+pub fn is_user(path: &str) -> bool {
+    state::is_user_app(path)
+}
+
+pub fn is_folder(path: &str) -> bool {
+    state::is_folder(path)
+}
+
+pub fn is_app(path: &str) -> bool {
+    state::is_app(path)
+}
+
+pub fn entry_for_uri(path: &str) -> Result<Entry, String> {
+    state::entry(path)
+}
+
+pub fn create_virtual_folder(parent: &str, name: &str) -> Result<Entry, String> {
+    state::create_folder(parent, name)
+}
+
+pub fn rename_virtual_folder(path: &str, name: &str) -> Result<Entry, String> {
+    state::rename_folder(path, name)
+}
+
+pub fn remove_virtual_folder(path: &str) -> Result<(), String> {
+    state::remove_empty_folder(path)
+}
+
+pub fn validate_remove(path: &str) -> Result<(), String> {
+    state::validate_remove(path)
+}
+
+pub fn parent_uri(path: &str) -> Result<String, String> {
+    state::parent_uri(path)
+}
+
+pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
+    state::validate_child(parent, child)
+}
+
+pub fn reserve_child(parent: &str, name: &str, directory: bool) -> Result<String, String> {
+    state::reserve_child(
+        parent,
+        name,
+        if directory {
+            state::PendingKind::Folder
+        } else {
+            state::PendingKind::Application
+        },
+    )
+}
+
+pub fn reserved_child(parent: &str, name: &str) -> Result<state::PendingTarget, String> {
+    state::reserved_child(parent, name)
+}
+
+pub fn pending_target(path: &str) -> Option<state::PendingTarget> {
+    state::pending_target(path)
+}
+
+pub fn cancel_reservation(path: &str) {
+    state::cancel_reservation(path)
+}
+
+pub fn commit_reserved_folder(path: &str) -> Result<Entry, String> {
+    state::commit_reserved_folder(path)
+}
+
+pub fn commit_reserved_application(path: &str) -> Result<Entry, String> {
+    state::commit_reserved_application(path)
+}
+
+pub fn rename_app(path: &str, name: &str) -> Result<Entry, String> {
+    state::rename_imported(path, name)
+}
+
+pub fn rename_node(path: &str, parent: &str, name: &str) -> Result<Entry, String> {
+    state::rename_node(path, parent, name)
+}
+
+pub fn remove_node(path: &str) -> Result<(), String> {
+    state::remove_node(path)
+}
+
+pub fn move_nodes(paths: &[String], destination: &str) -> Result<(), String> {
+    state::move_nodes(paths, destination)
+}
+
+pub fn asset_path(path: &str) -> Result<std::path::PathBuf, String> {
+    state::asset_path(path)
 }
 
 fn encode(value: &str) -> String {

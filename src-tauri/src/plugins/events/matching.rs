@@ -49,7 +49,7 @@ pub fn match_resources(resources: &[ResourceSnapshot]) -> Vec<MatchResource> {
         .iter()
         .map(|resource| {
             let (view, storage) =
-                crate::plugins::match_rules::typed_locations_for(&resource.display);
+                crate::plugins::match_rules::typed_locations_for_snapshot(resource);
             let effective = resource.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&resource.display)
             });
@@ -214,6 +214,10 @@ mod tests {
             &match_resources(&[local]),
             "/tmp"
         ));
+        let excluded = json!({"contextMenus":{"match":{
+            "exclude":{"view":{"providerIds":["core:applications"]}}
+        }}});
+        assert!(!matches("contextMenu.resolve", &excluded, &selected, path));
     }
 
     #[test]

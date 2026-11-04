@@ -29,7 +29,10 @@ struct MediaInfo;
 impl InfoProvider for MediaInfo {
     fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
         let resource = NativeProviderInvocation::resource(ctx, 0)?;
-        let path = resource.export_path().map_err(ProviderError::internal)?;
+        let user_action = NativeProviderInvocation::user_action(ctx)?;
+        let path = resource
+            .export_path(user_action)
+            .map_err(ProviderError::internal)?;
         Ok(media_sections(&path))
     }
 }
@@ -83,12 +86,22 @@ pub(super) fn invoke(
         serde_json::json!({}),
         std::slice::from_ref(resource),
         None,
-    );
+    )
+    .with_user_action_context(crate::core::fs::mapped_access::UserActionContext::for_test());
     provider.resolve(&invocation)
 }
 
 pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
+}
+
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resource: &ResourceSnapshot,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
 }
 
 #[cfg(test)]
@@ -116,5 +129,31 @@ mod tests {
             .any(|provider| provider.id == "core.media"));
         assert!(invoke("unknown", &directory).is_err());
         assert_eq!(invoke("core.metadata", &directory).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn native_info_providers_remain_available_in_core_special_views() {
+        for view_id in ["core:applications", "core:trash", "core:recent"] {
+            let target = fiex_provider_contracts::MatchResource {
+                metadata: Some(crate::plugins::contracts::ResourceMetadata {
+                    kind: "file".into(),
+                    mime: Some("video/mp4".into()),
+                    ..Default::default()
+                }),
+                view: Some(fiex_provider_contracts::ResourceLocation {
+                    resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                    provider_id: view_id.into(),
+                    mount_id: Some(view_id.into()),
+                }),
+                ..Default::default()
+            };
+            let candidates = registry().matched_candidates(&[target], None, 1);
+            assert!(candidates
+                .iter()
+                .any(|provider| provider.id == "core.metadata"));
+            assert!(candidates
+                .iter()
+                .any(|provider| provider.id == "core.media"));
+        }
     }
 }

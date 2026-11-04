@@ -1,34 +1,56 @@
 import { useEntryDecorations } from './useEntryDecorations'
-import { cachePresentations } from '@/lib/entryPresentation'
+import { cachePresentationPatch, cachePresentations, sameDecoration } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { openDirectoryStream } from '@/lib/listing'
+import { isVirtualResource } from '@/lib/files'
 import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
-/** True for every path owned by the three Core virtual views, including their
- *  subdirectories. A local SearchProvider cannot enumerate these. */
-function virtualViewPath(value: string, trashRoot: string | null): boolean {
-  if (
-    value === 'recent://' ||
-    value.startsWith('applications://') ||
-    value === 'recyclebin://' ||
-    value === 'trash://'
-  ) {
-    return true
-  }
-  if (!trashRoot) return false
-  const root = trashRoot.replace(/[/\\]+$/, '')
-  return value === root || value.startsWith(`${root}/`) || value.startsWith(`${root}\\`)
+function sameListing(previous: Entry[], next: Entry[]): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((entry, index) => {
+      const value = next[index]
+      return (
+        entry.path === value.path &&
+        entry.name === value.name &&
+        entry.isDir === value.isDir &&
+        entry.isSymlink === value.isSymlink &&
+        entry.size === value.size &&
+        entry.modified === value.modified &&
+        entry.created === value.created &&
+        entry.extension === value.extension &&
+        entry.mime === value.mime &&
+        entry.linkTarget === value.linkTarget &&
+        entry.hasCache === value.hasCache &&
+        entry.pinned === value.pinned &&
+        entry.uploaded === value.uploaded &&
+        entry.sync === value.sync &&
+        sameArray(entry.allowedOps, value.allowedOps) &&
+        entry.tags.length === value.tags.length &&
+        entry.tags.every(
+          (tag, tagIndex) =>
+            tag.name === value.tags[tagIndex].name &&
+            tag.color === value.tags[tagIndex].color &&
+            tag.hex === value.tags[tagIndex].hex,
+        )
+      )
+    })
+  )
 }
 
-/** Lightweight identity of a listing: order plus the fields that visibly
- *  change. Used to skip a redundant state replacement after the cache paint. */
-function listingKey(entries: Entry[]): string {
-  return JSON.stringify([...entries].sort((a, b) => a.path.localeCompare(b.path)))
+function sameArray(previous: string[] | undefined, next: string[] | undefined): boolean {
+  return (
+    previous === next ||
+    (previous !== undefined &&
+      next !== undefined &&
+      previous.length === next.length &&
+      previous.every((value, index) => value === next[index]))
+  )
 }
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -82,20 +104,7 @@ export function useListing(
   const locationsRequest = useRef(0)
   const searchRequest = useRef(0)
   const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
-  const trashRoot = useRef<string | null>(null)
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
-  useEffect(() => {
-    if (!native || !enabled) return
-    let active = true
-    void call<string | null>('trash_path')
-      .then((root) => {
-        if (active) trashRoot.current = root ?? null
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [enabled])
   useEffect(() => {
     if (!native || !enabled) return
     const stop = listen('remote-sync', () => {
@@ -203,27 +212,58 @@ export function useListing(
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
-    let paintedKey: string | null = null
+    let paintedEntries: Entry[] | null = null
     setLoading(true)
     setError('')
     void openDirectoryStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
       if (!active || id !== request.current) return
       const l = snapshot.listing
+      if (!l) {
+        if (paintedEntries === null) return
+        cachePresentationPatch(paintedEntries, snapshot.decorations)
+        publishPresentationIcons(paintedEntries, snapshot.presentationPending)
+        if (snapshot.decorations.length) {
+          setDirectoryDecorations((previous) => {
+            let changed = false
+            const next = { ...previous }
+            for (const value of snapshot.decorations) {
+              const old = previous[value.path]
+              if (old && sameDecoration(old, value)) continue
+              next[value.path] = value
+              changed = true
+            }
+            return changed ? next : previous
+          })
+        }
+        if (
+          snapshot.complete &&
+          path === 'recent://' &&
+          paintedEntries.length === 0 &&
+          history.length <= 1
+        ) {
+          const home = locations.find((item) => item.name === '个人文件夹')?.path
+          if (home) navigate(home)
+        }
+        return
+      }
       if (l.path !== path) {
         navigate(l.path)
         return
       }
-      const nextKey = listingKey(l.entries)
-      if (snapshot.decorations.length) {
-        cachePresentations(l.entries, snapshot.decorations)
-        publishPresentationIcons(l.entries)
-      }
-      const presentation = Object.fromEntries(
-        snapshot.decorations.map((value) => [value.path, value]),
-      )
-      setDirectoryDecorations((previous) =>
-        JSON.stringify(previous) === JSON.stringify(presentation) ? previous : presentation,
-      )
+      const displayedEntries = l.entries
+      cachePresentations(l.entries, snapshot.decorations)
+      publishPresentationIcons(l.entries, snapshot.presentationPending)
+      setDirectoryDecorations((previous) => {
+        if (
+          Object.keys(previous).length === snapshot.decorations.length &&
+          snapshot.decorations.every((value) => {
+            const old = previous[value.path]
+            return old !== undefined && sameDecoration(old, value)
+          })
+        )
+          return previous
+        return Object.fromEntries(snapshot.decorations.map((value) => [value.path, value]))
+      })
       setDirectoryAllowedOps(l.allowedOps || [])
       setVirtualVolume(Boolean(l.virtualVolume))
       setDefaultView(l.defaultView || null)
@@ -233,9 +273,9 @@ export function useListing(
           ? previous
           : l.warnings,
       )
-      if (paintedKey !== nextKey) {
-        paintedKey = nextKey
-        setEntries(l.entries)
+      if (paintedEntries === null || !sameListing(paintedEntries, displayedEntries)) {
+        paintedEntries = displayedEntries
+        setEntries(displayedEntries)
         const paths = new Set(l.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((p) => paths.has(p)))
       }
@@ -253,7 +293,7 @@ export function useListing(
     })
       .catch((error) => {
         if (!active || id !== request.current) return
-        if (paintedKey === null) {
+        if (paintedEntries === null) {
           setEntries([])
           setDirectoryDecorations({})
           setError(String(error))
@@ -267,6 +307,7 @@ export function useListing(
       })
     return () => {
       active = false
+      if (paintedEntries) publishPresentationIcons(paintedEntries, false)
     }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
@@ -275,7 +316,7 @@ export function useListing(
       !path ||
       !native ||
       virtualVolume ||
-      path.startsWith('recent://') ||
+      isVirtualResource(path) ||
       path.startsWith('fiex-plugin-view://')
     )
       return
@@ -322,7 +363,7 @@ export function useListing(
     const root = globalSearch ? 'everywhere://' : path
     // A Core-owned virtual root only has an in-process entry set; local search
     // providers cannot enumerate it, so the engine stays builtin.
-    const engine = virtualViewPath(root, trashRoot.current) ? 'builtin' : 'auto'
+    const engine = 'auto'
     const timer = setTimeout(() => {
       void cancelled
         .then(() => {
@@ -341,7 +382,7 @@ export function useListing(
                 // Virtual-folder results are complete snapshots.
                 startTransition(() =>
                   setEntries((previous) =>
-                    listingKey(previous) === listingKey(b.entries) ? previous : b.entries,
+                    sameListing(previous, b.entries) ? previous : b.entries,
                   ),
                 )
               } else if (b.entries.length) {

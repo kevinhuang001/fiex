@@ -17,11 +17,9 @@ import {
   RotateCcw,
   Scissors,
   Tags,
-  TerminalSquare,
   Trash2,
 } from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
-import { usePluginCatalog } from '@/lib/plugins'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { useContextMenu } from './useContextMenu'
 import { executeCoreMenu } from './execute'
@@ -37,7 +35,6 @@ const icons = {
   tags: Tags,
   copy: Copy,
   scissors: Scissors,
-  terminal: TerminalSquare,
   trash: Trash2,
   restore: RotateCcw,
   'cloud-check': CloudCheck,
@@ -55,8 +52,7 @@ export function FileContextMenu(props: ContextMenuProps) {
   // Core snapshot is ready. Keep `open` false until then so the measuring
   // effect runs again when the real node mounts (otherwise the stale initial
   // 0,0 placement would survive).
-  const { paths, menus, error, ready } = useContextMenu(props)
-  const plugins = usePluginCatalog()
+  const { paths, menus, error, ready, hasEligiblePlugins } = useContextMenu(props)
   const setError = x.setError
   useEffect(() => {
     // Menu resolution errors use the one modal error channel, never an inline
@@ -67,7 +63,7 @@ export function FileContextMenu(props: ContextMenuProps) {
   // Core decides eligible providers from trusted view/storage identities.
   // Never suppress IPC providers just because a resource is a Core-owned VFS;
   // plugins can also opt in to blank-canvas selection via match.selection=zero.
-  const pluginEntry = plugins.some((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+  const pluginEntry = hasEligiblePlugins
   const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null
   // Wait for the Core-only snapshot: the menu must appear with its final

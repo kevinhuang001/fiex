@@ -5,9 +5,11 @@ use serde::Serialize;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DirectoryViewUpdate {
-    pub listing: Listing,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub listing: Option<Listing>,
     pub decorations: Vec<Decoration>,
     pub complete: bool,
+    pub presentation_pending: bool,
 }
 
 /// One logical operation paints a previously visited directory and revalidates
@@ -23,44 +25,64 @@ pub(crate) async fn directory_open(
         if crate::core::volumes::trash_vfs::handles(&path) {
             crate::core::volumes::trash_vfs::check_access()?;
         }
-        let started = std::time::Instant::now();
         let identity = crate::core::fs::directory_cache::key(&path);
         let cached = crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?;
         let cache_hit = cached.is_some();
-        // Warm listings paint an atomic metadata + Decoration snapshot.
-        // A cold listing waits for its first complete presentation rather
-        // than displaying generic icons which will immediately flash.
+        // Paint a cached listing immediately. For stale snapshots, reuse only
+        // decorations whose entry fingerprint still matches; fresh providers
+        // are resolved after the first listing has reached the UI.
         if let Some(cached) = cached {
-            let decorations = crate::core::fs::decoration_cache::resolve(&path, &cached.listing);
+            let (decorations, exact) =
+                crate::core::fs::decoration_cache::cached(&path, &cached.listing);
             let _ = on_snapshot.send(DirectoryViewUpdate {
-                listing: cached.listing,
+                listing: Some(cached.listing),
                 decorations,
                 complete: false,
+                presentation_pending: !exact,
             });
         }
+        let listing_started = std::time::Instant::now();
         let broker = crate::core::fs::trusted(&path, "core:directory-open")?;
         let listing = broker
             .desktop_listing(hidden, &ignores)
             .map_err(String::from)?;
-        let decorations = crate::core::fs::decoration_cache::resolve(&path, &listing);
+        let listing_elapsed = listing_started.elapsed();
         if identity != crate::core::fs::directory_cache::key(&path) {
             return Err("StaleRef: connection identity changed during listing".into());
         }
-        let count = listing.entries.len();
+        let (decorations, exact) =
+            crate::core::fs::decoration_cache::cached(&path, &listing);
         let _ = on_snapshot.send(DirectoryViewUpdate {
-            listing,
-            decorations,
-            complete: true,
+            listing: Some(listing.clone()),
+            decorations: decorations.clone(),
+            complete: exact,
+            presentation_pending: !exact,
         });
+        let presentation_started = std::time::Instant::now();
+        if !exact {
+            let decoration_patch =
+                crate::core::fs::decoration_cache::resolve_missing(&path, &listing);
+            if identity != crate::core::fs::directory_cache::key(&path) {
+                return Err("StaleRef: connection identity changed during listing".into());
+            }
+            let _ = on_snapshot.send(DirectoryViewUpdate {
+                listing: None,
+                decorations: decoration_patch,
+                complete: true,
+                presentation_pending: false,
+            });
+        }
+        let count = listing.entries.len();
         crate::infrastructure::logging::record_core(
             "debug",
             "host.fs.list",
             &format!(
-                "Directory \"{}\" listed {} entries with presentation in {} ms (cache_hit={}, hidden={})",
-                path,
+                "listed {} entries in {} ms; presentation took {} ms (cache_hit={}, decoration_cache_hit={}, hidden={})",
                 count,
-                started.elapsed().as_millis(),
+                listing_elapsed.as_millis(),
+                presentation_started.elapsed().as_millis(),
                 cache_hit,
+                exact,
                 hidden,
             ),
         );

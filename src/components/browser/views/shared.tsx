@@ -134,6 +134,8 @@ export function NameCell({
     .filter(Boolean)
     .join(' · ')
   const label = decoration?.label || entry.name
+  const chars = Array.from(entry.name)
+  const split = Math.ceil(chars.length / 2)
   return (
     <>
       <span
@@ -146,7 +148,8 @@ export function NameCell({
         style={style}
         title={title}
       >
-        {entry.name}
+        <span className="filename-head">{chars.slice(0, split).join('')}</span>
+        <span className="filename-tail">{chars.slice(split).join('')}</span>
       </span>
       <Badges badges={[...(decoration?.nativeBadges || []), ...(field?.badges || [])]} />
       {label !== entry.name && <small className="decoration-label">{label}</small>}

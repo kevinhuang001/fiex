@@ -54,26 +54,40 @@ fn expired_sessions_and_disabled_actions_are_rejected() {
     assert!(super::builtin::execute("builtin:rename", "rename", &ctx).is_err());
 }
 #[test]
-fn generic_trash_menu_only_uses_normal_remove_capability() {
+fn trash_and_permanent_delete_are_independent_core_actions() {
     let ctx = super::builtin::Context::for_test_caps(
         "/tmp",
         vec!["/tmp/item".into()],
         vec![],
         crate::plugins::resource::file_capabilities::FileCapabilities {
+            trash: true,
             remove: true,
             ..Default::default()
         },
     );
-    let items = super::builtin::resolve("builtin:trash", &ctx).unwrap()["items"]
+    let trash = super::builtin::resolve("builtin:move-to-trash", &ctx).unwrap()["items"]
         .as_array()
-        .unwrap()
+        .unwrap()[0]
         .clone();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["id"], "trash");
-    assert_eq!(items[0]["placement"], "tail");
+    let remove = super::builtin::resolve("builtin:delete-permanently", &ctx).unwrap()["items"]
+        .as_array()
+        .unwrap()[0]
+        .clone();
+    assert_eq!(trash["id"], "trash");
+    assert_eq!(remove["id"], "delete");
+    assert_eq!(trash["placement"], "tail");
+    assert_eq!(remove["placement"], "tail");
+    let registered = super::builtin::providers(&ctx)
+        .into_iter()
+        .map(|provider| provider.id)
+        .collect::<Vec<_>>();
+    assert!(registered.iter().any(|id| id == "builtin:move-to-trash"));
+    assert!(registered
+        .iter()
+        .any(|id| id == "builtin:delete-permanently"));
     assert!(!super::builtin::providers(&ctx)
         .iter()
-        .any(|provider| provider.id == "builtin:connection-cache"));
+        .any(|provider| provider.id == "builtin:pin"));
 }
 
 #[test]
@@ -90,7 +104,7 @@ fn recent_location_still_offers_open_without_a_filesystem_directory() {
 #[test]
 fn core_and_plugin_scopes_keep_their_owner() {
     let (_temp, directory, paths) = temp_selection();
-    let core = super::query_core(&directory, &paths[..1]).unwrap();
+    let core = super::query_core(&directory, &paths[..1]).unwrap().menus;
     assert!(!core.is_empty());
     assert!(core.iter().all(|menu| menu["kind"] == "builtin"));
     let plugins = super::query_plugins(&directory, &paths[..1]).unwrap();

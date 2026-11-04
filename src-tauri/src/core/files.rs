@@ -3,6 +3,13 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
+#[derive(Clone, Debug, Default)]
+pub enum StorageProjection {
+    #[default]
+    Owned,
+    Projected(Option<fiex_provider_contracts::ResourceLocation>),
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
@@ -26,6 +33,10 @@ pub struct Entry {
     /// Connection entries pinned with "Always keep locally".
     #[serde(default)]
     pub pinned: bool,
+    /// Core-validated source storage identity for virtual projections. This
+    /// remains process-local metadata and never becomes part of the UI DTO.
+    #[serde(skip)]
+    pub storage_projection: StorageProjection,
     /// The current bytes of this connection entry reached the remote.
     #[serde(default)]
     pub uploaded: bool,
@@ -133,6 +144,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         pinned: false,
         uploaded: false,
         sync: None,
+        storage_projection: StorageProjection::Owned,
     })
 }
 #[derive(Clone, Serialize, Deserialize)]

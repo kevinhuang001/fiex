@@ -41,6 +41,7 @@ pub(super) fn items(id: &str, ctx: &Context) -> Result<Vec<Value>, String> {
 }
 
 fn available_action(
+    provider_id: &str,
     provider: &dyn ConnectionContextMenuProvider,
     invocation: &dyn ProviderInvocation,
 ) -> Result<String, ProviderError> {
@@ -49,9 +50,16 @@ fn available_action(
         _ => None,
     }
     .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
-    let offered_invocation =
-        NativeProviderInvocation::new("connectionContextMenu.resolve", json!({}), &[], None)
-            .with_local_data(Arc::new(context(invocation)?.clone()));
+    let offered_invocation = registry()
+        .invocation(
+            provider_id,
+            "connectionContextMenu.resolve",
+            json!({}),
+            &[],
+            None,
+        )
+        .map_err(ProviderError::internal)?
+        .with_local_data(Arc::new(context(invocation)?.clone()));
     let offered = provider.resolve(&offered_invocation)?;
     if !offered
         .iter()
@@ -109,18 +117,25 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn ConnectionContextMenuProvider
     registry().get_arc(id)
 }
 
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, &[], None)
+}
+
 /// Run an authorized native action after the shared provider revalidates it.
 pub(super) async fn execute(
     provider_id: &str,
     ctx: &Context,
     item_id: &str,
 ) -> Result<MenuExecuteResult, String> {
-    let invocation = NativeProviderInvocation::new(
+    let invocation = invocation(
+        provider_id,
         "connectionContextMenu.execute",
         json!({"itemId":item_id}),
-        &[],
-        None,
-    )
+    )?
     .with_local_data(Arc::new(ctx.clone()));
     let result = registry()
         .get(provider_id)

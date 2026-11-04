@@ -1,15 +1,11 @@
 //! Shared VfsProvider implementation for local and USB storage.
 use super::*;
 use fiex_provider_contracts::{
-    FsEntry, FsListing, FsRead, FsRequest, FsWrite, PreflightDecision, ProviderError,
-    ProviderInvocation, SearchCapabilities, TransferPreflight, VfsProvider,
+    FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
+    SearchCapabilities, VfsProvider,
 };
 
 impl VfsProvider for StorageProvider {
-    fn supports_preflight(&self) -> bool {
-        true
-    }
-
     fn operations(&self) -> &'static [FsOperation] {
         &[
             FsOperation::List,
@@ -19,6 +15,7 @@ impl VfsProvider for StorageProvider {
             FsOperation::Write,
             FsOperation::Mkdir,
             FsOperation::Rename,
+            FsOperation::Trash,
             FsOperation::Remove,
         ]
     }
@@ -103,7 +100,8 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        let value = fs_access::mkdir(&resource.scope, &resource.path).map_err(provider_error)?;
+        let value =
+            fs_access::mkdir(&resource.storage_scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(shared_entry(storage::decorated_entry(
             &resource.path,
@@ -129,10 +127,10 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        fs_access::rename(&resource.scope, &resource.path, &destination.path)
+        fs_access::rename(&resource.storage_scope, &resource.path, &destination.path)
             .map_err(provider_error)?;
-        let value =
-            fs_access::stat(&destination.scope, &destination.path).map_err(provider_error)?;
+        let value = fs_access::stat(&destination.storage_scope, &destination.path)
+            .map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(shared_entry(storage::decorated_entry(
             &destination.path,
@@ -148,7 +146,23 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        fs_access::remove(&resource.scope, &resource.path).map_err(provider_error)
+        fs_access::remove(&resource.storage_scope, &resource.path).map_err(provider_error)
+    }
+
+    fn trash(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
+        let resource = self.validate_node(request)?;
+        self.authorize_storage(&resource, FsOperation::Trash, false)?;
+        if usbfs::route(&resource.path).is_some() {
+            return Err(ProviderError::invalid_params(
+                "Unsupported: USB filesystem fallback does not support Trash",
+            ));
+        }
+        let result = crate::core::operations::recycle(std::slice::from_ref(&resource.path))
+            .map_err(provider_error)?;
+        if let Some(error) = result.errors.into_iter().next() {
+            return Err(provider_error(error));
+        }
+        Ok(())
     }
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
@@ -197,18 +211,6 @@ impl VfsProvider for StorageProvider {
             entries: entries.into_iter().map(shared_entry).collect(),
             truncated,
             ..Default::default()
-        })
-    }
-
-    fn preflight(
-        &self,
-        ctx: &dyn ProviderInvocation,
-        _request: &TransferPreflight,
-    ) -> Result<PreflightDecision, ProviderError> {
-        self.resource(ctx)?;
-        Ok(PreflightDecision {
-            allowed: true,
-            reason: None,
         })
     }
 }

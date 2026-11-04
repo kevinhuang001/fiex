@@ -7,7 +7,8 @@ use super::{
 };
 use crate::core::operations::{check_cancelled, OperationResult};
 use crate::core::volumes::applications;
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::sync::atomic::AtomicBool;
 pub(super) fn import(
     paths: &[String],
@@ -15,7 +16,8 @@ pub(super) fn import(
     keep_both: bool,
     cancel: &AtomicBool,
 ) -> Result<Option<OperationResult>, String> {
-    if paths.is_empty() || !(destination == applications::URI || applications::is_user(destination))
+    if paths.is_empty()
+        || !(destination == applications::URI || applications::is_folder(destination))
     {
         return Ok(None);
     }
@@ -39,21 +41,7 @@ pub(super) fn import(
         let source = binding::trusted(path, "core:application-import")?;
         source.require(FsOperation::Read, false)?;
         let metadata = source.transfer_metadata()?;
-        let same_mount = source.reference.mount_id == parent.reference.mount_id;
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Copy,
-            &metadata.name,
-            &metadata,
-            same_mount,
-        )?;
-        source.review_transfer(
-            TransferDirection::Export,
-            TransferAction::Copy,
-            &metadata.name,
-            &metadata,
-            same_mount,
-        )?;
+        source.review_export(TransferKind::Copy, PreflightPhase::Execute)?;
         let executable = dunce::canonicalize(path).map_err(|e| e.to_string())?;
         let executable = executable
             .to_str()
@@ -66,7 +54,11 @@ pub(super) fn import(
             .replace('$', r"\\$")
             .replace('%', "%%");
         let name = format!("{}.desktop", metadata.name);
-        let mut target = binding::child(&parent, &name)?;
+        let mut target = binding::child(
+            &parent,
+            &name,
+            crate::core::fs::provider_registry::ChildKind::File,
+        )?;
         if optional_stat(&target)?.is_some() {
             if !keep_both {
                 return Err(crate::i18n::t("应用已存在，请重命名或选择保留两者").into());
@@ -74,6 +66,14 @@ pub(super) fn import(
             target = unique(&parent, &name, false)?;
         }
         target.require(FsOperation::Write, true)?;
+        let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(&name);
+        parent.require(FsOperation::Write, true)?;
+        parent.review_import(
+            TransferKind::Copy,
+            final_name,
+            &metadata,
+            PreflightPhase::Execute,
+        )?;
         let label = metadata.name.replace(['\n', '\r'], " ");
         let content = format!(
             "[Desktop Entry]\nType=Application\nName={label}\nExec=\"{escaped}\"\nTerminal=false\n"

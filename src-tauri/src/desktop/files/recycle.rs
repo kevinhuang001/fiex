@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::Ordering;
 
 #[tauri::command]
 pub(crate) async fn recycle(
@@ -100,17 +101,23 @@ pub(crate) async fn delete_permanently(
 ) -> Result<usize, String> {
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || {
+        // Validate the whole selection before mutating anything: a mixed
+        // selection must never partly delete entries before rejecting a
+        // protected system application.
+        if paths.iter().any(|path| {
+            crate::core::volumes::native_vfs::provider_id(path) == Some("core:applications")
+                && !crate::core::volumes::applications::is_user(path)
+        }) {
+            return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").to_string());
+        }
         let mut removed = 0;
-        let mut trash = Vec::new();
         for path in paths {
-            if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {
-                trash.push(path);
-                continue;
+            if flag.load(Ordering::Relaxed) {
+                return Err(crate::core::operations::CANCELLED.into());
             }
             crate::core::fs::remove_path(&path, "core:delete")?;
             removed += 1;
         }
-        removed += volumes::delete_permanently(&trash, &flag)?;
         Ok(removed)
     })
     .await

@@ -65,6 +65,14 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 Capability::FilesDelete
             },
         ),
+        "host.fs.trash" => (
+            FsOperation::Trash,
+            if resource.is_dir()? {
+                Capability::FoldersDelete
+            } else {
+                Capability::FilesDelete
+            },
+        ),
         "host.fs.rename" => (
             FsOperation::Rename,
             if resource.is_dir()? {
@@ -121,6 +129,10 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         }
         "host.fs.remove" => {
             resource.remove()?;
+            Ok(Value::Null)
+        }
+        "host.fs.trash" => {
+            resource.move_to_trash()?;
             Ok(Value::Null)
         }
         "host.fs.rename" => {

@@ -39,7 +39,20 @@ export function useEntryDecorations({
     const timer = window.setTimeout(() => {
       void call<EntryDecoration[]>('plugin_decorations', {
         directory: path,
-        entries,
+        entries: entries.map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isDir: entry.isDir,
+          extension: entry.extension,
+          mime: entry.mime,
+          allowedOps: entry.allowedOps || [],
+          tags: entry.tags,
+          sync: entry.sync,
+          hasCache: entry.hasCache || false,
+          pinned: entry.pinned || false,
+          uploaded: entry.uploaded || false,
+          linkTarget: entry.linkTarget,
+        })),
         includePlugins: !query,
       })
         .then((values) => {
@@ -49,7 +62,7 @@ export function useEntryDecorations({
           setSnapshot({
             entries,
             key,
-            values: Object.fromEntries(values.map((value) => [value.path, value])),
+            values: cachedPresentations(entries),
           })
         })
         .catch(() => {

@@ -2,6 +2,14 @@
 /// existing parent so a symlinked parent cannot change the selected target.
 use super::*;
 
+#[derive(Clone)]
+struct MappedResourceBinding {
+    snapshot: crate::plugins::resource::resource_context::ResourceSnapshot,
+    path: String,
+    operation: crate::plugins::provider_registry::FsOperation,
+    storage_scope: Scope,
+}
+
 pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
     if path
         .components()
@@ -49,6 +57,8 @@ pub struct Scope {
     pub(super) remote_resources: std::sync::Arc<
         HashMap<String, crate::plugins::resource::resource_context::ResourceSnapshot>,
     >,
+    user_action: Option<crate::core::fs::mapped_access::UserActionContext>,
+    mapped_resources: std::sync::Arc<Mutex<HashMap<String, MappedResourceBinding>>>,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -64,6 +74,8 @@ impl Scope {
             read_only: false,
             issued: Default::default(),
             remote_resources: Default::default(),
+            user_action: None,
+            mapped_resources: Default::default(),
         })
     }
     /// Capture only paths chosen for this operation. A file grants that file;
@@ -94,6 +106,119 @@ impl Scope {
     pub fn restrict_to_readonly(&mut self) {
         self.read_only = true;
     }
+    pub(crate) fn set_user_action_context(
+        &mut self,
+        user_action: crate::core::fs::mapped_access::UserActionContext,
+    ) {
+        self.user_action = Some(user_action);
+    }
+    pub(crate) fn user_action_context(
+        &self,
+    ) -> Option<crate::core::fs::mapped_access::UserActionContext> {
+        self.user_action
+    }
+    pub(crate) fn without_user_action(mut self) -> Self {
+        self.user_action = None;
+        self.mapped_resources = Default::default();
+        self
+    }
+    pub(crate) fn bind_mapped_resource(
+        &self,
+        snapshot: crate::plugins::resource::resource_context::ResourceSnapshot,
+        operation: crate::plugins::provider_registry::FsOperation,
+    ) -> Result<(), String> {
+        let reference = serde_json::to_value(&snapshot.reference).map_err(|e| e.to_string())?;
+        let access = crate::core::fs::provider_registry::resource_access(&snapshot.display)
+            .map_err(String::from)?;
+        let mut storage_scope =
+            if access == crate::core::fs::provider_registry::ResourceAccess::HostPath {
+                let path = Path::new(&snapshot.display);
+                let parent = path.parent().unwrap_or(path);
+                Scope::selected(parent, &[path.to_path_buf()])?
+            } else {
+                Scope::selected(&std::env::temp_dir(), &[])?
+            };
+        if let Some(user_action) = self.user_action_context() {
+            storage_scope.set_user_action_context(user_action);
+        }
+        let resource = json!({"ref": snapshot.reference, "metadata": snapshot.metadata()});
+        if access == crate::core::fs::provider_registry::ResourceAccess::HostPath {
+            storage_scope.bind_resource(&resource, Some(Path::new(&snapshot.display)))?;
+        } else {
+            storage_scope.bind_remote(&resource, &snapshot)?;
+        }
+        let path = storage_scope
+            .resolve_reference(&reference)
+            .unwrap_or_else(|_| snapshot.display.clone());
+        self.mapped_resources
+            .lock()
+            .map_err(|_| "mapped resource registry unavailable")?
+            .insert(
+                Self::ref_key(&reference)?,
+                MappedResourceBinding {
+                    snapshot,
+                    path,
+                    operation,
+                    storage_scope,
+                },
+            );
+        Ok(())
+    }
+    pub(crate) fn mapped_storage_scope(
+        &self,
+        reference: &Value,
+        path: &str,
+    ) -> Result<
+        Option<(
+            Scope,
+            Option<crate::plugins::provider_registry::FsOperation>,
+        )>,
+        String,
+    > {
+        let key = Self::ref_key(reference)?;
+        let mapped = self
+            .mapped_resources
+            .lock()
+            .map_err(|_| "mapped resource registry unavailable")?;
+        if let Some(binding) = mapped.get(&key) {
+            return Ok(Some((
+                binding.storage_scope.clone(),
+                Some(binding.operation),
+            )));
+        }
+        Ok(mapped.values().find_map(|binding| {
+            let delegated_children = matches!(
+                binding.operation,
+                crate::plugins::provider_registry::FsOperation::List
+                    | crate::plugins::provider_registry::FsOperation::Search
+                    | crate::plugins::provider_registry::FsOperation::Write
+                    | crate::plugins::provider_registry::FsOperation::Mkdir
+            );
+            (delegated_children
+                && binding.snapshot.is_dir
+                && Path::new(path).starts_with(&binding.path))
+            .then(|| (binding.storage_scope.clone(), None))
+        }))
+    }
+    fn mapped_path_authorized(&self, path: &str) -> Result<bool, String> {
+        Ok(self
+            .mapped_resources
+            .lock()
+            .map_err(|_| "mapped resource registry unavailable")?
+            .values()
+            .any(|binding| {
+                path == binding.path
+                    || (binding.snapshot.is_dir
+                        && matches!(
+                            binding.operation,
+                            crate::plugins::provider_registry::FsOperation::List
+                                | crate::plugins::provider_registry::FsOperation::Search
+                                | crate::plugins::provider_registry::FsOperation::Write
+                                | crate::plugins::provider_registry::FsOperation::Mkdir
+                        )
+                        && Path::new(path).starts_with(&binding.path))
+            }))
+    }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
         if method.starts_with("fs.") {
             return Err("unsupported filesystem method namespace".into());
@@ -108,6 +233,7 @@ impl Scope {
                     | "host.fs.writeBuffer"
                     | "host.fs.commit"
                     | "host.fs.remove"
+                    | "host.fs.trash"
                     | "host.fs.rename"
                     | "host.process.run"
                     | "host.vfs.openView"
@@ -140,6 +266,11 @@ impl Scope {
         Ok(self.references.contains_key(&key)
             || self.metadata_refs.contains_key(&key)
             || self.remote_resources.contains_key(&key)
+            || self
+                .mapped_resources
+                .lock()
+                .map_err(|_| "mapped resource registry unavailable")?
+                .contains_key(&key)
             || self
                 .issued
                 .lock()
@@ -187,6 +318,14 @@ impl Scope {
     ) -> Result<Option<crate::plugins::resource::resource_context::ResourceSnapshot>, String> {
         if let Some(reference) = p.get("ref") {
             let key = Self::ref_key(reference)?;
+            if let Some(snapshot) = self
+                .mapped_resources
+                .lock()
+                .ok()
+                .and_then(|mapped| mapped.get(&key).map(|binding| binding.snapshot.clone()))
+            {
+                return Ok(Some(snapshot));
+            }
             return Ok(self.remote_resources.get(&key).cloned().or_else(|| {
                 self.issued
                     .lock()
@@ -217,6 +356,15 @@ impl Scope {
         {
             return serde_json::from_str(key).map_err(|e| e.to_string());
         }
+        if let Some((key, _)) = self
+            .mapped_resources
+            .lock()
+            .map_err(|_| "mapped resource registry unavailable")?
+            .iter()
+            .find(|(_, binding)| binding.path == path || binding.snapshot.display == path)
+        {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
         let issued = self
             .issued
             .lock()
@@ -234,6 +382,13 @@ impl Scope {
         self.references
             .get(&key)
             .cloned()
+            .or_else(|| {
+                self.mapped_resources
+                    .lock()
+                    .ok()?
+                    .get(&key)
+                    .map(|binding| binding.path.clone())
+            })
             .or_else(|| {
                 self.issued
                     .lock()
@@ -281,6 +436,9 @@ impl Scope {
         Ok(json!({"ref":reference,"metadata":metadata}))
     }
     pub fn authorize(&self, path: &str) -> Result<(), String> {
+        if self.mapped_path_authorized(path)? {
+            return Ok(());
+        }
         relative(self, path).map(|_| ())
     }
     pub fn path(&self) -> &Path {

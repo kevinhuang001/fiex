@@ -14,17 +14,12 @@ use std::sync::Arc;
 #[derive(Clone)]
 struct VfsTarget {
     path: String,
-    owner: String,
     broker: Option<Arc<crate::core::fs::ResourceBroker>>,
     destination: Option<Arc<crate::core::fs::ResourceBroker>>,
 }
 
 pub(super) fn path(ctx: &dyn ProviderInvocation) -> Result<&str, ProviderError> {
     NativeProviderInvocation::local_data::<VfsTarget>(ctx).map(|target| target.path.as_str())
-}
-
-pub(super) fn owner(ctx: &dyn ProviderInvocation) -> Result<&str, ProviderError> {
-    NativeProviderInvocation::local_data::<VfsTarget>(ctx).map(|target| target.owner.as_str())
 }
 
 pub(super) fn broker(
@@ -49,7 +44,7 @@ pub(super) fn destination_broker(
 
 pub(super) fn target_invocation(
     path: &str,
-    owner: &str,
+    _owner: &str,
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
@@ -72,10 +67,17 @@ pub(super) fn target_invocation(
     // A provider's own discover/stat invocation must not re-enter its VFS
     // merely to compute the target capabilities it is currently resolving.
     target.operations = Some(Default::default());
-    NativeProviderInvocation::new(method, params, std::slice::from_ref(&target), None)
+    registry()
+        .invocation(
+            shared_provider_id(path).expect("invocation path has a registered provider"),
+            method,
+            params,
+            std::slice::from_ref(&target),
+            None,
+        )
+        .expect("registered VFS provider has an owner binding")
         .with_local_data(Arc::new(VfsTarget {
             path: path.into(),
-            owner: owner.into(),
             broker: None,
             destination: None,
         }))
@@ -98,14 +100,21 @@ pub(super) fn broker_invocation(
         target.operations = Some(Default::default());
         targets.push(target);
     }
-    NativeProviderInvocation::new(method, params, &targets, None).with_local_data(Arc::new(
-        VfsTarget {
+    registry()
+        .invocation(
+            shared_provider_id(&source.path)
+                .expect("broker invocation path has a registered provider"),
+            method,
+            params,
+            &targets,
+            None,
+        )
+        .expect("registered VFS provider has an owner binding")
+        .with_local_data(Arc::new(VfsTarget {
             path: source.path.clone(),
-            owner: source.owner.clone(),
             broker: Some(Arc::new(source.clone_binding())),
             destination: destination.map(|broker| Arc::new(broker.clone_binding())),
-        },
-    ))
+        }))
 }
 
 pub(super) fn shared_entry(entry: Entry) -> FsEntry {
