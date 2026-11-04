@@ -47,7 +47,11 @@ fn main() {
             }
         }
 
-        if manifest.extensions["contextMenus"].as_bool() == Some(true) {
+        let has_context_menus = manifest
+            .extensions
+            .get("contextMenus")
+            .is_some_and(|value| value.as_bool() == Some(true) || value.is_object());
+        if has_context_menus {
             let directory_path = directory.path().to_string_lossy().into_owned();
             let menu = fiex_lib::plugins::providers::context_menu::query_plugins(
                 &directory_path,
