@@ -99,7 +99,7 @@ pub fn query_with_plugins(
             }
         })
         .collect();
-    let invocation = super::invocation::CoreDecorationInvocation::native(
+    let invocation = super::invocation::CoreDecorationInvocation::unbound(
         directory.into(),
         entries.clone(),
         resources.clone(),
@@ -109,7 +109,19 @@ pub fn query_with_plugins(
         "decorations.resolve",
         providers,
         &invocation,
-        |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let native = super::invocation::CoreDecorationInvocation::native(
+                    &resolver.id,
+                    directory.into(),
+                    entries.clone(),
+                    resources.clone(),
+                )?;
+                provider.resolve(&native).map_err(|error| error.to_string())
+            } else {
+                provider.resolve(context).map_err(|error| error.to_string())
+            }
+        },
         |_, items| {
             let response = json!({"decorations": items});
             crate::plugins::events::validate_result("decorations.resolve", &response)?;

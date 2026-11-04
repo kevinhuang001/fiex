@@ -56,7 +56,9 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
                 task_id.to_string(),
                 TaskEntry {
                     owner: format!("{}:task:{task_id}", running.base_owner),
-                    scope: operation.scope,
+                    scope: operation
+                        .scope
+                        .map(crate::plugins::resource::fs_access::Scope::without_user_action),
                     info: info.clone(),
                 },
             );

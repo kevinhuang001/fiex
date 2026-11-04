@@ -98,19 +98,19 @@ impl NativeProviderInvocation {
     /// never part of ProviderRequestContext serialization.
     pub(crate) fn storage(
         invocation: &dyn ProviderInvocation,
-        provider_id: &str,
         scope: &str,
     ) -> Result<NativeScopedStorage, ProviderError> {
         let services = invocation
             .local_service_handle()
             .and_then(|value| value.downcast_ref::<Self>())
             .and_then(|native| native.registration.as_ref())
-            .filter(|services| services.provider_id == provider_id)
             .ok_or_else(|| ProviderError::invalid_params("missing registered owner services"))?;
-        services
-            .storage
-            .scoped(scope)
-            .map_err(ProviderError::internal)
+        services.storage.scoped(scope).map_err(|error| {
+            ProviderError::internal(format!(
+                "provider {} storage: {error}",
+                services.provider_id
+            ))
+        })
     }
 
     pub(crate) fn user_action(

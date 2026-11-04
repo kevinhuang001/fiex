@@ -116,7 +116,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         self.owners.get(id).copied()
     }
 
-    pub fn storage_for(
+    pub fn management_storage_for(
         &self,
         id: &str,
         scope: &str,
@@ -282,7 +282,7 @@ mod tests {
             entries.owner("core.example"),
             Some(CoreOwnerKey::new("core"))
         );
-        assert!(entries.storage_for("missing", "scope").is_err());
+        assert!(entries.management_storage_for("missing", "scope").is_err());
     }
 
     #[test]

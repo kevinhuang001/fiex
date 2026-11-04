@@ -124,6 +124,15 @@ pub(super) fn provider_arc(id: &str) -> Option<Arc<dyn SearchProvider>> {
     registry().get_arc(id)
 }
 
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, resources, None)
+}
+
 pub(super) fn modes(id: &str) -> Vec<SearchMode> {
     let Some(provider) = provider(id) else {
         return Vec::new();

@@ -144,7 +144,7 @@ pub(crate) async fn open_path(path: String) -> Result<(), String> {
             let exported = crate::core::fs::export_for_external_drag(&[path], user_action)?;
             terminals::open_path(exported.first().ok_or("missing export")?)?;
         }
-        crate::plugins::providers::hooks::after_open(&snapshot);
+        crate::plugins::providers::hooks::complete_open(&snapshot, true);
         Ok(())
     })
     .await

@@ -57,20 +57,15 @@ impl VfsProvider for RecentView {
     }
 
     fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
-        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
-            ctx,
-            "core:recent",
-            "history",
-        )?;
+        let store =
+            crate::plugins::native_invocation::NativeProviderInvocation::storage(ctx, "history")?;
         Ok(recent_operations(path(ctx)?, &store))
     }
 
     fn search_capabilities(&self, ctx: &dyn ProviderInvocation) -> SearchCapabilities {
-        let Ok(store) = crate::plugins::native_invocation::NativeProviderInvocation::storage(
-            ctx,
-            "core:recent",
-            "history",
-        ) else {
+        let Ok(store) =
+            crate::plugins::native_invocation::NativeProviderInvocation::storage(ctx, "history")
+        else {
             return SearchCapabilities::default();
         };
         SearchCapabilities {
@@ -84,7 +79,6 @@ impl VfsProvider for RecentView {
         let path = path(request.ctx())?;
         let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
             request.ctx(),
-            "core:recent",
             "history",
         )?;
         storage::recent_stat(path, &recent_operations(path, &store), &store)
@@ -95,7 +89,6 @@ impl VfsProvider for RecentView {
     fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
         let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
             request.ctx(),
-            "core:recent",
             "history",
         )?;
         storage::recent_list(path(request.ctx())?, &store)
@@ -107,7 +100,6 @@ impl VfsProvider for RecentView {
         let alias = request.node_id().unwrap_or(path(request.ctx())?);
         let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
             request.ctx(),
-            "core:recent",
             "history",
         )?;
         let source =
@@ -133,7 +125,6 @@ impl VfsProvider for RecentView {
         let root = path(request.ctx())?;
         let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
             request.ctx(),
-            "core:recent",
             "history",
         )?;
         search_listing(root, request, |path| storage::recent_list(path, &store))

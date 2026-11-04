@@ -124,7 +124,7 @@ pub(crate) async fn remote_open(
     let local = remote::ensure_downloaded(&path, &options).await?;
     tauri::async_runtime::spawn_blocking(move || {
         terminals::open_path(&local)?;
-        crate::plugins::providers::hooks::after_open(&snapshot);
+        crate::plugins::providers::hooks::complete_open(&snapshot, true);
         Ok(())
     })
     .await

@@ -35,11 +35,8 @@ impl HookProvider for RecentHook {
         }
         let resource =
             crate::plugins::native_invocation::NativeProviderInvocation::resource(ctx, 0)?;
-        let storage = crate::plugins::native_invocation::NativeProviderInvocation::storage(
-            ctx,
-            "core:recent.hook",
-            "history",
-        )?;
+        let storage =
+            crate::plugins::native_invocation::NativeProviderInvocation::storage(ctx, "history")?;
         crate::core::recent::record_opened(resource, &storage).map_err(ProviderError::internal)?;
         Ok(HookResult { handled: false })
     }
@@ -105,10 +102,25 @@ pub fn before_open(path: &str) -> Result<Value, String> {
         "hooks.invoke",
         providers,
         &invocation,
-        |_, provider, context| provider.invoke(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let native = native::invocation(
+                    &resolver.id,
+                    call.method.clone(),
+                    call.params.clone(),
+                    std::slice::from_ref(&resource),
+                )?;
+                provider.invoke(&native).map_err(|error| error.to_string())
+            } else {
+                provider.invoke(context).map_err(|error| error.to_string())
+            }
+        },
         |_, result| {
             let wire = serde_json::to_value(result).map_err(|error| error.to_string())?;
             crate::plugins::events::validate_result("hooks.invoke", &wire)?;
+            if result.handled {
+                complete_open(&resource, true);
+            }
             Ok(result)
         },
         |result| result.handled,
@@ -131,24 +143,62 @@ pub fn after_open(resource: &ResourceSnapshot) {
         method: "hooks.invoke".into(),
         params: json!({"event":"afterOpen"}),
     };
-    let invocation = native::invocation(
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
         call.method.clone(),
         call.params.clone(),
         std::slice::from_ref(resource),
-    )
-    .expect("afterOpen Hook registration has an owner binding");
+        None,
+    );
     EventRouter::resolve_merge_parallel(
         "hooks.invoke",
         providers,
         &invocation,
-        |_, provider, context| provider.invoke(context).map_err(|error| error.to_string()),
+        |resolver, provider, context| {
+            if resolver.plugin.is_none() {
+                let native = native::invocation(
+                    &resolver.id,
+                    call.method.clone(),
+                    call.params.clone(),
+                    std::slice::from_ref(resource),
+                )?;
+                provider.invoke(&native).map_err(|error| error.to_string())
+            } else {
+                provider.invoke(context).map_err(|error| error.to_string())
+            }
+        },
         |_, result| {
             let wire = serde_json::to_value(result).map_err(|error| error.to_string())?;
             crate::plugins::events::validate_result("hooks.invoke", &wire)?;
             Ok(result)
         },
-        |_| (),
+        |outcomes| {
+            for (provider, result) in outcomes {
+                let Err(error) = result else { continue };
+                if let Some(plugin) = provider.plugin.as_deref() {
+                    let _ = crate::plugins::errors::report(
+                        &plugin.id,
+                        "host",
+                        &format!("afterOpen Hook failed: {error}"),
+                        Some(&error),
+                    );
+                } else {
+                    crate::infrastructure::logging::record_core(
+                        "error",
+                        "provider.hook",
+                        &format!("afterOpen provider={} failed: {error}", provider.id),
+                    );
+                }
+            }
+        },
     );
+}
+
+/// The single completion boundary for every successful open path. Failed and
+/// cancelled opens never publish an afterOpen event.
+pub(crate) fn complete_open(resource: &ResourceSnapshot, accepted: bool) {
+    if accepted {
+        after_open(resource);
+    }
 }
 
 #[cfg(test)]

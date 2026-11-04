@@ -87,6 +87,23 @@ pub(super) fn invocation(
     .with_local_data(Arc::new(context.clone()))
 }
 
+pub(super) fn invocation_for(
+    provider_id: &str,
+    context: &Context,
+    method: &str,
+    params: Value,
+) -> Result<NativeProviderInvocation, String> {
+    registry()
+        .invocation(
+            provider_id,
+            method,
+            params,
+            context.resources.as_slice(),
+            context.directory_resource.as_ref(),
+        )
+        .map(|invocation| invocation.with_local_data(Arc::new(context.clone())))
+}
+
 pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
     registry()
         .matched_candidates(

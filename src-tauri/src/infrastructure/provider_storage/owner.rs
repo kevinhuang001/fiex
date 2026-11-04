@@ -17,7 +17,7 @@ impl CoreOwnerKey {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum OwnerId {
     Plugin(String),
     Core(CoreOwnerKey),

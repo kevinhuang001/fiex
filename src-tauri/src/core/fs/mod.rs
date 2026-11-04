@@ -13,7 +13,6 @@ mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;
-#[cfg(feature = "desktop")]
 pub(crate) use binding::trusted_snapshot;
 pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
@@ -39,8 +38,10 @@ pub struct ResourceBroker {
     pub reference: ResourceRef,
     pub(crate) path: String,
     pub(crate) scope: Scope,
+    pub(crate) storage_scope: Scope,
     pub(crate) owner: String,
     user_action: Option<mapped_access::UserActionContext>,
+    mapped_operation: Option<FsOperation>,
 }
 
 pub(crate) fn clear_preflight_availability_cache() {
@@ -78,12 +79,22 @@ impl ResourceBroker {
             .map(|snapshot| snapshot.display)
             .map(Ok)
             .unwrap_or_else(|| scope.resolve_reference(reference))?;
+        let (storage_scope, mapped_operation) = scope
+            .mapped_storage_scope(reference, &path)?
+            .unwrap_or_else(|| (scope.clone(), None));
+        let path = if mapped_operation.is_some() {
+            storage_scope.resolve_reference(reference).unwrap_or(path)
+        } else {
+            path
+        };
         Ok(Self {
             reference: reference_typed,
             path,
+            user_action: scope.user_action_context(),
+            storage_scope,
             scope: scope.clone(),
             owner: owner.into(),
-            user_action: None,
+            mapped_operation,
         })
     }
 
@@ -103,6 +114,19 @@ impl ResourceBroker {
         provider_registry::open_read(self)
     }
     pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError> {
+        if let Some(granted) = self.mapped_operation {
+            let allowed = granted == operation || operation == FsOperation::Stat;
+            if !allowed {
+                return Err(FsError::new(
+                    FsErrorKind::PermissionDenied,
+                    format!(
+                        "mapped resource grants {}, not {}",
+                        granted.as_str(),
+                        operation.as_str()
+                    ),
+                ));
+            }
+        }
         provider_registry::require(self, operation, create)
     }
     pub fn stat(&self) -> Result<Value, FsError> {
@@ -244,8 +268,10 @@ impl ResourceBroker {
             reference: self.reference.clone(),
             path: self.path.clone(),
             scope: self.scope.clone(),
+            storage_scope: self.storage_scope.clone(),
             owner: self.owner.clone(),
             user_action: self.user_action,
+            mapped_operation: self.mapped_operation,
         }
     }
 
