@@ -20,6 +20,7 @@ pub struct ResourceSnapshot {
     pub name: String,
     metadata: Option<ResourceMetadata>,
     pub operations: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
+    pub(crate) storage_projection: crate::core::files::StorageProjection,
 }
 
 impl ResourceSnapshot {
@@ -67,6 +68,7 @@ impl ResourceSnapshot {
             name,
             metadata,
             operations: None,
+            storage_projection: crate::core::files::StorageProjection::Owned,
         }
     }
 
@@ -135,6 +137,7 @@ impl ResourceSnapshot {
     }
     pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
         let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
+        resource.storage_projection = entry.storage_projection.clone();
         resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
             display, entry,
         ));
@@ -172,12 +175,19 @@ impl ResourceSnapshot {
             name: metadata.name.clone(),
             metadata: Some(metadata),
             operations: None,
+            storage_projection: crate::core::files::StorageProjection::Owned,
         }
     }
     /// A native renderer needs a local path. Export through the same bounded,
     /// leased broker as external open/drag; never expose provider caches.
-    pub fn export_path(&self) -> Result<PathBuf, String> {
-        let paths = crate::core::fs::export_for_external_drag(std::slice::from_ref(&self.display))?;
+    pub(crate) fn export_path(
+        &self,
+        user_action: crate::core::fs::mapped_access::UserActionContext,
+    ) -> Result<PathBuf, String> {
+        let paths = crate::core::fs::export_for_external_drag(
+            std::slice::from_ref(&self.display),
+            user_action,
+        )?;
         paths
             .into_iter()
             .next()
@@ -191,7 +201,7 @@ impl ResourceSnapshot {
         metadata_allowed: bool,
         _read_allowed: bool,
     ) -> ResourceContext {
-        let (view, storage) = crate::plugins::match_rules::typed_locations_for(&self.display);
+        let (view, storage) = crate::plugins::match_rules::typed_locations_for_snapshot(self);
         let capabilities = if metadata_allowed {
             let effective = self.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&self.display)

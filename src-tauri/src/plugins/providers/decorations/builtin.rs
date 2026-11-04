@@ -51,11 +51,11 @@ pub(super) fn resolve_in(
     let mut decorations = Vec::new();
     for entry in entries.values() {
         if kind == NativeKind::ApplicationIcon {
-            let recognized = directory == crate::core::volumes::applications::URI
-                && entry.mime == "application/x-fiex-application"
-                && !crate::core::volumes::applications::is_user(&entry.path);
+            let recognized = entry.mime == "application/x-fiex-application"
+                && crate::core::volumes::applications::is_system_app(&entry.path);
             if directory != crate::core::volumes::applications::URI
                 && !crate::core::volumes::applications::is_user(&entry.path)
+                && !crate::core::volumes::applications::is_system_app(&entry.path)
             {
                 continue;
             }
@@ -119,7 +119,7 @@ pub(super) fn resolve_in(
 fn application_icon(entry: &DecorationEntry) -> Option<String> {
     use crate::core::volumes::applications;
     if applications::is_user(&entry.path) {
-        let path = applications::stored_path(&entry.path).ok()?;
+        let path = applications::asset_path(&entry.path).ok()?;
         return applications::cached_icon(&path.to_string_lossy());
     }
     let source = if entry.mime == "application/x-fiex-application" {

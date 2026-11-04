@@ -1,72 +1,65 @@
-//! Applications view implementation of the shared VFS provider contract.
+//! Applications is a pure virtual tree. Physical paths are resolved only for
+//! imported assets; folders and installed applications have stable VFS IDs.
 use super::shared::*;
 use super::*;
 use fiex_provider_contracts::{
-    ExportPreflight, ImportPreflight, MovePreflight, PreflightDecision, PreflightHandlers,
-    PreflightPhase, ProviderError, ProviderInvocation, RemovePreflight, RenamePreflight,
-    VfsProvider,
+    CreateFilePreflight, ExportPreflight, ImportPreflight, MovePreflight, PreflightDecision,
+    PreflightHandlers, PreflightPhase, ProviderError, ProviderInvocation, RemovePreflight,
+    RenamePreflight, VfsProvider,
 };
 use std::{
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, LazyLock, Mutex,
+    },
 };
 
-fn application_child(parent: &str, name: &str) -> Result<(String, PathBuf), ProviderError> {
-    crate::plugins::mounts::segment(name).map_err(provider_error)?;
-    let parent_path = if parent == APPLICATIONS_URI {
-        applications::stored_path(APPLICATIONS_URI)
-    } else {
-        applications::candidate_path(parent)
-    }
-    .map_err(provider_error)?;
-    if !parent_path.is_dir() {
-        return Err(ProviderError::invalid_params(
-            "NotFound: application parent is not a directory",
-        ));
-    }
-    let path = parent_path.join(name);
-    let uri = applications::stored_uri(&path).map_err(provider_error)?;
-    Ok((uri, path))
+struct ApplicationStage {
+    file: Arc<Mutex<Option<tempfile::NamedTempFile>>>,
+    uri: String,
+    committed: Arc<AtomicBool>,
 }
-
-struct ApplicationStage(Arc<Mutex<Option<tempfile::NamedTempFile>>>);
 
 impl Write for ApplicationStage {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let mut temporary = self
-            .0
+        let mut staged = self
+            .file
             .lock()
             .map_err(|_| io::Error::other("write stream unavailable"))?;
-        temporary
+        staged
             .as_mut()
             .ok_or_else(|| io::Error::other("write stream closed"))?
             .write(bytes)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let mut temporary = self
-            .0
+        let mut staged = self
+            .file
             .lock()
             .map_err(|_| io::Error::other("write stream unavailable"))?;
-        temporary
+        staged
             .as_mut()
             .ok_or_else(|| io::Error::other("write stream closed"))?
             .flush()
     }
 }
 
-fn application_operations(path: &str) -> Vec<FsOperation> {
-    if path == APPLICATIONS_URI {
-        vec![
-            FsOperation::List,
-            FsOperation::Stat,
-            FsOperation::Search,
-            FsOperation::Write,
-            FsOperation::Mkdir,
-        ]
-    } else if applications::is_user(path) {
-        applications::stored_entry(path)
+impl Drop for ApplicationStage {
+    fn drop(&mut self) {
+        if !self.committed.load(Ordering::Acquire) {
+            applications::cancel_reservation(&self.uri);
+        }
+    }
+}
+
+fn application_operations(uri: &str) -> Vec<FsOperation> {
+    if applications::pending_target(uri).is_some() {
+        return vec![FsOperation::Stat, FsOperation::Write, FsOperation::Mkdir];
+    }
+    if applications::is_system_app(uri) {
+        return applications::system_entry(uri)
             .map(|entry| {
                 entry
                     .allowed_ops
@@ -74,22 +67,56 @@ fn application_operations(path: &str) -> Vec<FsOperation> {
                     .filter_map(|operation| FsOperation::parse(operation))
                     .collect()
             })
-            .unwrap_or_default()
-    } else if applications::is_system_app(path) {
-        vec![FsOperation::Stat]
-    } else {
-        Vec::new()
+            .unwrap_or_default();
     }
+    applications::entry_for_uri(uri)
+        .map(|entry| {
+            entry
+                .allowed_ops
+                .iter()
+                .filter_map(|operation| FsOperation::parse(operation))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub(super) struct ApplicationView;
 
-/// Resolve a user-store node to its backing path inside the Applications
-/// provider. System-app identities are virtual and have no writable backing
-/// path exposed through this helper.
+/// Applications can move nodes within their mount by changing only parent
+/// metadata. The transfer engine calls this provider operation before falling
+/// back to byte streams.
+pub(super) fn move_within_mount(
+    sources: &[crate::core::fs::ResourceBroker],
+    destination: &crate::core::fs::ResourceBroker,
+) -> Result<Vec<String>, String> {
+    let mut paths = Vec::with_capacity(sources.len());
+    let mut previous_parents = Vec::with_capacity(sources.len());
+    for source in sources {
+        let stat = source.stat()?;
+        let name = stat["name"]
+            .as_str()
+            .ok_or("source has no name")?
+            .to_owned();
+        source.review_move(destination, Some(&name), PreflightPhase::Execute)?;
+        previous_parents.push(applications::parent_uri(&source.path)?);
+        paths.push(source.path.clone());
+    }
+    applications::move_nodes(&paths, &destination.path)?;
+    for (source, previous) in sources.iter().zip(previous_parents) {
+        if previous == destination.path {
+            continue;
+        }
+        crate::core::fs::directory_cache::remove_entry(&previous, &source.path);
+        crate::core::fs::changes::committed(&source.path);
+    }
+    Ok(paths)
+}
+
+/// Imported entities are stored in the flat private asset root. No virtual
+/// folder or system application is converted into a host filesystem path.
 pub(super) fn backing_path(uri: &str) -> Option<PathBuf> {
     applications::is_user(uri)
-        .then(|| applications::candidate_path(uri).ok())
+        .then(|| applications::asset_path(uri).ok())
         .flatten()
 }
 
@@ -97,11 +124,7 @@ fn application_preflight_handlers() -> PreflightHandlers {
     static HANDLERS: LazyLock<PreflightHandlers> = LazyLock::new(|| {
         let mut handlers = PreflightHandlers::new();
         handlers
-            .on_create_file(|_, _, _| {
-                Ok(PreflightDecision::deny(
-                    "Applications does not support creating files",
-                ))
-            })
+            .on_create_file(check_application_create_file)
             .expect("create-file handler is unique");
         handlers
             .on_rename(check_application_rename)
@@ -123,18 +146,43 @@ fn application_preflight_handlers() -> PreflightHandlers {
     HANDLERS.clone()
 }
 
+fn check_application_create_file(
+    _ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &CreateFilePreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    let allowed = request.name.as_deref().is_some_and(|name| {
+        applications::reserved_child(&request.parent_id, name)
+            .is_ok_and(|target| target.kind == applications::PendingKind::Application)
+    });
+    if allowed {
+        Ok(PreflightDecision::allow())
+    } else {
+        Ok(PreflightDecision::deny(
+            "Applications accepts only validated application imports",
+        ))
+    }
+}
+
 fn check_application_import(
     _ctx: &dyn ProviderInvocation,
     _phase: PreflightPhase,
     request: &ImportPreflight,
 ) -> Result<PreflightDecision, ProviderError> {
     if request.source.system == Some(true) || request.source.executable_shortcut != Some(true) {
-        Ok(PreflightDecision::deny(
+        return Ok(PreflightDecision::deny(
             "Applications accepts only verified applications or shortcuts",
-        ))
-    } else {
-        Ok(PreflightDecision::allow())
+        ));
     }
+    let Some(name) = request.name.as_deref() else {
+        return Ok(PreflightDecision::deny("application name is required"));
+    };
+    if applications::reserved_child(&request.parent_id, name).is_err() {
+        return Ok(PreflightDecision::deny(
+            "Applications import target was not reserved by Core",
+        ));
+    }
+    Ok(PreflightDecision::allow())
 }
 
 fn check_application_export(
@@ -148,15 +196,11 @@ fn check_application_export(
             "export node does not match the scoped resource",
         ));
     }
-    let metadata = source.transfer_metadata().map_err(provider_error)?;
-    if metadata.system != Some(true)
-        && metadata.executable_shortcut == Some(true)
-        && applications::is_user(&source.path)
-    {
+    if applications::is_user(&source.path) {
         Ok(PreflightDecision::allow())
     } else {
         Ok(PreflightDecision::deny(
-            "Only user applications can leave the Applications view",
+            "Only imported applications can leave the Applications view",
         ))
     }
 }
@@ -172,7 +216,9 @@ fn check_application_rename(
             "rename node does not match the scoped resource",
         ));
     }
-    if !applications::is_user(&source.path) {
+    if applications::is_system_app(&source.path)
+        || (!applications::is_user(&source.path) && !applications::is_folder(&source.path))
+    {
         return Ok(PreflightDecision::deny(
             "System applications cannot be renamed in Fiex",
         ));
@@ -195,15 +241,10 @@ fn check_application_remove(
             "remove IDs do not match the scoped resource",
         ));
     }
-    if !applications::is_user(&source.path) {
-        return Ok(PreflightDecision::deny(
-            "System applications cannot be deleted in Fiex",
-        ));
+    match applications::validate_remove(&source.path) {
+        Ok(()) => Ok(PreflightDecision::allow()),
+        Err(reason) => Ok(PreflightDecision::deny(reason)),
     }
-    if let Err(reason) = applications::validate_user_removal(&source.path) {
-        return Ok(PreflightDecision::deny(reason));
-    }
-    Ok(PreflightDecision::allow())
 }
 
 fn check_application_move(
@@ -218,12 +259,15 @@ fn check_application_move(
             "move IDs do not match the scoped resources",
         ));
     }
-    if !applications::is_user(&source.path) && !applications::is_system_app(&source.path) {
+    if !applications::is_user(&source.path)
+        && !applications::is_folder(&source.path)
+        && !applications::is_system_app(&source.path)
+    {
         return Ok(PreflightDecision::deny(
             "Only Applications entries can be moved inside Applications",
         ));
     }
-    if target_parent.path != APPLICATIONS_URI && !applications::is_user(&target_parent.path) {
+    if target_parent.path != APPLICATIONS_URI && !applications::is_folder(&target_parent.path) {
         return Ok(PreflightDecision::deny(
             "Applications entries can only be moved within Applications",
         ));
@@ -270,27 +314,14 @@ impl VfsProvider for ApplicationView {
         if !matches!(operation, FsOperation::Write | FsOperation::Mkdir) {
             return Err(ProviderError::method_not_found(operation.methods()[0]));
         }
-        // Create authorization is requested against the new child URI. That
-        // node does not exist yet, so capability checks must come from its
-        // parent directory rather than `application_operations(uri)`.
         let parent = if uri == APPLICATIONS_URI {
             APPLICATIONS_URI.to_owned()
-        } else if applications::is_user(uri) {
-            let target = applications::candidate_path(uri).map_err(provider_error)?;
-            let parent = target
-                .parent()
-                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
-            if parent == applications::stored_path(APPLICATIONS_URI).map_err(provider_error)? {
-                APPLICATIONS_URI.to_owned()
-            } else {
-                applications::stored_uri(parent).map_err(provider_error)?
-            }
         } else {
-            return Err(ProviderError::method_not_found(operation.methods()[0]));
+            applications::parent_uri(uri).map_err(provider_error)?
         };
-        let parent_is_directory = parent == APPLICATIONS_URI
-            || applications::stored_entry(&parent).is_ok_and(|entry| entry.is_dir);
-        if parent_is_directory && application_operations(&parent).contains(&operation) {
+        if (parent == APPLICATIONS_URI || applications::is_folder(&parent))
+            && application_operations(&parent).contains(&operation)
+        {
             Ok(())
         } else {
             Err(ProviderError::method_not_found(operation.methods()[0]))
@@ -306,8 +337,8 @@ impl VfsProvider for ApplicationView {
     }
 
     fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
-        let path = path(request.ctx())?;
-        storage::applications_stat(path, &application_operations(path))
+        let uri = path(request.ctx())?;
+        storage::applications_stat(uri, &application_operations(uri))
             .map(shared_entry)
             .map_err(provider_error)
     }
@@ -323,85 +354,93 @@ impl VfsProvider for ApplicationView {
         if !applications::is_user(uri) {
             return Err(ProviderError::method_not_found("vfs.openRead"));
         }
-        let file_path = applications::candidate_path(uri).map_err(provider_error)?;
+        let file_path = applications::asset_path(uri).map_err(provider_error)?;
         let file = std::fs::File::open(&file_path).map_err(provider_error)?;
         let size = file.metadata().map_err(provider_error)?.len();
         Ok(FsRead::new(file, Some(size)))
     }
 
     fn write(&self, request: &FsRequest<'_>) -> Result<FsWrite, ProviderError> {
-        let (uri, target, create) = match (request.node_id(), request.parent_id(), request.name()) {
-            (Some(uri), _, _) => (
-                uri.to_owned(),
-                applications::candidate_path(uri).map_err(provider_error)?,
-                false,
-            ),
-            (None, Some(parent), Some(name)) => {
-                let (uri, target) = application_child(parent, name)?;
-                (uri, target, true)
-            }
+        let (parent, name) = match (request.node_id(), request.parent_id(), request.name()) {
+            (None, Some(parent), Some(name)) => (parent, name),
             _ => {
-                return Err(ProviderError::invalid_params(
-                    "write requires nodeId or parentId and name",
-                ))
+                return Err(ProviderError::method_not_found("vfs.beginWrite"));
             }
         };
-        if create {
-            let parent = target
-                .parent()
-                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
-            if !parent.is_dir() || target.exists() {
-                return Err(ProviderError::invalid_params(
-                    "Conflict: application destination is unavailable",
-                ));
-            }
-        } else if !target.is_file() {
+        let target = applications::reserved_child(parent, name).map_err(provider_error)?;
+        if target.kind != applications::PendingKind::Application {
             return Err(ProviderError::invalid_params(
-                "Unsupported: application write requires a file",
+                "Applications writes must target an imported application",
             ));
         }
-        let temporary = tempfile::NamedTempFile::new_in(
-            target
-                .parent()
-                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?,
-        )
-        .map_err(provider_error)?;
+        let uri = target.uri.clone();
+        let destination = applications::asset_path(&uri).map_err(provider_error)?;
+        let staging_root = dirs::home_dir()
+            .ok_or_else(|| ProviderError::internal("cannot locate home directory"))?
+            .join(".fiex")
+            .join("application-staging");
+        std::fs::create_dir_all(&staging_root)
+            .map_err(|error| ProviderError::internal(error.to_string()))?;
+        let temporary = tempfile::NamedTempFile::new_in(&staging_root)
+            .map_err(|error| ProviderError::internal(error.to_string()))?;
         let staged = Arc::new(Mutex::new(Some(temporary)));
-        let writer = ApplicationStage(Arc::clone(&staged));
-        let commit_stage = Arc::clone(&staged);
+        let committed = Arc::new(AtomicBool::new(false));
+        let writer = ApplicationStage {
+            file: Arc::clone(&staged),
+            uri: uri.clone(),
+            committed: Arc::clone(&committed),
+        };
+        let commit_file = Arc::clone(&staged);
+        let commit_flag = Arc::clone(&committed);
         Ok(FsWrite::with_commit(writer, move || {
-            let temporary = commit_stage
-                .lock()
-                .map_err(|_| ProviderError::internal("write stream unavailable"))?
-                .take()
-                .ok_or_else(|| ProviderError::internal("write stream closed"))?;
-            temporary
-                .as_file()
-                .sync_all()
-                .map_err(|error| ProviderError::internal(error.to_string()))?;
-            if create {
+            let result = (|| {
+                let temporary = commit_file
+                    .lock()
+                    .map_err(|_| ProviderError::internal("write stream unavailable"))?
+                    .take()
+                    .ok_or_else(|| ProviderError::internal("write stream closed"))?;
                 temporary
-                    .persist_noclobber(&target)
-                    .map_err(|error| ProviderError::internal(error.error.to_string()))?;
-            } else {
+                    .as_file()
+                    .sync_all()
+                    .map_err(|error| ProviderError::internal(error.to_string()))?;
+                applications::validate_import_asset(temporary.path(), &target.name)
+                    .map_err(provider_error)?;
+                if destination.exists() {
+                    return Err(ProviderError::invalid_params(
+                        "Conflict: application asset already exists",
+                    ));
+                }
                 temporary
-                    .persist(&target)
+                    .persist_noclobber(&destination)
                     .map_err(|error| ProviderError::internal(error.error.to_string()))?;
+                if let Err(error) =
+                    crate::core::volumes::application_policy::finish_import(&uri, true)
+                {
+                    let _ = std::fs::remove_file(&destination);
+                    return Err(provider_error(error));
+                }
+                match applications::commit_reserved_application(&uri) {
+                    Ok(entry) => {
+                        commit_flag.store(true, Ordering::Release);
+                        crate::core::fs::changes::committed(&uri);
+                        Ok(shared_entry(entry))
+                    }
+                    Err(error) => {
+                        let _ = std::fs::remove_file(&destination);
+                        Err(provider_error(error))
+                    }
+                }
+            })();
+            if result.is_err() {
+                applications::cancel_reservation(&uri);
             }
-            let entry = applications::stored_entry(&uri).map_err(provider_error)?;
-            Ok(shared_entry(entry))
+            result
         }))
     }
 
     fn mkdir(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
-        let parent = request
-            .parent_id()
-            .ok_or_else(|| ProviderError::invalid_params("parentId is required"))?;
-        let name = request
-            .name()
-            .ok_or_else(|| ProviderError::invalid_params("name is required"))?;
-        let uri = applications::create_stored(parent, name, true).map_err(provider_error)?;
-        applications::stored_entry(&uri)
+        let uri = path(request.ctx())?;
+        applications::commit_reserved_folder(uri)
             .map(shared_entry)
             .map_err(provider_error)
     }
@@ -416,31 +455,14 @@ impl VfsProvider for ApplicationView {
         let name = request
             .name()
             .ok_or_else(|| ProviderError::invalid_params("name is required"))?;
-        let expected_parent = applications::stored_path(uri)
-            .map_err(provider_error)?
-            .parent()
-            .ok_or_else(|| ProviderError::invalid_params("application item has no parent"))?
-            .to_path_buf();
-        let destination_parent = if parent == APPLICATIONS_URI {
-            applications::stored_path(parent)
-        } else {
-            applications::candidate_path(parent)
-        }
-        .map_err(provider_error)?;
-        if destination_parent != expected_parent {
-            return Err(ProviderError::invalid_params(
-                "Unsupported: moving application items requires TransferEngine",
-            ));
-        }
-        let renamed = applications::rename_stored(uri, name).map_err(provider_error)?;
-        applications::stored_entry(&renamed)
+        applications::rename_node(uri, parent, name)
             .map(shared_entry)
             .map_err(provider_error)
     }
 
     fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
         let uri = request.node_id().unwrap_or(path(request.ctx())?);
-        applications::remove_user(uri).map_err(provider_error)
+        applications::remove_node(uri).map_err(provider_error)
     }
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {

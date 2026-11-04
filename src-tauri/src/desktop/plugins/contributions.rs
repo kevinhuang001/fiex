@@ -69,11 +69,13 @@ pub(crate) async fn preview_open(
     provider_id: Option<String>,
     provider_order: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::providers::preview::open_resource(
             &path,
             provider_id.as_deref(),
             provider_order.as_deref(),
+            user_action,
         )
     })
     .await

@@ -73,6 +73,35 @@ pub(super) fn unique(
     name: &str,
     directory: bool,
 ) -> Result<ResourceBroker, String> {
+    unique_with_kind(
+        parent,
+        name,
+        if directory {
+            crate::core::fs::provider_registry::ChildKind::Folder
+        } else {
+            crate::core::fs::provider_registry::ChildKind::File
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn unique_application(
+    parent: &ResourceBroker,
+    name: &str,
+) -> Result<ResourceBroker, String> {
+    unique_with_kind(
+        parent,
+        name,
+        crate::core::fs::provider_registry::ChildKind::Application,
+    )
+}
+
+fn unique_with_kind(
+    parent: &ResourceBroker,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<ResourceBroker, String> {
+    let directory = kind == crate::core::fs::provider_registry::ChildKind::Folder;
     let path = std::path::Path::new(name);
     let stem = if directory {
         name
@@ -90,7 +119,7 @@ pub(super) fn unique(
             .unwrap_or_default()
     };
     for index in 2..=10_000 {
-        let target = binding::child(parent, &format!("{stem} ({index}){extension}"))?;
+        let target = binding::child(parent, &format!("{stem} ({index}){extension}"), kind)?;
         if optional_stat(&target)?.is_none() {
             return Ok(target);
         }
@@ -151,7 +180,15 @@ pub(super) fn plan(
         },
         false,
     )?;
-    let mut target = binding::child(parent, name)?;
+    let mut target = binding::child(
+        parent,
+        name,
+        if directory {
+            crate::core::fs::provider_registry::ChildKind::Folder
+        } else {
+            crate::core::fs::provider_registry::ChildKind::File
+        },
+    )?;
     if source.path == target.path
         || (directory
             && target
@@ -224,7 +261,11 @@ pub(super) fn plan(
         let listing = directory_source.list()?;
         for entry in listing.as_array().ok_or("invalid directory listing")? {
             let child_name = entry["name"].as_str().ok_or("missing child name")?;
-            let child_source = binding::child(&directory_source, child_name)?;
+            let child_source = binding::child(
+                &directory_source,
+                child_name,
+                crate::core::fs::provider_registry::ChildKind::Folder,
+            )?;
             // Descendant scopes are shared with their selected root. The
             // destination may not exist yet, but its ref is already confined.
             plan(

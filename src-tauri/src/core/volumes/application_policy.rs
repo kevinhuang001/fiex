@@ -61,9 +61,11 @@ pub fn executable_file(path: &str) -> bool {
 }
 pub fn finish_import(uri: &str, executable: bool) -> Result<(), String> {
     #[cfg(unix)]
-    if executable && super::applications::is_user(uri) {
+    if executable
+        && (super::applications::is_user(uri) || super::applications::pending_target(uri).is_some())
+    {
         use std::os::unix::fs::PermissionsExt;
-        let path = super::applications::candidate_path(uri)?;
+        let path = super::applications::asset_path(uri)?;
         let mut permissions = std::fs::metadata(&path)
             .map_err(|e| e.to_string())?
             .permissions();

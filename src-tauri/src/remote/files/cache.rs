@@ -98,6 +98,7 @@ pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
         has_cache,
         pinned,
         uploaded,
+        storage_projection: Default::default(),
         sync: Some(
             if state.conflict {
                 "conflict"

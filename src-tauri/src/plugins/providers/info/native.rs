@@ -29,7 +29,10 @@ struct MediaInfo;
 impl InfoProvider for MediaInfo {
     fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
         let resource = NativeProviderInvocation::resource(ctx, 0)?;
-        let path = resource.export_path().map_err(ProviderError::internal)?;
+        let user_action = NativeProviderInvocation::user_action(ctx)?;
+        let path = resource
+            .export_path(user_action)
+            .map_err(ProviderError::internal)?;
         Ok(media_sections(&path))
     }
 }
@@ -83,12 +86,22 @@ pub(super) fn invoke(
         serde_json::json!({}),
         std::slice::from_ref(resource),
         None,
-    );
+    )
+    .with_user_action_context(crate::core::fs::mapped_access::UserActionContext::for_test());
     provider.resolve(&invocation)
 }
 
 pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
+}
+
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resource: &ResourceSnapshot,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
 }
 
 #[cfg(test)]

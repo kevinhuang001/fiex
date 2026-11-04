@@ -254,6 +254,14 @@ pub fn resource_scope(
     if read_only_vfs {
         scope.restrict_to_readonly();
     }
+    if matches!(
+        method,
+        "hooks.invoke" | "contextMenu.execute" | "toolbar.invoke" | "preview.open"
+    ) {
+        scope.set_user_action_context(
+            crate::core::fs::mapped_access::UserActionContext::from_core_event(),
+        );
+    }
     Ok((params, scope))
 }
 

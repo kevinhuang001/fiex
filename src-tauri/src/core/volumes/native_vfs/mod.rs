@@ -2,6 +2,7 @@
 use super::{applications, recycle, trash_vfs};
 use crate::{
     core::files::Entry,
+    infrastructure::provider_storage::CoreOwnerKey,
     plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
 };
 use fiex_provider_contracts::{
@@ -10,6 +11,7 @@ use fiex_provider_contracts::{
 };
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -39,39 +41,104 @@ use trash_provider::TrashView;
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
-/// A projected alias carries a view identity and resolves its storage owner separately.
-pub enum NativeStorageProjection {
-    Owned,
-    Projected(Option<String>),
+#[cfg(feature = "desktop")]
+type OpenHandler = fn(&str) -> Result<(), String>;
+type ValidateChildHandler = fn(&str, &str) -> Result<(), String>;
+type ChildPathHandler =
+    fn(&str, &str, crate::core::fs::provider_registry::ChildKind) -> Result<String, String>;
+type ParentPathHandler = fn(&str) -> Result<String, String>;
+type SameMountMoveHandler = fn(
+    &[crate::core::fs::ResourceBroker],
+    &crate::core::fs::ResourceBroker,
+) -> Result<Vec<String>, String>;
+
+#[derive(Clone, Copy, Default)]
+struct NativeVfsExtensions {
+    #[cfg(feature = "desktop")]
+    open: Option<OpenHandler>,
+    validate_child: Option<ValidateChildHandler>,
+    child_path: Option<ChildPathHandler>,
+    parent_path: Option<ParentPathHandler>,
+    same_mount_move: Option<SameMountMoveHandler>,
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn VfsProvider>> = OnceLock::new();
+struct RegisteredNativeVfs {
+    providers: NativeProviderRegistry<dyn VfsProvider>,
+    extensions: HashMap<&'static str, NativeVfsExtensions>,
+}
+
+fn registration() -> &'static RegisteredNativeVfs {
+    static REGISTERED: OnceLock<RegisteredNativeVfs> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut registry: NativeProviderRegistry<dyn VfsProvider> =
             NativeProviderRegistry::new(ProviderKind::Vfs);
-        for (id, provider) in [
-            ("core:recent", Arc::new(RecentView) as Arc<dyn VfsProvider>),
+        let mut extensions = HashMap::new();
+        for (id, owner, provider, provider_extensions) in [
+            (
+                "core:recent",
+                CoreOwnerKey::new("recent"),
+                Arc::new(RecentView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    validate_child: Some(validate_recent_child),
+                    ..NativeVfsExtensions::default()
+                },
+            ),
             (
                 "core:applications",
+                CoreOwnerKey::new("applications"),
                 Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    #[cfg(feature = "desktop")]
+                    open: Some(applications::open),
+                    validate_child: Some(applications::validate_child),
+                    child_path: Some(applications_child_path),
+                    parent_path: Some(applications::parent_uri),
+                    same_mount_move: Some(application_provider::move_within_mount),
+                },
             ),
-            ("core:trash", Arc::new(TrashView) as Arc<dyn VfsProvider>),
+            (
+                "core:trash",
+                CoreOwnerKey::new("core"),
+                Arc::new(TrashView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    validate_child: Some(trash_vfs::validate_child),
+                    ..NativeVfsExtensions::default()
+                },
+            ),
             (
                 "core:local-fs",
+                CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    child_path: Some(host_child_path),
+                    ..NativeVfsExtensions::default()
+                },
             ),
             (
                 "core:usb-fs",
+                CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    validate_child: Some(usb_validate_child),
+                    child_path: Some(usb_child_path),
+                    ..NativeVfsExtensions::default()
+                },
             ),
         ] {
             registry
-                .register(id, 100, ProviderMatchRule::default(), provider)
+                .register_owned(id, owner, 100, ProviderMatchRule::default(), provider)
                 .expect("invalid native VFS registration");
+            extensions.insert(id, provider_extensions);
         }
-        registry
+        RegisteredNativeVfs {
+            providers: registry,
+            extensions,
+        }
     })
+}
+
+fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
+    &registration().providers
 }
 
 /// Resolve the native VFS identity at the URI boundary. General services use
@@ -119,6 +186,49 @@ pub fn backing_path(path: &str) -> Option<PathBuf> {
     }
 }
 
+/// Let a registered native provider handle resources whose platform open
+/// target is not a byte stream. Other resources continue through the ordinary
+/// export/open path; Open is not an FsOperation capability.
+#[cfg(feature = "desktop")]
+pub(crate) fn open(path: &str) -> Result<bool, String> {
+    let Some(provider) = shared_provider_id(path) else {
+        return Ok(false);
+    };
+    match registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.open)
+    {
+        Some(open) => open(path).map(|()| true),
+        None => Ok(false),
+    }
+}
+
+/// Give native providers first chance to handle an intra-mount move as a
+/// metadata operation. `None` keeps the normal TransferEngine stream path.
+pub(crate) fn move_within_mount(
+    sources: &[crate::core::fs::ResourceBroker],
+    destination: &crate::core::fs::ResourceBroker,
+) -> Result<Option<Vec<String>>, String> {
+    let Some(provider) = shared_provider_id(&destination.path) else {
+        return Ok(None);
+    };
+    if sources.iter().any(|source| {
+        shared_provider_id(&source.path) != Some(provider)
+            || source.reference.mount_id != destination.reference.mount_id
+    }) {
+        return Ok(None);
+    }
+    let Some(move_within_mount) = registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.same_mount_move)
+    else {
+        return Ok(None);
+    };
+    move_within_mount(sources, destination).map(Some)
+}
+
 /// USB references are scoped to a mount generation. Keep that liveness check
 /// at the native storage boundary so generic ResourceBroker code stays free
 /// of USB-specific policy.
@@ -155,6 +265,8 @@ fn unregistered_scheme(path: &str) -> bool {
 pub fn is_tree_path(path: &str) -> bool {
     path == RECENT_URI
         || path == APPLICATIONS_URI
+        || applications::is_folder(path)
+        || applications::is_app(path)
         || applications::is_user(path)
         || trash_vfs::is_tree(path)
 }
@@ -162,49 +274,36 @@ pub fn is_tree_path(path: &str) -> bool {
 /// Ask the owning native view to validate a child identity. Ordinary host paths
 /// are validated by the enclosing operation scope in Core's VFS router.
 pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
-    if crate::usbfs::route(parent).is_some() {
-        return crate::usbfs::validate_child(parent, child);
-    }
-    match provider_id(parent) {
-        Some("core:recent") if parent == RECENT_URI => {
-            crate::core::recent::source_for(child).map(|_| ())
-        }
-        Some("core:applications") => applications::validate_child(parent, child),
-        Some("core:trash") => trash_vfs::validate_child(parent, child),
-        _ => Err("Unsupported: provider does not support child identities".into()),
-    }
+    let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
+    registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.validate_child)
+        .ok_or("Unsupported: provider does not support child identities")?(parent, child)
 }
 
-pub fn child_path(parent: &str, name: &str) -> Result<String, String> {
-    match shared_provider_id(parent) {
-        Some("core:local-fs") => Ok(PathBuf::from(parent)
-            .join(name)
-            .to_string_lossy()
-            .into_owned()),
-        Some("core:usb-fs") => {
-            crate::usbfs::route(parent).ok_or("invalid USB parent")?;
-            Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
-        }
-        Some("core:applications") => {
-            let backing = if parent == APPLICATIONS_URI {
-                applications::stored_path(parent)?
-            } else {
-                applications::candidate_path(parent)?
-            };
-            applications::stored_uri(&backing.join(name))
-        }
-        _ => Err("Unsupported: provider does not support child creation".into()),
-    }
+pub(crate) fn child_path(
+    parent: &str,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
+    registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.child_path)
+        .ok_or("Unsupported: provider does not support child creation")?(parent, name, kind)
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
-    if applications::is_user(path) {
-        let local = applications::candidate_path(path)?;
-        let parent = local.parent().ok_or("item has no parent")?;
-        if parent == applications::stored_path(applications::URI)? {
-            return Ok(applications::URI.into());
+    if let Some(provider) = shared_provider_id(path) {
+        if let Some(parent_path) = registration()
+            .extensions
+            .get(provider)
+            .and_then(|extensions| extensions.parent_path)
+        {
+            return parent_path(path);
         }
-        return applications::stored_uri(parent);
     }
     if opaque(path) {
         return Err("view has no writable parent".into());
@@ -213,6 +312,46 @@ pub fn parent_path(path: &str) -> Result<String, String> {
         .parent()
         .map(|path| path.to_string_lossy().into_owned())
         .ok_or_else(|| "item has no parent".into())
+}
+
+fn validate_recent_child(parent: &str, child: &str) -> Result<(), String> {
+    if parent != RECENT_URI {
+        return Err("recent view has no writable child identities".into());
+    }
+    crate::core::recent::source_for(child).map(|_| ())
+}
+
+fn host_child_path(
+    parent: &str,
+    name: &str,
+    _kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    Ok(PathBuf::from(parent)
+        .join(name)
+        .to_string_lossy()
+        .into_owned())
+}
+
+fn usb_validate_child(parent: &str, child: &str) -> Result<(), String> {
+    crate::usbfs::validate_child(parent, child)
+}
+
+fn usb_child_path(
+    parent: &str,
+    name: &str,
+    _kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    crate::usbfs::route(parent).ok_or("invalid USB parent")?;
+    Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
+}
+
+fn applications_child_path(
+    parent: &str,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
+    let is_directory = matches!(kind, crate::core::fs::provider_registry::ChildKind::Folder);
+    applications::reserve_child(parent, name, is_directory)
 }
 
 pub fn tree_path_key(path: &str) -> Option<String> {
@@ -227,12 +366,18 @@ fn shared_view_for(path: &str) -> Option<&'static dyn VfsProvider> {
     registry().get(shared_provider_id(path)?)
 }
 
-pub fn storage_projection(path: &str) -> NativeStorageProjection {
-    if provider_id(path) == Some("core:recent") {
-        NativeStorageProjection::Projected(crate::core::recent::source_for(path).ok())
-    } else {
-        NativeStorageProjection::Owned
-    }
+/// Resolve Core private storage through the same registration that owns the
+/// provider identity. Callers select a provider capability, never an owner.
+pub(crate) fn management_storage_for_provider(
+    provider_id: &str,
+    scope: &str,
+) -> Result<crate::infrastructure::provider_storage::native::NativeScopedStorage, String> {
+    registry().management_storage_for(provider_id, scope)
+}
+
+#[cfg(test)]
+pub(crate) fn owner_for_provider(provider_id: &str) -> Option<CoreOwnerKey> {
+    registry().owner(provider_id)
 }
 
 pub fn operations(path: &str) -> Vec<FsOperation> {

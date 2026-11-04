@@ -1,5 +1,6 @@
 use super::*;
 use fiex_provider_contracts::ProviderInvocation;
+use rayon::prelude::*;
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -89,29 +90,44 @@ impl EventRouter {
             };
             groups[group].push((index, candidate));
         }
+        if groups.is_empty() {
+            return collect(Vec::new());
+        }
 
         let mut indexed: Vec<TimedProviderResult<T>> = std::iter::repeat_with(|| None)
             .take(provider_count)
             .collect();
         let trace = std::env::var_os("FIEX_TRACE_PROVIDER_PERF").is_some();
-        for batch in groups.chunks(8) {
-            std::thread::scope(|scope| {
-                let (sender, receiver) = std::sync::mpsc::channel();
-                let handles = batch
-                    .iter()
-                    .map(|group| {
-                        let sender = sender.clone();
-                        let invoke = &invoke;
-                        scope.spawn(move || {
+        static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+        let pool = POOL.get_or_init(|| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(8)
+                .thread_name(|index| format!("provider-event-{index}"))
+                .build()
+                .expect("provider event pool configuration is valid")
+        });
+        let worker_panicked = std::thread::scope(|scope| {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let worker_sender = sender.clone();
+            let group_lanes = &groups;
+            let provider_invoke = &invoke;
+            let worker = scope.spawn(move || {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    pool.install(|| {
+                        group_lanes.par_iter().for_each(|group| {
+                            let sender = worker_sender.clone();
                             for (index, candidate) in group {
                                 let started = Instant::now();
                                 let result = std::panic::catch_unwind(
                                     std::panic::AssertUnwindSafe(|| {
                                         require_event(method)?;
                                         if invocation.method() != method {
-                                            return Err("provider invocation method does not match routed event".into());
+                                            return Err(
+                                                "provider invocation method does not match routed event"
+                                                    .into(),
+                                            );
                                         }
-                                        invoke(
+                                        provider_invoke(
                                             &candidate.resolver,
                                             candidate.implementation.as_ref(),
                                             invocation,
@@ -131,50 +147,53 @@ impl EventRouter {
                                     break;
                                 }
                             }
-                        })
+                        });
                     })
-                    .collect::<Vec<_>>();
-                drop(sender);
+                }))
+                    .is_err()
+            });
+            drop(sender);
 
-                for (index, resolver, result, elapsed) in receiver {
-                    if trace {
-                        crate::infrastructure::logging::record_core(
-                            "debug",
-                            "provider.perf",
-                            &format!(
-                                "event={method} provider={} elapsed_ms={} status={}",
-                                resolver.id,
-                                elapsed.as_millis(),
-                                if result.is_ok() { "ok" } else { "error" },
-                            ),
-                        );
+            for (index, resolver, result, elapsed) in receiver {
+                if trace {
+                    crate::infrastructure::logging::record_core(
+                        "debug",
+                        "provider.perf",
+                        &format!(
+                            "event={method} provider={} elapsed_ms={} status={}",
+                            resolver.id,
+                            elapsed.as_millis(),
+                            if result.is_ok() { "ok" } else { "error" },
+                        ),
+                    );
+                }
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    result.and_then(|value| validate(&resolver, value))
+                }))
+                .unwrap_or_else(|_| Err("provider validation panicked".into()));
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    on_partial(&resolver, &result)
+                }));
+                indexed[index] = Some((resolver, result, elapsed));
+            }
+
+            worker.join().unwrap_or(true)
+        });
+
+        if worker_panicked {
+            for group in &groups {
+                for (index, candidate) in group {
+                    if indexed[*index].is_some() {
+                        continue;
                     }
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        result.and_then(|value| validate(&resolver, value))
-                    }))
-                    .unwrap_or_else(|_| Err("provider validation panicked".into()));
+                    let resolver = candidate.resolver.clone();
+                    let result = Err("provider panicked".into());
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         on_partial(&resolver, &result)
                     }));
-                    indexed[index] = Some((resolver, result, elapsed));
+                    indexed[*index] = Some((resolver, result, Duration::ZERO));
                 }
-
-                for (handle, group) in handles.into_iter().zip(batch) {
-                    if handle.join().is_err() {
-                        for (index, candidate) in group {
-                            if indexed[*index].is_some() {
-                                continue;
-                            }
-                            let resolver = candidate.resolver.clone();
-                            let result = Err("provider panicked".into());
-                            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                on_partial(&resolver, &result)
-                            }));
-                            indexed[*index] = Some((resolver, result, Duration::ZERO));
-                        }
-                    }
-                }
-            });
+            }
         }
 
         let mut outcomes = Vec::with_capacity(provider_count);

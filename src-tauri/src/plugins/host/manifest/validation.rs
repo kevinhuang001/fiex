@@ -178,6 +178,19 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "hooks" && object.contains_key("method") {
             return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
         }
+        if key == "hooks" {
+            if object.keys().any(|field| {
+                !matches!(field.as_str(), "event" | "match" | "priority" | "providers")
+            }) {
+                return Err("extensions.hooks accepts event, match, priority and providers".into());
+            }
+            if !matches!(
+                object.get("event").and_then(Value::as_str),
+                Some("beforeOpen" | "afterOpen")
+            ) {
+                return Err("extensions.hooks.event must be beforeOpen or afterOpen".into());
+            }
+        }
     }
     if let Some(themes) = value.get("themes") {
         let object = themes

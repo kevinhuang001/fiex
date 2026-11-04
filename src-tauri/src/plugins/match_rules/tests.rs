@@ -198,7 +198,7 @@ fn view_and_storage_are_independent_and_match_all_selected_resources() {
         "storage":{"type":"vfs","providerId":"plugin:org.example.drive:gdrive","mountId":"account-1"},
         "kind":"file","operations":["read"]
     });
-    assert!(rules.matches_event(&[remote.clone()], ""));
+    assert!(rules.matches_event(std::slice::from_ref(&remote), ""));
     let missing_source = json!({"view":remote["view"],"kind":"file","operations":["read"]});
     assert!(!rules.matches_event(&[missing_source], ""));
     let another_account = json!({
@@ -210,8 +210,8 @@ fn view_and_storage_are_independent_and_match_all_selected_resources() {
         "storage":{"mountIds":["account-1"]}
     }}))
     .unwrap();
-    assert!(mount_specific.matches_event(&[remote.clone()], ""));
-    assert!(!mount_specific.matches_event(&[another_account.clone()], ""));
+    assert!(mount_specific.matches_event(std::slice::from_ref(&remote), ""));
+    assert!(!mount_specific.matches_event(std::slice::from_ref(&another_account), ""));
     assert!(!mount_specific.matches_event(&[remote, another_account], ""));
 }
 

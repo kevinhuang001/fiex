@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::atomic::Ordering;
 
 #[tauri::command]
 pub(crate) async fn recycle(
@@ -111,7 +112,7 @@ pub(crate) async fn delete_permanently(
         }
         let mut removed = 0;
         for path in paths {
-            if flag.is_cancelled() {
+            if flag.load(Ordering::Relaxed) {
                 return Err(crate::core::operations::CANCELLED.into());
             }
             crate::core::fs::remove_path(&path, "core:delete")?;

@@ -25,8 +25,9 @@ pub(crate) async fn register_drag(
             .iter()
             .all(|path| crate::plugins::resource::file_capabilities::for_path(path).remove);
     let originals = paths.clone();
+    let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     let materialized = tauri::async_runtime::spawn_blocking(move || {
-        crate::core::fs::export_for_external_drag(&paths)
+        crate::core::fs::export_for_external_drag(&paths, user_action)
     })
     .await
     .map_err(|e| e.to_string())??;

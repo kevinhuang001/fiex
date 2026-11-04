@@ -42,9 +42,7 @@ fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool 
             };
             match crate::core::volumes::native_vfs::provider_id(path) {
                 Some("core:trash") => entry.is_dir && !entry.is_symlink,
-                Some("core:applications") => true,
-                Some("core:recent") => entry.allowed_ops.iter().any(|op| op == "read"),
-                _ => entry.is_dir || capabilities.read,
+                _ => entry.is_dir || capabilities.read || entry.link_target.is_some(),
             }
         })
 }

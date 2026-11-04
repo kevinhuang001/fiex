@@ -144,6 +144,7 @@ fn project_entry(
             uploaded: false,
             sync: None,
             allowed_ops,
+            storage_projection: Default::default(),
         },
         entry.node_id,
     ))

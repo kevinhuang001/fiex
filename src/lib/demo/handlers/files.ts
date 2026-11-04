@@ -61,8 +61,8 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           defaultView: 'icons',
           warnings: [],
           entries: [
-            app('Fiex', 'applications://ZmlleHQ=', 'app'),
-            app('我的快捷方式', 'applications://~bXktYXBw', 'app'),
+            app('Fiex', 'applications://app/fiex', 'app'),
+            app('我的快捷方式', 'applications://app/my-app', 'app'),
           ],
         }
       }
@@ -110,6 +110,8 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     }
     case 'file_info':
       return state.entries.find((e) => e.path === a.path)
+    case 'file_parent':
+      return parent(String(a.path ?? ''))
     case 'file_info_details': {
       const entry = state.entries.find((e) => e.path === a.path)
       if (!entry) return []

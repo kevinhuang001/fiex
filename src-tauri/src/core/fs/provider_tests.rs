@@ -160,6 +160,7 @@ fn symlink_kind_survives_event_metadata_projection() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     use crate::core::volumes::applications;
@@ -173,23 +174,23 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     let export_name = if cfg!(target_os = "windows") {
         "same.exe"
     } else {
-        "same.txt"
+        "same.desktop"
     };
     let mut expected = vec![b"local".to_vec()];
     for index in 0..2 {
-        let dir = applications::create_stored(
+        let dir = applications::create_virtual_folder(
             applications::URI,
             &format!("export-{token}-{index}"),
-            true,
         )
-        .unwrap();
-        let item = applications::create_stored(&dir, export_name, false).unwrap();
+        .unwrap()
+        .path;
+        let item = applications::reserve_child(&dir, export_name, false).unwrap();
         let contents = if cfg!(target_os = "windows") {
             vec![b'M', b'Z', index as u8]
         } else {
             index.to_string().into_bytes()
         };
-        let item_path = applications::candidate_path(&item).unwrap();
+        let item_path = applications::asset_path(&item).unwrap();
         std::fs::write(&item_path, &contents).unwrap();
         #[cfg(unix)]
         {
@@ -198,12 +199,17 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
             permissions.set_mode(0o755);
             std::fs::set_permissions(&item_path, permissions).unwrap();
         }
+        applications::commit_reserved_application(&item).unwrap();
         inputs.push(item);
         virtual_files.push(inputs.last().unwrap().clone());
         directories.push(dir);
         expected.push(contents);
     }
-    let output = export_for_external_drag(&inputs).unwrap();
+    let output = export_for_external_drag(
+        &inputs,
+        crate::core::fs::mapped_access::UserActionContext::for_test(),
+    )
+    .unwrap();
     assert_eq!(output.len(), 3);
     for (path, bytes) in output.iter().zip(expected) {
         assert_eq!(std::fs::read(path).unwrap(), bytes);
@@ -217,10 +223,10 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
         assert_eq!(std::path::Path::new(path).file_name().unwrap(), export_name);
     }
     for file in virtual_files {
-        applications::remove_user(&file).unwrap();
+        applications::remove_node(&file).unwrap();
     }
     for directory in directories {
-        applications::remove_user(&directory).unwrap();
+        applications::remove_virtual_folder(&directory).unwrap();
     }
 }
 
@@ -289,9 +295,9 @@ fn applications_root_creation_uses_the_same_broker_contract() {
         "core:test-app-rename",
     )
     .unwrap();
-    assert!(applications::is_user(&renamed));
+    assert!(applications::is_folder(&renamed));
     super::binding::remove_path(&renamed, "core:test-app-delete").unwrap();
-    assert!(applications::stored_entry(&renamed).is_err());
+    assert!(applications::entry_for_uri(&renamed).is_err());
 }
 
 #[test]

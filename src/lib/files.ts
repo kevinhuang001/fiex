@@ -43,12 +43,9 @@ export function virtualPath(path: string): VirtualAddress | null {
   const match = /^(recent|applications|trash|recyclebin):\/\/(.*)$/i.exec(path)
   if (!match) return null
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
-  let payload = match[2]
-  if (root === 'applications://') payload = payload.replace(/^~/, '').replace(/^user\//, '')
-  return { root, payload }
+  return { root, payload: match[2] }
 }
 function virtualHref(root: VirtualRoot, payload: string): string {
-  if (root === 'applications://') return payload ? `${root}~${payload}` : root
   return root + payload
 }
 function virtualRootName(root: VirtualRoot): string {
@@ -72,13 +69,7 @@ export function normalizeAddress(input: string): string {
   if (!match) return text
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
   let payload = match[2].replace(/^[\\/]+/, '')
-  if (root === 'applications://') {
-    if (/^user[\\/]/i.test(payload)) payload = payload.slice(5)
-    else if (payload.startsWith('~')) payload = payload.slice(1)
-    else if (payload && !opaquePayload(payload))
-      payload = encodeBase64Url(payload.replace(/\\/g, '/'))
-    return virtualHref(root, payload)
-  }
+  if (root === 'applications://') return virtualHref(root, payload.replace(/\\/g, '/'))
   if (root === 'trash://') {
     if (payload && !opaquePayload(payload)) payload = encodeBase64Url(payload.replace(/\\/g, '/'))
     return virtualHref(root, payload)
@@ -90,7 +81,7 @@ export function displayAddress(path: string): string {
   const virtual = virtualPath(path)
   if (!virtual) return path
   if (!virtual.payload) return virtual.root
-  if (virtual.root === 'applications://' || virtual.root === 'trash://') {
+  if (virtual.root === 'trash://') {
     const relative = decodeBase64Url(virtual.payload)
     if (relative) return virtual.root + relative
   }
@@ -125,6 +116,11 @@ export function parent(path: string): string {
   if (virtual) {
     if (!virtual.payload || virtual.root === 'recent://' || virtual.root === 'recyclebin://')
       return virtual.root
+    // Applications nodes have stable opaque IDs and their parent is stored in
+    // the virtual tree, not encoded in the URI. URI-only helpers can only
+    // safely return the mount root; provider-aware navigation resolves deeper
+    // parent relationships.
+    if (virtual.root === 'applications://') return virtual.root
     const relative = decodeBase64Url(virtual.payload)
     if (!relative || !relative.includes('/')) return virtual.root
     return virtualHref(virtual.root, encodeBase64Url(relative.slice(0, relative.lastIndexOf('/'))))
@@ -145,7 +141,7 @@ export function join(path: string, name: string): string {
     return result
   }
   const virtual = virtualPath(path)
-  if (virtual && (virtual.root === 'applications://' || virtual.root === 'trash://')) {
+  if (virtual && virtual.root === 'trash://') {
     const relative = virtual.payload ? decodeBase64Url(virtual.payload) : ''
     if (relative !== null)
       return virtualHref(virtual.root, encodeBase64Url(relative ? `${relative}/${name}` : name))
@@ -177,6 +173,11 @@ export function pathCrumbs(
     const crumbs: Crumb[] = [{ name: displayName(root) || virtualRootName(root), path: root }]
     // Recycle-bin identities are opaque records, not navigable folders.
     if (virtual.payload && root !== 'recyclebin://') {
+      if (root === 'applications://') {
+        const child = virtualHref(root, virtual.payload)
+        crumbs.push({ name: displayName(child) || basename(child), path: child })
+        return crumbs
+      }
       const relative = opaquePayload(virtual.payload)
       if (relative) {
         let prefix = ''
@@ -218,10 +219,12 @@ export function basename(path: string): string {
   const virtual = virtualPath(path)
   if (virtual) {
     if (!virtual.payload) return virtualRootName(virtual.root)
-    if (virtual.root === 'applications://' || virtual.root === 'trash://') {
+    if (virtual.root === 'trash://') {
       const relative = decodeBase64Url(virtual.payload)
       if (relative) return relative.split('/').pop() || virtualRootName(virtual.root)
     }
+    if (virtual.root === 'applications://')
+      return virtual.payload.split('/').at(-1) || virtualRootName(virtual.root)
     return virtual.payload
   }
   return (

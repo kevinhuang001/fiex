@@ -8,17 +8,19 @@ pub(crate) mod directory_cache;
 mod error;
 mod export;
 mod list_service;
+pub(crate) mod mapped_access;
 mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;
-#[cfg(feature = "desktop")]
 pub(crate) use binding::trusted_snapshot;
-pub(crate) use binding::{child, parent_path, trusted};
+pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
 pub use error::{FsError, FsErrorKind};
-pub use export::{export as export_for_external_drag, initialize as initialize_exports};
+pub(crate) use export::export as export_for_external_drag;
+#[cfg(feature = "desktop")]
+pub(crate) use export::initialize as initialize_exports;
 pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
@@ -36,7 +38,10 @@ pub struct ResourceBroker {
     pub reference: ResourceRef,
     pub(crate) path: String,
     pub(crate) scope: Scope,
+    pub(crate) storage_scope: Scope,
     pub(crate) owner: String,
+    user_action: Option<mapped_access::UserActionContext>,
+    mapped_operation: Option<FsOperation>,
 }
 
 pub(crate) fn clear_preflight_availability_cache() {
@@ -74,18 +79,54 @@ impl ResourceBroker {
             .map(|snapshot| snapshot.display)
             .map(Ok)
             .unwrap_or_else(|| scope.resolve_reference(reference))?;
+        let (storage_scope, mapped_operation) = scope
+            .mapped_storage_scope(reference, &path)?
+            .unwrap_or_else(|| (scope.clone(), None));
+        let path = if mapped_operation.is_some() {
+            storage_scope.resolve_reference(reference).unwrap_or(path)
+        } else {
+            path
+        };
         Ok(Self {
             reference: reference_typed,
             path,
+            user_action: scope.user_action_context(),
+            storage_scope,
             scope: scope.clone(),
             owner: owner.into(),
+            mapped_operation,
         })
+    }
+
+    pub(crate) fn with_user_action_context(
+        mut self,
+        user_action: mapped_access::UserActionContext,
+    ) -> Self {
+        self.user_action = Some(user_action);
+        self
+    }
+
+    pub(crate) fn user_action_context(&self) -> Option<&mapped_access::UserActionContext> {
+        self.user_action.as_ref()
     }
     pub(crate) fn open_read_handle(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         self.require(FsOperation::Read, false)?;
         provider_registry::open_read(self)
     }
     pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError> {
+        if let Some(granted) = self.mapped_operation {
+            let allowed = granted == operation || operation == FsOperation::Stat;
+            if !allowed {
+                return Err(FsError::new(
+                    FsErrorKind::PermissionDenied,
+                    format!(
+                        "mapped resource grants {}, not {}",
+                        granted.as_str(),
+                        operation.as_str()
+                    ),
+                ));
+            }
+        }
         provider_registry::require(self, operation, create)
     }
     pub fn stat(&self) -> Result<Value, FsError> {
@@ -163,7 +204,15 @@ impl ResourceBroker {
         } else {
             "host.fs.beginWrite"
         })?;
-        let child = binding::child(self, name)?;
+        let child = binding::child(
+            self,
+            name,
+            if directory {
+                provider_registry::ChildKind::Folder
+            } else {
+                provider_registry::ChildKind::File
+            },
+        )?;
         if directory {
             child.mkdir()?;
         } else {
@@ -194,27 +243,35 @@ impl ResourceBroker {
     pub fn remove(&self) -> Result<(), FsError> {
         self.scope.authorize_method("host.fs.remove")?;
         self.require(FsOperation::Remove, false)?;
+        let parent = parent_path(&self.path).ok();
         provider_registry::remove(self)?;
-        changes::removed(&self.path);
+        if let Some(parent) = parent {
+            changes::removed_from(&self.path, &parent);
+        } else {
+            changes::removed(&self.path);
+        }
         Ok(())
     }
-    pub fn rename(&self, destination: &Self) -> Result<(), FsError> {
+    pub fn rename(&self, destination: &Self) -> Result<String, FsError> {
         self.scope.authorize_method("host.fs.rename")?;
         self.require(FsOperation::Rename, false)?;
         destination.require(FsOperation::Write, true)?;
         if self.reference.mount_id != destination.reference.mount_id {
             return Err("Unsupported: cross-mount rename requires TransferEngine".into());
         }
-        provider_registry::rename(self, destination)?;
-        changes::renamed(&self.path, &destination.path);
-        Ok(())
+        let path = provider_registry::rename(self, destination)?;
+        changes::renamed(&self.path, &path);
+        Ok(path)
     }
     pub(crate) fn clone_binding(&self) -> Self {
         Self {
             reference: self.reference.clone(),
             path: self.path.clone(),
             scope: self.scope.clone(),
+            storage_scope: self.storage_scope.clone(),
             owner: self.owner.clone(),
+            user_action: self.user_action,
+            mapped_operation: self.mapped_operation,
         }
     }
 

@@ -5,7 +5,6 @@ use super::builtin::{builtin_view, Builtin};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-#[cfg(test)]
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
     LocationMatch, MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
@@ -22,7 +21,10 @@ impl PreviewProvider for BuiltinPreview {
         let path = if self.0 == Builtin::Fallback {
             resource.local.clone()
         } else {
-            resource.export_path().map_err(ProviderError::internal)?
+            let user_action = NativeProviderInvocation::user_action(ctx)?;
+            resource
+                .export_path(user_action)
+                .map_err(ProviderError::internal)?
         };
         let view =
             builtin_view(self.0, &path, &resource.display).map_err(ProviderError::internal)?;
@@ -146,12 +148,22 @@ pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView,
         json!({}),
         std::slice::from_ref(resource),
         None,
-    );
+    )
+    .with_user_action_context(crate::core::fs::mapped_access::UserActionContext::for_test());
     provider.open(&invocation)
 }
 
 pub(super) fn provider(id: &str) -> Option<Arc<dyn PreviewProvider>> {
     registry().get_arc(id)
+}
+
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resource: &ResourceSnapshot,
+) -> Result<NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
 }
 
 #[cfg(test)]
@@ -180,24 +192,22 @@ mod tests {
 
     #[test]
     fn native_previews_exclude_applications_but_keep_trash_and_recent() {
-        for view_id in ["core:applications"] {
-            let target = MatchResource {
-                metadata: Some(ResourceMetadata {
-                    kind: "file".into(),
-                    extension: Some("png".into()),
-                    mime: Some("image/png".into()),
-                    ..Default::default()
-                }),
-                view: Some(fiex_provider_contracts::ResourceLocation {
-                    resource_type: fiex_provider_contracts::ResourceType::Vfs,
-                    provider_id: view_id.into(),
-                    mount_id: Some(view_id.into()),
-                }),
+        let target = MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "file".into(),
+                extension: Some("png".into()),
+                mime: Some("image/png".into()),
                 ..Default::default()
-            };
-            assert!(candidates_for(std::slice::from_ref(&target)).is_empty());
-            assert!(!fallback_matches(std::slice::from_ref(&target)));
-        }
+            }),
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                provider_id: "core:applications".into(),
+                mount_id: Some("core:applications".into()),
+            }),
+            ..Default::default()
+        };
+        assert!(candidates_for(std::slice::from_ref(&target)).is_empty());
+        assert!(!fallback_matches(std::slice::from_ref(&target)));
         let recent = MatchResource {
             metadata: Some(ResourceMetadata {
                 kind: "file".into(),

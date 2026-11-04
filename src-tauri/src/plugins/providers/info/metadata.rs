@@ -1,9 +1,8 @@
 use super::{row, InfoSection};
 use crate::plugins::contracts::ResourceMetadata;
-use std::{
-    path::Path,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::path::Path;
+#[cfg(any(feature = "desktop", test))]
+use std::sync::atomic::{AtomicBool, Ordering};
 fn display_name(path: &str) -> String {
     path.trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])

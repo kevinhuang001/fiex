@@ -24,6 +24,7 @@ pub(crate) async fn file_info_details(
     use std::sync::OnceLock;
     use std::time::Duration;
     static INFO: OnceLock<MemoryCache<Vec<InfoSection>>> = OnceLock::new();
+    let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     tauri::async_runtime::spawn_blocking(move || {
         let cache = INFO.get_or_init(|| MemoryCache::new(256, Duration::from_secs(90)));
         // A cache lookup must still validate the current resource identity.
@@ -67,6 +68,7 @@ pub(crate) async fn file_info_details(
         }
         let result = crate::plugins::providers::info::file_info_snapshot_with_partial(
             resource,
+            user_action,
             |sections| {
                 let _ = on_partial.send(sections);
             },

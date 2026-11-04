@@ -35,7 +35,7 @@ pub(super) fn read(resource: ResourceBroker) -> Result<FsRead, ProviderError> {
             move |offset, length| read_state.read_at(offset, length).map_err(provider_error),
         ));
     }
-    let value = fs_access::open_read(&resource.owner, &resource.scope, &resource.path)
+    let value = fs_access::open_read(&resource.owner, &resource.storage_scope, &resource.path)
         .map_err(provider_error)?;
     let handle = value["handle"]
         .as_str()
@@ -62,8 +62,13 @@ pub(super) fn write(resource: ResourceBroker, create: bool) -> Result<FsWrite, P
             "Unsupported: USB filesystem fallback is read-only",
         ));
     }
-    let handle = fs_access::begin_write(&resource.owner, &resource.scope, &resource.path, create)
-        .map_err(provider_error)?;
+    let handle = fs_access::begin_write(
+        &resource.owner,
+        &resource.storage_scope,
+        &resource.path,
+        create,
+    )
+    .map_err(provider_error)?;
     let staged = Arc::new(Mutex::new(Some(LocalWrite {
         owner: resource.owner.clone(),
         handle,
@@ -78,7 +83,8 @@ pub(super) fn write(resource: ResourceBroker, create: bool) -> Result<FsWrite, P
             .take()
             .ok_or_else(|| ProviderError::internal("write stream closed"))?;
         write.commit().map_err(provider_error)?;
-        let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
+        let value =
+            fs_access::stat(&resource.storage_scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(shared_entry(storage::decorated_entry(
             &resource.path,

@@ -61,6 +61,16 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn DecorationProvider>> {
     registry().get_arc(id)
 }
 
+pub(super) fn invocation(
+    id: &str,
+    method: impl Into<String>,
+    params: serde_json::Value,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+    directory: Option<&crate::plugins::resource::resource_context::ResourceSnapshot>,
+) -> Result<crate::plugins::native_invocation::NativeProviderInvocation, String> {
+    registry().invocation(id, method, params, resources, directory)
+}
+
 fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -136,7 +146,7 @@ pub(super) fn resolve(
             .collect(),
     );
     let invocation =
-        invocation::CoreDecorationInvocation::native(directory.into(), entries, resources);
+        invocation::CoreDecorationInvocation::native(id, directory.into(), entries, resources)?;
     invoke(id, &invocation)
 }
 

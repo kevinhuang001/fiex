@@ -100,7 +100,8 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        let value = fs_access::mkdir(&resource.scope, &resource.path).map_err(provider_error)?;
+        let value =
+            fs_access::mkdir(&resource.storage_scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(shared_entry(storage::decorated_entry(
             &resource.path,
@@ -126,10 +127,10 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        fs_access::rename(&resource.scope, &resource.path, &destination.path)
+        fs_access::rename(&resource.storage_scope, &resource.path, &destination.path)
             .map_err(provider_error)?;
-        let value =
-            fs_access::stat(&destination.scope, &destination.path).map_err(provider_error)?;
+        let value = fs_access::stat(&destination.storage_scope, &destination.path)
+            .map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(shared_entry(storage::decorated_entry(
             &destination.path,
@@ -145,7 +146,7 @@ impl VfsProvider for StorageProvider {
                 "Unsupported: USB filesystem fallback is read-only",
             ));
         }
-        fs_access::remove(&resource.scope, &resource.path).map_err(provider_error)
+        fs_access::remove(&resource.storage_scope, &resource.path).map_err(provider_error)
     }
 
     fn trash(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {

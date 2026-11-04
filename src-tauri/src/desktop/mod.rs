@@ -46,7 +46,6 @@ pub(crate) use volumes::*;
 use crate::{
     core::drag_session::DragSessions,
     core::operations::{OperationCancel, Operations},
-    core::recent,
     core::search::SearchState,
 };
 use std::sync::atomic::Ordering;
@@ -84,7 +83,6 @@ pub fn run() {
         .manage(SearchState::default())
         .manage(Watch::default())
         .manage(WindowPaths::default())
-        .manage(recent::Recent::default())
         .manage(DragSessions::default())
         .invoke_handler(tauri::generate_handler![
             platform,
@@ -169,6 +167,7 @@ pub fn run() {
             list_directory,
             directory_open,
             file_info,
+            file_parent,
             read_preview,
             create_entry,
             create_file_entry,
@@ -214,8 +213,6 @@ pub fn run() {
             relaunch_elevated,
             mount_device,
             reveal_path,
-            trash_application_entries,
-            remove_application_entries,
             trash_path,
             empty_trash,
             restore_from_trash,

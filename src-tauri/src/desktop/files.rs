@@ -5,7 +5,6 @@
 use crate::{
     core::files,
     core::operations::{self, OperationCancel, OperationResult, Operations},
-    core::recent,
     core::search::{
         SearchBatch, SearchEngine, SearchMode, SearchRequest, SearchState, RESULT_LIMIT,
     },

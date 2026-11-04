@@ -37,7 +37,7 @@ pub(super) fn fresh(broker: &ResourceBroker) -> Result<Listing, FsError> {
             if revision == super::changes::revision(&broker.path)
                 && identity == directory_cache::key(&broker.path)
             {
-                directory_cache::store(&broker.path, &listing);
+                directory_cache::store_at_revision(&broker.path, &listing, revision);
             }
             let mut visible = listing;
             super::mutation_overlay::paint(&broker.path, &mut visible);

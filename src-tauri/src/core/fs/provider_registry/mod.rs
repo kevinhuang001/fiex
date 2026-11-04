@@ -23,5 +23,5 @@ pub(super) use writes::{
 
 pub(crate) use routing::{
     child_path, identity, is_plugin_mount, owner, parent_path, reference_mount_id, resource_access,
-    resource_entry, validate_child, ResourceAccess, ResourceOwner,
+    resource_entry, validate_child, ChildKind, ResourceAccess, ResourceOwner,
 };

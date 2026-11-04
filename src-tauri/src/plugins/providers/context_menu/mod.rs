@@ -231,9 +231,19 @@ fn query_scope(
         "contextMenu.resolve",
         providers,
         &invocation,
-        |resolver, provider, invocation| {
+        |resolver, provider, _invocation| {
+            let bound = if resolver.plugin.is_none() {
+                file_ops::invocation_for(
+                    &resolver.id,
+                    &ctx,
+                    &request.method,
+                    request.params.clone(),
+                )?
+            } else {
+                file_ops::invocation(&ctx, &request.method, request.params.clone())
+            };
             let items = provider
-                .resolve(invocation)
+                .resolve(&bound)
                 .map_err(|error| error.to_string())?;
             let mut result = json!({"items":items});
             if resolver.plugin.is_some() {

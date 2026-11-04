@@ -165,7 +165,7 @@ pub(crate) fn invalidate(list_key: &str) {
 }
 
 #[cfg(feature = "desktop")]
-pub(crate) fn resolve(path: &str, listing: &Listing) -> Vec<Decoration> {
+pub(crate) fn resolve_missing(path: &str, listing: &Listing) -> Vec<Decoration> {
     use crate::plugins::providers::decorations::{
         query_with_plugins, DecorationEntry, DecorationTag,
     };
@@ -178,7 +178,7 @@ pub(crate) fn resolve(path: &str, listing: &Listing) -> Vec<Decoration> {
         .map(|snapshot| reuse_from_snapshot(snapshot, listing))
         .unwrap_or_default();
     if exact {
-        return decorations;
+        return Vec::new();
     }
     let old_entries = previous
         .as_ref()
@@ -214,11 +214,14 @@ pub(crate) fn resolve(path: &str, listing: &Listing) -> Vec<Decoration> {
             });
         }
     }
-    if !missing.is_empty() {
-        decorations.extend(query_with_plugins(path, missing, true));
-    }
+    let resolved = if missing.is_empty() {
+        Vec::new()
+    } else {
+        query_with_plugins(path, missing, true)
+    };
+    decorations.extend(resolved.iter().cloned());
     if original_identity == key(path) && enabled(path) {
         store(path, listing, &decorations);
     }
-    decorations
+    resolved
 }
