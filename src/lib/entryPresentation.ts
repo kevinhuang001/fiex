@@ -43,6 +43,18 @@ export function cachePresentations(entries: Entry[], decorations: EntryDecoratio
   }
   while (values.size > 10_000) values.delete(values.keys().next().value!)
 }
+export function cachePresentationPatch(entries: Entry[], decorations: EntryDecoration[]) {
+  if (!decorations.length) return
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]))
+  for (const decoration of decorations) {
+    const entry = byPath.get(decoration.path)
+    if (!entry) continue
+    const key = presentationKey(entry)
+    values.delete(key)
+    values.set(key, decoration)
+  }
+  while (values.size > 10_000) values.delete(values.keys().next().value!)
+}
 export function sameDecoration(left: EntryDecoration, right: EntryDecoration): boolean {
   return (
     left.path === right.path &&

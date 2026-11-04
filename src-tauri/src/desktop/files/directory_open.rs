@@ -5,7 +5,8 @@ use serde::Serialize;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DirectoryViewUpdate {
-    pub listing: Listing,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub listing: Option<Listing>,
     pub decorations: Vec<Decoration>,
     pub complete: bool,
     pub presentation_pending: bool,
@@ -34,7 +35,7 @@ pub(crate) async fn directory_open(
             let (decorations, exact) =
                 crate::core::fs::decoration_cache::cached(&path, &cached.listing);
             let _ = on_snapshot.send(DirectoryViewUpdate {
-                listing: cached.listing,
+                listing: Some(cached.listing),
                 decorations,
                 complete: false,
                 presentation_pending: !exact,
@@ -49,23 +50,24 @@ pub(crate) async fn directory_open(
         if identity != crate::core::fs::directory_cache::key(&path) {
             return Err("StaleRef: connection identity changed during listing".into());
         }
-        let (mut decorations, exact) =
+        let (decorations, exact) =
             crate::core::fs::decoration_cache::cached(&path, &listing);
         let _ = on_snapshot.send(DirectoryViewUpdate {
-            listing: listing.clone(),
+            listing: Some(listing.clone()),
             decorations: decorations.clone(),
             complete: exact,
             presentation_pending: !exact,
         });
         let presentation_started = std::time::Instant::now();
         if !exact {
-            decorations = crate::core::fs::decoration_cache::resolve(&path, &listing);
+            let decoration_patch =
+                crate::core::fs::decoration_cache::resolve_missing(&path, &listing);
             if identity != crate::core::fs::directory_cache::key(&path) {
                 return Err("StaleRef: connection identity changed during listing".into());
             }
             let _ = on_snapshot.send(DirectoryViewUpdate {
-                listing: listing.clone(),
-                decorations: decorations.clone(),
+                listing: None,
+                decorations: decoration_patch,
                 complete: true,
                 presentation_pending: false,
             });

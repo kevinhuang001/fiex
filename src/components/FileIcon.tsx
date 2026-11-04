@@ -5,7 +5,7 @@ import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
 import { fileVisual } from '@/lib/fileIcons'
 import { MemoryCache } from '@/lib/cache'
-import { useDecorationIcon } from '@/lib/decorationIcons'
+import { useDecorationIcon, usePresentationPending } from '@/lib/decorationIcons'
 import { cachedPresentation } from '@/lib/entryPresentation'
 import type { Entry } from '@/lib/types'
 
@@ -65,6 +65,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   const canNativeIcon = isApplication && !e.path.includes('://')
   const [native, setNative] = useState<{ key: string; url: string | null }>()
   const decorationIcon = useDecorationIcon(e)
+  const presentationPending = usePresentationPending(e)
   const ref = useRef<HTMLSpanElement>(null)
   const pixels = Math.min(
     512,
@@ -102,7 +103,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
           draggable={false}
           onError={() => setNative({ key: iconKey, url: null })}
         />
-      ) : isApplication && e.presentationPending ? (
+      ) : isApplication && presentationPending ? (
         <span className="file-icon-skeleton" aria-hidden="true" />
       ) : isApplication && e.path.includes('://') && !cachedPresentation(e) ? (
         <span aria-hidden="true" />
