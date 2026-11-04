@@ -27,6 +27,7 @@ export function useRunner({
     quiet = false,
     hold,
     resume,
+    affectedDirectories,
   ) => {
     if (running.current) return
     running.current = true
@@ -58,14 +59,14 @@ export function useRunner({
     try {
       const result = await fn()
       if (activity && !hold?.value) finishActivity(activity)
-      requestDirectoryRefresh([x.path])
+      if (affectedDirectories) requestDirectoryRefresh(affectedDirectories(result))
       return result
     } catch (e) {
       const message = String(e)
       if (message.startsWith('Cancelled:')) {
-        // Cancelling is the user's choice; the activity centre already says so.
-        // Refresh because a stopped transfer may still have moved some files.
-        requestDirectoryRefresh([x.path])
+        // Partial cancellation is reconciled only in the operation's known
+        // affected directories, supplied by the caller.
+        if (affectedDirectories) requestDirectoryRefresh(affectedDirectories(undefined))
       } else {
         const location = detail?.trim() || (x.selected.length ? x.selected.join('\n') : x.path)
         if (reportFilesystemPermissionError(message, `${label}\n${location}`)) {
@@ -73,6 +74,7 @@ export function useRunner({
         } else {
           x.setError(message)
         }
+        if (affectedDirectories) requestDirectoryRefresh(affectedDirectories(undefined))
       }
       if (activity) finishActivity(activity, message)
       return undefined

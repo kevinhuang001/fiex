@@ -27,8 +27,17 @@ export function createActions({ x, run }: FileOpsContext) {
       x.entries.map((e) => e.name),
       t('未命名文件夹'),
     )
-    const path = await run(t('正在新建文件夹…'), () =>
-      call<string>('create_entry', { path: x.path, name }),
+    const path = await run(
+      t('正在新建文件夹…'),
+      () => call<string>('create_entry', { path: x.path, name }),
+      undefined,
+      false,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      (created) => (created ? [x.path] : []),
     )
     if (!path) return
     if (x.query) x.setQuery('')
@@ -45,8 +54,17 @@ export function createActions({ x, run }: FileOpsContext) {
       x.entries.map((e) => e.name),
       `${t('未命名文件')}.txt`,
     )
-    const path = await run(t('正在新建文件…'), () =>
-      call<string>('create_file_entry', { path: x.path, name }),
+    const path = await run(
+      t('正在新建文件…'),
+      () => call<string>('create_file_entry', { path: x.path, name }),
+      undefined,
+      false,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      (created) => (created ? [x.path] : []),
     )
     if (!path) return
     if (x.query) x.setQuery('')

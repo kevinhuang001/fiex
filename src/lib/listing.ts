@@ -35,10 +35,11 @@ export interface DirectoryViewUpdate {
   decorations: EntryDecoration[]
   complete: boolean
   presentationPending: boolean
+  revision: number
 }
 
-/** Ask every visible pane showing one of these directories to apply its
- * cache-first snapshot and complete the usual live-list reconciliation. */
+/** Ask every visible pane showing one of these directories to reconcile its
+ * current snapshot without restarting its initial-loading lifecycle. */
 export function requestDirectoryRefresh(directories: string[]) {
   const unique = [...new Set(directories.filter(Boolean))]
   if (!unique.length || typeof window === 'undefined') return
@@ -73,7 +74,13 @@ export function openDirectoryStream(
 ): Promise<void> {
   if (!native) {
     return listDirectory(path, hidden, ignores).then((listing) =>
-      onSnapshot({ listing, decorations: [], complete: true, presentationPending: false }),
+      onSnapshot({
+        listing,
+        decorations: [],
+        complete: true,
+        presentationPending: false,
+        revision: 0,
+      }),
     )
   }
   const channel = new Channel<DirectoryViewUpdate>()

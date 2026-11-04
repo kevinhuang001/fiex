@@ -10,6 +10,7 @@ pub(crate) struct DirectoryViewUpdate {
     pub decorations: Vec<Decoration>,
     pub complete: bool,
     pub presentation_pending: bool,
+    pub revision: u64,
 }
 
 /// One logical operation paints a previously visited directory and revalidates
@@ -39,13 +40,23 @@ pub(crate) async fn directory_open(
                 decorations,
                 complete: false,
                 presentation_pending: !exact,
+                revision: crate::core::fs::changes::revision(&path),
             });
         }
-        let listing_started = std::time::Instant::now();
         let broker = crate::core::fs::trusted(&path, "core:directory-open")?;
-        let listing = broker
-            .desktop_listing(hidden, &ignores)
-            .map_err(String::from)?;
+        let listing_started = std::time::Instant::now();
+        // A mutation may commit while a slow Provider List is in progress.
+        // Repeat until the result was read against the current directory
+        // revision so an older response cannot replace a newer mutation.
+        let (listing, revision) = loop {
+            let revision = crate::core::fs::changes::revision(&path);
+            let listing = broker
+                .desktop_listing(hidden, &ignores)
+                .map_err(String::from)?;
+            if revision == crate::core::fs::changes::revision(&path) {
+                break (listing, revision);
+            }
+        };
         let listing_elapsed = listing_started.elapsed();
         if identity != crate::core::fs::directory_cache::key(&path) {
             return Err("StaleRef: connection identity changed during listing".into());
@@ -57,6 +68,7 @@ pub(crate) async fn directory_open(
             decorations: decorations.clone(),
             complete: exact,
             presentation_pending: !exact,
+            revision,
         });
         let presentation_started = std::time::Instant::now();
         if !exact {
@@ -70,6 +82,7 @@ pub(crate) async fn directory_open(
                 decorations: decoration_patch,
                 complete: true,
                 presentation_pending: false,
+                revision,
             });
         }
         let count = listing.entries.len();

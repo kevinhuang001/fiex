@@ -91,8 +91,12 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
       itemId: item.id,
       onProgress,
     })
-    if ('kind' in effect && effect.kind === 'coreAction') await applyCoreAction(effect, props)
-    else requestDirectoryRefresh([props.x.path])
+    if ('kind' in effect && effect.kind === 'coreAction') {
+      await applyCoreAction(effect, props)
+      return true
+    }
+    requestDirectoryRefresh([props.x.path])
+    return false
   }
   try {
     if (item.activity)
@@ -106,6 +110,9 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
           onProgress = progressChannel(id) ?? quietProgressChannel()
         },
         item.activity.quiet,
+        undefined,
+        undefined,
+        (coreAction) => (coreAction === undefined ? [props.x.path] : []),
       )
     else await execute()
   } catch (error) {

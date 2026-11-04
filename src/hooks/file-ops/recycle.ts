@@ -1,7 +1,6 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
-import { requestDirectoryRefresh } from '@/lib/listing'
 import type { OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
@@ -12,11 +11,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
     paths: string[],
     onProgress: ReturnType<typeof progressChannel> = quietProgressChannel(),
   ) => {
-    const result = await call<OperationResult>('recycle', { paths, onProgress })
-    if (result.errors.length)
-      throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
-    x.setSelected([])
-    requestDirectoryRefresh(['trash://', 'recyclebin://'])
+    return call<OperationResult>('recycle', { paths, onProgress })
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
   const recycle = (selection = x.selected) => {
@@ -35,19 +30,31 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
       return
     }
     let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
-    void run(
-      t(isWindows() ? '正在移到回收站…' : '正在移到废纸篓…'),
-      () => moveToTrash(paths, onProgress),
-      t(
-        isWindows() ? '删除来源：\n{0}\n\n目标：\n回收站' : '删除来源：\n{0}\n\n目标：\n废纸篓',
-        source,
-      ),
-      true,
-      'delete',
-      (id) => {
-        onProgress = progressChannel(id) ?? quietProgressChannel()
-      },
-    )
+    void (async () => {
+      const result = await run(
+        t(isWindows() ? '正在移到回收站…' : '正在移到废纸篓…'),
+        () => moveToTrash(paths, onProgress),
+        t(
+          isWindows() ? '删除来源：\n{0}\n\n目标：\n回收站' : '删除来源：\n{0}\n\n目标：\n废纸篓',
+          source,
+        ),
+        true,
+        'delete',
+        (id) => {
+          onProgress = progressChannel(id) ?? quietProgressChannel()
+        },
+        false,
+        undefined,
+        undefined,
+        (result) =>
+          result === undefined || result.paths.length > 0
+            ? ['trash://', 'recyclebin://', x.path]
+            : [],
+      )
+      if (result?.paths.length) x.setSelected([])
+      if (result?.errors.length)
+        x.setError(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
+    })()
   }
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
@@ -66,6 +73,11 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
           t('删除：\n{0}', source),
           true,
           'delete',
+          undefined,
+          false,
+          undefined,
+          undefined,
+          (removed) => (removed === undefined || removed > 0 ? [x.path] : []),
         )
         x.setSelected([])
       },
@@ -83,6 +95,12 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
           t(isWindows() ? '删除：回收站中的所有项目' : '删除：废纸篓中的所有项目'),
           true,
           'delete',
+          undefined,
+          false,
+          undefined,
+          undefined,
+          (removed) =>
+            removed === undefined || removed > 0 ? [x.path, 'trash://', 'recyclebin://'] : [],
         )
         if (removed === undefined) return
         x.setSelected([])

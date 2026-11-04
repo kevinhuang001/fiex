@@ -355,7 +355,6 @@ pub fn commit_reserved_folder(uri: &str) -> Result<Entry, String> {
     cancel_reservation(uri);
     Ok(folder_entry(
         state.folders.get(&id).expect("folder was inserted"),
-        &state,
     ))
 }
 
@@ -426,20 +425,13 @@ pub fn asset_path(uri: &str) -> Result<std::path::PathBuf, String> {
     }
 }
 
-pub fn folder_entry(folder: &VirtualFolder, state: &ApplicationsState) -> Entry {
+pub fn folder_entry(folder: &VirtualFolder) -> Entry {
     let uri = folder_uri(&folder.id);
-    let occupied = state
-        .apps
-        .values()
-        .any(|app| app.parent.as_deref() == Some(&folder.id))
-        || state
-            .folders
-            .values()
-            .any(|child| child.parent.as_deref() == Some(&folder.id));
-    let mut operations = vec!["stat", "list", "search", "write", "mkdir", "rename"];
-    if !occupied {
-        operations.push("remove");
-    }
+    // Remove is a supported operation for virtual folders. Whether a folder
+    // is empty is checked by the Provider's remove preflight at execution.
+    let operations = [
+        "stat", "list", "search", "write", "mkdir", "rename", "remove",
+    ];
     application_entry(folder.name.clone(), uri, true, &operations)
 }
 
@@ -509,7 +501,7 @@ pub fn create_folder(parent_uri: &str, name: &str) -> Result<Entry, String> {
         Ok(())
     })?;
     let folder = state.folders.get(&id).expect("folder was inserted");
-    Ok(folder_entry(folder, &state))
+    Ok(folder_entry(folder))
 }
 
 pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
@@ -525,7 +517,7 @@ pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
         state.folders.get_mut(&id).unwrap().name = name.to_owned();
         Ok(())
     })?;
-    Ok(folder_entry(state.folders.get(&id).unwrap(), &state))
+    Ok(folder_entry(state.folders.get(&id).unwrap()))
 }
 
 pub fn rename_imported(uri: &str, name: &str) -> Result<Entry, String> {
@@ -577,7 +569,7 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
             let _ = current;
             Ok(())
         })?;
-        return Ok(folder_entry(state.folders.get(&id).unwrap(), &state));
+        return Ok(folder_entry(state.folders.get(&id).unwrap()));
     }
     let id = app_id(uri).ok_or("not an Applications node")?;
     let state = update(|state| {
@@ -923,7 +915,7 @@ pub fn folder_children(uri: &str) -> Result<Vec<Entry>, String> {
         .folders
         .values()
         .filter(|folder| folder.parent == parent)
-        .map(|folder| folder_entry(folder, &state))
+        .map(folder_entry)
         .chain(
             state
                 .apps
@@ -952,7 +944,7 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         return state
             .folders
             .get(&id)
-            .map(|folder| folder_entry(folder, &state))
+            .map(folder_entry)
             .ok_or_else(|| "NotFound: application folder".into());
     }
     if let Some(id) = app_id(uri) {

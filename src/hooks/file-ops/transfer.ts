@@ -1,6 +1,5 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
-import { parentDirectoryOf, requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import type { ConflictResolution, OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
@@ -26,9 +25,15 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     // finishing it and the resolution reuses the same id instead of adding a
     // second "copy" record to the status centre.
     const hold = { value: false }
+    let sourceDirectories = [x.path]
     const result = await run(
       moving ? t('正在移动…') : t('正在复制…'),
       async () => {
+        sourceDirectories = moving
+          ? await Promise.all(
+              paths.map((path) => call<string>('file_parent', { path }).catch(() => x.path)),
+            )
+          : []
         const next = await call<OperationResult>('transfer', {
           paths,
           destination,
@@ -52,6 +57,11 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
       false,
       hold,
       resume,
+      (next) => {
+        if (next === undefined || next.paths.length > 0)
+          return [...new Set([destination, ...(moving ? sourceDirectories : [])])]
+        return []
+      },
     )
     if (!result) return
     if (result.conflicts?.length) {
@@ -62,9 +72,6 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     }
     setConflict(null)
     if (moving) setClipboard(null)
-    if (result.paths.length) {
-      requestDirectoryRefresh([destination, ...(moving ? paths.map(parentDirectoryOf) : [])])
-    }
     if (result.errors.length) {
       const message = t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n'))
       const context = t(
@@ -112,6 +119,7 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
         })
         if (result.errors.length)
           throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
+        return result
       },
       undefined,
       true,
@@ -119,6 +127,10 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
       (id) => {
         onProgress = progressChannel(id) ?? quietProgressChannel()
       },
+      false,
+      undefined,
+      undefined,
+      (result) => (result === undefined || result.paths.length > 0 ? [x.path] : []),
     )
   }
   return { executeTransfer, transfer, resolveConflict, copy, duplicate }

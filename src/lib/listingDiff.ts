@@ -1,4 +1,6 @@
+import { sortEntries } from './files'
 import type { Entry } from './types'
+import type { Sort } from './types'
 
 /** Compare rendered directory data by stable path identity, independent of
  * provider response order. Callers can keep the current array when this holds. */
@@ -45,4 +47,19 @@ export function sameStringSet(previous: string[] | undefined, next: string[] | u
       previous.length === next.length &&
       previous.every((value) => next.includes(value)))
   )
+}
+
+/** Compare the entries in the order the active view actually displays them.
+ * Provider response order is irrelevant when the user's sort produces the same
+ * visible order, including stable tie ordering. */
+export function sameVisibleListing(
+  previous: Entry[],
+  next: Entry[],
+  sort: Sort,
+  descending: boolean,
+): boolean {
+  if (!sameListing(previous, next)) return false
+  const previousOrder = sortEntries(previous, sort, descending)
+  const nextOrder = sortEntries(next, sort, descending)
+  return previousOrder.every((entry, index) => entry.path === nextOrder[index]?.path)
 }

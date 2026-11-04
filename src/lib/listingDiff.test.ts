@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Entry } from './types'
-import { sameListing, sameStringSet } from './listingDiff'
+import { sameListing, sameStringSet, sameVisibleListing } from './listingDiff'
 
 const entry = (path: string, patch: Partial<Entry> = {}): Entry => ({
   path,
@@ -32,5 +32,17 @@ describe('sameListing', () => {
   it('compares operation capabilities as a set', () => {
     expect(sameStringSet(['read', 'list'], ['list', 'read'])).toBe(true)
     expect(sameStringSet(['read'], ['read', 'write'])).toBe(false)
+  })
+})
+
+describe('sameVisibleListing', () => {
+  it('preserves the Entry array when response order does not change the sorted view', () => {
+    const first = [entry('/b', { name: 'B' }), entry('/a', { name: 'A' })]
+    expect(sameVisibleListing(first, [...first].reverse(), 'name', false)).toBe(true)
+  })
+
+  it('detects a provider-order change among entries tied by the active sort', () => {
+    const first = [entry('/first', { name: 'Same' }), entry('/second', { name: 'Same' })]
+    expect(sameVisibleListing(first, [...first].reverse(), 'name', false)).toBe(false)
   })
 })
