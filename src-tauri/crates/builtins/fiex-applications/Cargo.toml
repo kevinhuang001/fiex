@@ -5,7 +5,18 @@ edition = "2021"
 rust-version = "1.90"
 publish = false
 
+[features]
+default = []
+desktop = [
+    "dep:dirs",
+    "dep:hex",
+    "dep:sha2",
+]
+
 [dependencies]
 fiex-storage = { path = "../../foundation/fiex-storage" }
+dirs = { workspace = true, optional = true }
+hex = { version = "0.4", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { version = "0.10", optional = true }

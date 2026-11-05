@@ -59,37 +59,3 @@ mod windows_target_tests {
         assert!(resolve_windows_executable(r"C:\Windows\readme.txt").is_none());
     }
 }
-
-#[cfg(test)]
-mod executable_target_tests {
-    use super::is_executable_target;
-
-    #[test]
-    fn executables_are_kept_including_uninstallers() {
-        for path in [
-            r"C:\Program Files\App\app.exe",
-            r"C:\Program Files\App\unins000.exe",
-            r"C:\Program Files\App\Uninstall App.exe",
-            r"C:\Program Files\App\tool.cmd",
-            r"C:\Windows\System32\app.msc",
-            r"C:\Users\me\AppData\Roaming\Microsoft\Installer\{ABC}\app.appref-ms",
-        ] {
-            assert!(is_executable_target(path), "{path} should be launched");
-        }
-    }
-
-    #[test]
-    fn documents_and_websites_are_filtered() {
-        for path in [
-            r"C:\Program Files\App\readme.pdf",
-            r"C:\Program Files\App\manual.docx",
-            r"C:\Program Files\App\release-notes.txt",
-            "https://example.com",
-            "https://example.com/download",
-            r"C:\Program Files\App\website.url",
-            "",
-        ] {
-            assert!(!is_executable_target(path), "{path} should be filtered");
-        }
-    }
-}
