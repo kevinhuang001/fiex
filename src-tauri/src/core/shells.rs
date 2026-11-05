@@ -1,5 +1,5 @@
 use std::path::Path;
-#[cfg(any(not(windows), test))]
+#[cfg(not(windows))]
 use std::path::PathBuf;
 /// Shells that read a user profile and provide an editable prompt. `sh` and
 /// `dash` only qualify as a last resort; multiplexers listed in `/etc/shells`
@@ -32,7 +32,7 @@ pub(crate) fn shell_rank(path: &str) -> u8 {
 
 /// The user's own login shell leads, profile shells follow, POSIX `sh` comes
 /// last so a fresh terminal already has the expected prompt and aliases.
-#[cfg(any(not(windows), test))]
+#[cfg(not(windows))]
 pub(crate) fn order_shells(login: Option<&str>, listed: Vec<String>) -> Vec<String> {
     let login = login
         .filter(|path| Path::new(path).is_file())
