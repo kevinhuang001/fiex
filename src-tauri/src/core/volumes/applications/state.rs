@@ -523,16 +523,7 @@ pub fn parent_uri(uri: &str) -> Result<String, String> {
     if let Some(pending) = pending_target(uri) {
         return Ok(pending.parent_uri);
     }
-    if folder_id(uri).is_some() || app_id(uri).is_some() {
-        let relative = uri
-            .strip_prefix(super::URI)
-            .ok_or("invalid Applications node URI")?;
-        let separator = relative.rfind('/');
-        return Ok(separator
-            .map(|index| format!("{}{parent}", super::URI, parent = &relative[..index]))
-            .unwrap_or_else(|| super::URI.into()));
-    }
-    Err("invalid Applications node URI".into())
+    fiex_applications::parent_uri(uri)
 }
 
 pub fn validate_child(parent_uri: &str, child_uri: &str) -> Result<(), String> {
@@ -543,165 +534,17 @@ pub fn validate_child(parent_uri: &str, child_uri: &str) -> Result<(), String> {
     if !parent_uri_matches(&state, parent_uri) {
         return Err("StaleRef: Applications parent moved".into());
     }
-    if folder_id(child_uri).is_some() || app_id(child_uri).is_some() {
-        if let Some(pending) = pending_target(child_uri) {
-            if pending.parent_uri == parent_uri {
-                return Ok(());
-            }
-        }
-        let expected_parent = parent_id(parent_uri)?;
-        let (actual_parent, canonical_uri) = if let Some(id) = folder_id(child_uri) {
-            let folder = state.folders.get(&id);
-            (
-                folder.and_then(|folder| folder.parent.as_deref()),
-                folder_uri_in(&state, &id),
-            )
-        } else {
-            let id = app_id(child_uri).expect("validated app URI");
-            let app = state.apps.get(&id);
-            (
-                app.and_then(|app| app.parent.as_deref()),
-                app_uri_in(&state, &id),
-            )
-        };
-        if actual_parent == expected_parent.as_deref()
-            && canonical_uri.as_deref() == Some(child_uri)
-        {
+    if let Some(pending) = pending_target(child_uri) {
+        if pending.parent_uri == parent_uri {
             return Ok(());
         }
     }
-    Err("InvalidVfsUri: application is not a child of this folder".into())
-}
-
-fn parent_id(uri: &str) -> Result<Option<String>, String> {
-    folder_id_or_root(uri)
+    fiex_applications::validate_child_in(&state, parent_uri, child_uri)
 }
 
 pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<Vec<String>, String> {
-    let target = folder_id_or_root(target_uri)?;
-    let mut ids = Vec::new();
-    for uri in uris {
-        if let Some(id) = folder_id(uri) {
-            ids.push((id, true));
-        } else if let Some(id) = app_id(uri) {
-            ids.push((id, false));
-        } else {
-            return Err("invalid Applications node".into());
-        }
-    }
-    ids.sort();
-    ids.dedup();
-    let state = update(|state| {
-        require_parent(state, target.as_deref())?;
-        if !parent_uri_matches(state, target_uri) {
-            return Err("StaleRef: Applications destination moved".into());
-        }
-        for uri in uris {
-            let current = folder_id(uri)
-                .and_then(|id| folder_uri_in(state, &id))
-                .or_else(|| app_id(uri).and_then(|id| app_uri_in(state, &id)));
-            if current.as_deref() != Some(uri) {
-                return Err("StaleRef: Applications item moved".into());
-            }
-        }
-        let moving_folders = ids
-            .iter()
-            .filter_map(|(id, is_folder)| is_folder.then_some(id.as_str()))
-            .collect::<std::collections::HashSet<_>>();
-        let moving_apps = ids
-            .iter()
-            .filter_map(|(id, is_folder)| (!is_folder).then_some(id.as_str()))
-            .collect::<std::collections::HashSet<_>>();
-        let mut names = std::collections::HashSet::new();
-        for (id, folder) in &ids {
-            if *folder {
-                let node = state
-                    .folders
-                    .get(id)
-                    .ok_or_else(|| "NotFound: application folder".to_string())?;
-                if node.parent == target || target.as_deref() == Some(id) {
-                    if node.parent == target {
-                        continue;
-                    }
-                    return Err("Cannot move an Applications folder into itself".into());
-                }
-                let name = node.name.to_lowercase();
-                if !names.insert(name) {
-                    return Err("同一目录中不能有同名项目".into());
-                }
-                ensure_name_available_except(
-                    state,
-                    target.as_deref(),
-                    &node.name,
-                    &moving_folders,
-                    &moving_apps,
-                )?;
-                let mut ancestor = target.as_deref();
-                while let Some(parent) = ancestor {
-                    if parent == id {
-                        return Err("Cannot move a folder into its descendant".into());
-                    }
-                    ancestor = state
-                        .folders
-                        .get(parent)
-                        .and_then(|entry| entry.parent.as_deref());
-                }
-            } else {
-                let node = state
-                    .apps
-                    .get(id)
-                    .ok_or_else(|| "NotFound: application".to_string())?;
-                if node.parent == target {
-                    continue;
-                }
-                let name = node.display_name.to_lowercase();
-                if !names.insert(name) {
-                    return Err("同一目录中不能有同名项目".into());
-                }
-                ensure_name_available_except(
-                    state,
-                    target.as_deref(),
-                    &node.display_name,
-                    &moving_folders,
-                    &moving_apps,
-                )?;
-            }
-        }
-        for (id, folder) in &ids {
-            if *folder {
-                if state
-                    .folders
-                    .get(id)
-                    .is_some_and(|node| node.parent == target)
-                {
-                    continue;
-                }
-                let order = next_order(state, target.as_deref());
-                let node = state.folders.get_mut(id).unwrap();
-                node.parent = target.clone();
-                node.order = order;
-            } else {
-                if state.apps.get(id).is_some_and(|node| node.parent == target) {
-                    continue;
-                }
-                let order = next_order(state, target.as_deref());
-                let node = state.apps.get_mut(id).unwrap();
-                node.parent = target.clone();
-                node.order = order;
-            }
-        }
-        Ok(())
-    })?;
-    uris.iter()
-        .map(|uri| {
-            if let Some(id) = folder_id(uri) {
-                return folder_uri_in(&state, &id)
-                    .ok_or_else(|| "NotFound: application folder".into());
-            }
-            let id = app_id(uri).ok_or("invalid Applications node")?;
-            app_uri_in(&state, &id).ok_or_else(|| "NotFound: application".into())
-        })
-        .collect()
+    migration::ensure_migrated()?;
+    fiex_applications::ApplicationsStore::new(storage()).move_nodes(uris, target_uri)
 }
 
 pub fn register_system_apps(
@@ -949,27 +792,6 @@ fn ensure_unique_name_excluding(
         app.parent.as_deref() == parent
             && Some(app.id.as_str()) != except_app
             && same(&app.display_name)
-    }) {
-        return Err(crate::i18n::t("同名项目已存在，请更换名称").into());
-    }
-    Ok(())
-}
-
-fn ensure_name_available_except(
-    state: &ApplicationsState,
-    parent: Option<&str>,
-    name: &str,
-    moving_folders: &std::collections::HashSet<&str>,
-    moving_apps: &std::collections::HashSet<&str>,
-) -> Result<(), String> {
-    if state.folders.values().any(|folder| {
-        folder.parent.as_deref() == parent
-            && !moving_folders.contains(folder.id.as_str())
-            && folder.name.eq_ignore_ascii_case(name)
-    }) || state.apps.values().any(|app| {
-        app.parent.as_deref() == parent
-            && !moving_apps.contains(app.id.as_str())
-            && app.display_name.eq_ignore_ascii_case(name)
     }) {
         return Err(crate::i18n::t("同名项目已存在，请更换名称").into());
     }

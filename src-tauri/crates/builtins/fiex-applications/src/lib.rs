@@ -14,6 +14,8 @@ const STATE_VALUE_LIMIT: usize = 16 * 1024 * 1024 - 1024;
 
 mod icon_cache;
 pub use icon_cache::cached_icon_with;
+mod tree;
+pub use tree::{parent_uri, validate_child_in};
 
 /// Whether a launch target is an executable application format supported by
 /// the Applications view. URL handlers and ordinary documents are excluded.
