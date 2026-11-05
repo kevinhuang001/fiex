@@ -60,6 +60,7 @@ fiex-trash = { path = "crates/builtins/fiex-trash" }
 fiex-info = { path = "crates/builtins/fiex-info" }
 fiex-preview = { path = "crates/builtins/fiex-preview" }
 fiex-decorations = { path = "crates/builtins/fiex-decorations" }
+fiex-actions = { path = "crates/builtins/fiex-actions" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }

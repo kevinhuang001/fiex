@@ -8,28 +8,7 @@ use fiex_provider_contracts::{
 use fiex_resource::FileCapabilities;
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Action {
-    Open,
-    Preview,
-    Info,
-    Tags,
-    NewFolder,
-    NewFile,
-    Rename,
-    BatchRename,
-    Copy,
-    Cut,
-    Duplicate,
-    CopyPath,
-    MoveToTrash,
-    DeletePermanently,
-    Pin,
-    Unpin,
-    Cache,
-    Uncache,
-    ConflictResolution,
-}
+use fiex_actions::Action;
 
 pub(super) struct AtomicMenuAction(pub(super) Action);
 
