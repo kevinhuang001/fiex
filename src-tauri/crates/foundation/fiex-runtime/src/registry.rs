@@ -62,6 +62,7 @@ struct RegistrationRequest<T: ?Sized> {
     kind: ProviderKind,
     module: ModuleDescriptor,
     id: String,
+    uri_route: Option<(&'static str, &'static str)>,
     event: Option<String>,
     priority: i64,
     rule: ProviderMatchRule,
@@ -72,6 +73,7 @@ struct RegistrationRequest<T: ?Sized> {
 struct RegistryState {
     modules: HashMap<String, ModuleDescriptor>,
     providers: HashMap<(ProviderKind, String), Registration>,
+    uri_routes: HashMap<&'static str, &'static str>,
 }
 
 /// Process-local registry shared by typed provider views.
@@ -93,6 +95,7 @@ impl RuntimeRegistry {
             kind,
             module,
             id,
+            uri_route,
             event,
             priority,
             rule,
@@ -110,6 +113,12 @@ impl RuntimeRegistry {
             r#match: rule,
         };
         descriptor.validate()?;
+        if let Some((scheme, provider_id)) = uri_route {
+            validate_uri_scheme(scheme)?;
+            if kind != ProviderKind::Vfs || provider_id != id {
+                return Err("URI routes can only be registered by their VFS provider".into());
+            }
+        }
 
         let mut state = self
             .state
@@ -124,6 +133,11 @@ impl RuntimeRegistry {
         let key = (kind, descriptor.id.clone());
         if state.providers.contains_key(&key) {
             return Err(format!("duplicate provider ID for {kind:?}: {id}"));
+        }
+        if let Some((scheme, _)) = uri_route {
+            if state.uri_routes.contains_key(scheme) {
+                return Err(format!("duplicate VFS URI scheme: {scheme}"));
+            }
         }
 
         let mut events = BTreeSet::new();
@@ -144,8 +158,63 @@ impl RuntimeRegistry {
                 implementation,
             },
         );
+        if let Some((scheme, provider_id)) = uri_route {
+            state.uri_routes.insert(scheme, provider_id);
+        }
         Ok(())
     }
+
+    fn register_uri_alias(
+        &self,
+        kind: ProviderKind,
+        module_id: &str,
+        provider_id: &'static str,
+        scheme: &'static str,
+    ) -> Result<(), String> {
+        validate_uri_scheme(scheme)?;
+        if kind != ProviderKind::Vfs {
+            return Err("URI routes can only be registered for VFS providers".into());
+        }
+        let mut state = self
+            .state
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        let key = (kind, provider_id.to_owned());
+        let registration = state
+            .providers
+            .get(&key)
+            .ok_or_else(|| format!("cannot route an unregistered VFS provider: {provider_id}"))?;
+        if registration.module.id != module_id {
+            return Err("a module can route only its own VFS providers".into());
+        }
+        if state.uri_routes.contains_key(scheme) {
+            return Err(format!("duplicate VFS URI scheme: {scheme}"));
+        }
+        state.uri_routes.insert(scheme, provider_id);
+        Ok(())
+    }
+
+    fn resolve_uri(&self, path: &str) -> Option<&'static str> {
+        let (scheme, _) = path.split_once("://")?;
+        self.state
+            .read()
+            .unwrap_or_else(|error| error.into_inner())
+            .uri_routes
+            .get(scheme)
+            .copied()
+    }
+}
+
+fn validate_uri_scheme(scheme: &str) -> Result<(), String> {
+    if scheme.is_empty()
+        || !scheme.as_bytes()[0].is_ascii_lowercase()
+        || !scheme.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'+' | b'-' | b'.')
+        })
+    {
+        return Err("invalid VFS URI scheme".into());
+    }
+    Ok(())
 }
 
 /// Return the one process-wide registry used by native provider modules.
@@ -221,6 +290,7 @@ impl<T: ?Sized + Send + Sync + 'static> TypedProviderRegistry<T> {
             kind: self.kind,
             module,
             id: id.into(),
+            uri_route: None,
             event: None,
             priority,
             rule,
@@ -242,6 +312,7 @@ impl<T: ?Sized + Send + Sync + 'static> TypedProviderRegistry<T> {
             kind: self.kind,
             module,
             id: id.into(),
+            uri_route: None,
             event: Some(event.into()),
             priority,
             rule,
@@ -393,6 +464,13 @@ impl<T: ?Sized + Send + Sync + 'static> TypedProviderRegistry<T> {
         self.len() == 0
     }
 
+    /// Return the registered VFS provider ID for a declared `scheme://` URI.
+    pub fn route_uri(&self, path: &str) -> Option<&'static str> {
+        (self.kind == ProviderKind::Vfs)
+            .then(|| self.runtime.resolve_uri(path))
+            .flatten()
+    }
+
     pub fn descriptors(&self) -> Vec<ProviderDescriptor> {
         let state = self
             .runtime
@@ -436,11 +514,26 @@ impl<T: ?Sized + Send + Sync + 'static> ModuleRegistrar<'_, T> {
             kind: self.registry.kind,
             module: self.descriptor.clone(),
             id: id.into(),
+            uri_route: None,
             event: event.map(Into::into),
             priority,
             rule,
             implementation,
         })
+    }
+
+    /// Declare a URI scheme for one of this module's VFS providers.
+    pub fn register_vfs_uri(
+        &mut self,
+        provider_id: &'static str,
+        scheme: &'static str,
+    ) -> Result<(), String> {
+        self.registry.runtime.register_uri_alias(
+            self.registry.kind,
+            &self.descriptor.id,
+            provider_id,
+            scheme,
+        )
     }
 }
 
@@ -525,5 +618,47 @@ mod tests {
         assert_eq!(hooks.len(), 1);
         assert_eq!(info.len(), 1);
         assert_eq!(info.get("builtin:test").unwrap().call(), 3);
+    }
+
+    #[test]
+    fn vfs_uri_routes_are_declared_by_registered_modules() {
+        let mut vfs: TypedProviderRegistry<dyn Handler> =
+            TypedProviderRegistry::new(ProviderKind::Vfs);
+        {
+            let mut module = vfs.module(ModuleDescriptor::new(
+                "core:recent",
+                CoreOwnerKey::new("recent"),
+                "1",
+            ));
+            module
+                .register(
+                    "core:recent",
+                    100,
+                    ProviderMatchRule::default(),
+                    Arc::new(TestHandler(1)),
+                )
+                .unwrap();
+            module.register_vfs_uri("core:recent", "recent").unwrap();
+            assert!(module
+                .register_vfs_uri("core:recent", "bad/scheme")
+                .is_err());
+        }
+        assert_eq!(vfs.route_uri("recent://item"), Some("core:recent"));
+        assert_eq!(vfs.route_uri("unknown://item"), None);
+
+        let mut second = vfs.module(ModuleDescriptor::new(
+            "core:other",
+            CoreOwnerKey::new("other"),
+            "1",
+        ));
+        second
+            .register(
+                "core:other",
+                100,
+                ProviderMatchRule::default(),
+                Arc::new(TestHandler(2)),
+            )
+            .unwrap();
+        assert!(second.register_vfs_uri("core:other", "recent").is_err());
     }
 }

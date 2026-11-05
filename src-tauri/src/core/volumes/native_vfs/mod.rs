@@ -43,6 +43,10 @@ use trash_provider::TrashView;
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
+const NO_URI_SCHEMES: &[&str] = &[];
+const RECENT_URI_SCHEMES: &[&str] = &["recent"];
+const APPLICATIONS_URI_SCHEMES: &[&str] = &["applications"];
+const TRASH_URI_SCHEMES: &[&str] = &["trash", "recyclebin"];
 
 #[cfg(feature = "desktop")]
 type OpenHandler = fn(&str) -> Result<(), String>;
@@ -76,11 +80,12 @@ fn registration() -> &'static RegisteredNativeVfs {
         let mut registry: NativeProviderRegistry<dyn VfsProvider> =
             NativeProviderRegistry::shared(ProviderKind::Vfs);
         let mut extensions = HashMap::new();
-        for (id, owner, provider, provider_extensions) in [
+        for (id, owner, provider, uri_schemes, provider_extensions) in [
             (
                 "core:recent",
                 CoreOwnerKey::new("recent"),
                 Arc::new(RecentView) as Arc<dyn VfsProvider>,
+                RECENT_URI_SCHEMES,
                 NativeVfsExtensions {
                     validate_child: Some(validate_recent_child),
                     ..NativeVfsExtensions::default()
@@ -94,6 +99,7 @@ fn registration() -> &'static RegisteredNativeVfs {
                     16 * 1024 * 1024 - 1024,
                 ),
                 Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
+                APPLICATIONS_URI_SCHEMES,
                 NativeVfsExtensions {
                     #[cfg(feature = "desktop")]
                     open: Some(applications::open),
@@ -107,6 +113,7 @@ fn registration() -> &'static RegisteredNativeVfs {
                 "core:trash",
                 CoreOwnerKey::new("core"),
                 Arc::new(TrashView) as Arc<dyn VfsProvider>,
+                TRASH_URI_SCHEMES,
                 NativeVfsExtensions {
                     validate_child: Some(trash_vfs::validate_child),
                     ..NativeVfsExtensions::default()
@@ -116,6 +123,7 @@ fn registration() -> &'static RegisteredNativeVfs {
                 "core:local-fs",
                 CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
+                NO_URI_SCHEMES,
                 NativeVfsExtensions {
                     child_path: Some(host_child_path),
                     ..NativeVfsExtensions::default()
@@ -125,6 +133,7 @@ fn registration() -> &'static RegisteredNativeVfs {
                 "core:usb-fs",
                 CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
+                NO_URI_SCHEMES,
                 NativeVfsExtensions {
                     validate_child: Some(usb_validate_child),
                     child_path: Some(usb_child_path),
@@ -132,10 +141,16 @@ fn registration() -> &'static RegisteredNativeVfs {
                 },
             ),
         ] {
-            registry
-                .module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")))
+            let mut module =
+                registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
+            module
                 .register(id, 100, ProviderMatchRule::default(), provider)
                 .expect("invalid native VFS registration");
+            for scheme in uri_schemes {
+                module
+                    .register_vfs_uri(id, scheme)
+                    .expect("invalid native VFS URI route");
+            }
             extensions.insert(id, provider_extensions);
         }
         RegisteredNativeVfs {
@@ -152,15 +167,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
 /// Resolve the native VFS identity at the URI boundary. General services use
 /// the returned descriptor ID and shared provider instance thereafter.
 pub fn provider_id(path: &str) -> Option<&'static str> {
-    if path.starts_with(RECENT_URI) {
-        Some("core:recent")
-    } else if path.starts_with(APPLICATIONS_URI) {
-        Some("core:applications")
-    } else if recycle::is_virtual(path) || trash_vfs::handles(path) {
-        Some("core:trash")
-    } else {
-        None
-    }
+    registry().route_uri(path)
 }
 
 /// Resolve a Core storage provider without promoting unknown URI schemes to
