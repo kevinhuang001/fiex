@@ -1,6 +1,6 @@
 //! Atomic actions whose semantics belong to a native view.
 use super::NativeProviderInvocation;
-use crate::core::volumes::{native_vfs, recycle, trash_vfs};
+use crate::core::volumes::native_vfs;
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
     ProviderInvocation,
@@ -88,80 +88,6 @@ impl ContextMenuProvider for Reveal {
             ));
         }
         Ok(core_action("reveal", paths, &directory))
-    }
-}
-
-pub(super) struct Restore;
-impl ContextMenuProvider for Restore {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
-        if ctx.method() != "contextMenu.resolve" {
-            return Err(ProviderError::method_not_found(ctx.method()));
-        }
-        let (_, paths) = selection(ctx)?;
-        if paths.len() != 1 {
-            return Ok(Vec::new());
-        }
-        Ok(vec![item(
-            "restore",
-            crate::i18n::t("放回原处").into(),
-            "restore",
-            false,
-        )])
-    }
-
-    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
-        if ctx.method() != "contextMenu.execute" {
-            return Err(ProviderError::method_not_found(ctx.method()));
-        }
-        let (directory, paths) = selection(ctx)?;
-        let id = offered(ctx, &self.resolve(&resolve_invocation(ctx)?)?)?;
-        if id != "restore" || paths.len() != 1 {
-            return Err(ProviderError::invalid_params(
-                "restore requires one Trash item",
-            ));
-        }
-        Ok(core_action("restore", paths, &directory))
-    }
-}
-
-pub(super) struct EmptyTrash;
-impl ContextMenuProvider for EmptyTrash {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
-        if ctx.method() != "contextMenu.resolve" {
-            return Err(ProviderError::method_not_found(ctx.method()));
-        }
-        let (directory, paths) = selection(ctx)?;
-        if !paths.is_empty() || !matches!(directory.as_str(), trash_vfs::URI | recycle::URI) {
-            return Ok(Vec::new());
-        }
-        Ok(vec![item(
-            "emptyTrash",
-            crate::i18n::t(if cfg!(windows) {
-                "清空回收站"
-            } else {
-                "清空废纸篓"
-            })
-            .into(),
-            "trash",
-            true,
-        )])
-    }
-
-    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
-        if ctx.method() != "contextMenu.execute" {
-            return Err(ProviderError::method_not_found(ctx.method()));
-        }
-        let (directory, paths) = selection(ctx)?;
-        let id = offered(ctx, &self.resolve(&resolve_invocation(ctx)?)?)?;
-        if id != "emptyTrash"
-            || !paths.is_empty()
-            || !matches!(directory.as_str(), trash_vfs::URI | recycle::URI)
-        {
-            return Err(ProviderError::invalid_params(
-                "Empty Trash requires its root",
-            ));
-        }
-        Ok(core_action("emptyTrash", paths, &directory))
     }
 }
 

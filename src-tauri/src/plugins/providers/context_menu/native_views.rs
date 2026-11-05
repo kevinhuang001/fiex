@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 mod implementations;
-use implementations::{EmptyTrash, Restore, Reveal};
+use implementations::Reveal;
 
 #[cfg(test)]
 const PROVIDER_IDS: [&str; 4] = [
@@ -30,12 +30,14 @@ const PROVIDER_IDS: [&str; 4] = [
 ];
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
+    let trash_module =
+        fiex_trash::TrashModule::new(crate::core::volumes::native_vfs::trash_services());
     for (id, module_id, owner, storage_owner, selection, priority, implementation) in [
         (
             "builtin:reveal",
             "core:recent",
             "core:recent",
-            "recent",
+            CoreOwnerKey::new("recent"),
             "single",
             80,
             Arc::new(Reveal) as Arc<dyn ContextMenuProvider>,
@@ -44,7 +46,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             "builtin:remove-from-recent",
             "core:recent",
             "core:recent",
-            "recent",
+            CoreOwnerKey::new("recent"),
             "nonzero",
             79,
             fiex_recent::RecentModule::new(crate::core::volumes::native_vfs::recent_services())
@@ -54,25 +56,25 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             "builtin:restore",
             "core:trash",
             "core:trash",
-            "core",
+            fiex_trash::owner_key(),
             "single",
             20,
-            Arc::new(Restore) as Arc<dyn ContextMenuProvider>,
+            trash_module.restore_menu(),
         ),
         (
             "builtin:empty-trash",
             "core:trash",
             "core:trash",
-            "core",
+            fiex_trash::owner_key(),
             "zero",
             8,
-            Arc::new(EmptyTrash) as Arc<dyn ContextMenuProvider>,
+            trash_module.empty_menu(),
         ),
     ] {
         values
             .module(ModuleDescriptor::new(
                 module_id,
-                CoreOwnerKey::new(storage_owner),
+                storage_owner,
                 env!("CARGO_PKG_VERSION"),
             ))
             .register(
