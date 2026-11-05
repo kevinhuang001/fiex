@@ -23,8 +23,8 @@ pub use fiex_fs::{FsError, FsErrorKind, ReadHandle, WriteHandle, CHUNK};
 pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
-use crate::plugins::provider_registry::FsOperation;
-use crate::plugins::{contracts::ResourceRef, resource::fs_access::Scope};
+use crate::plugins::resource::fs_access::Scope;
+use fiex_provider_contracts::{FsOperation, ResourceRef};
 use serde_json::Value;
 pub use streams::{cleanup, http_body, stream_call, stream_permission};
 

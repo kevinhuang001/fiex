@@ -1,6 +1,7 @@
 //! Platform storage implementations projected through the shared VFS DTOs.
 use super::{applications, recycle, trash_vfs, APPLICATIONS_URI, RECENT_URI};
-use crate::{core::files::Entry, plugins::provider_registry::FsOperation};
+use crate::core::files::Entry;
+use fiex_provider_contracts::FsOperation;
 
 pub(super) fn entry(value: serde_json::Value) -> Result<Entry, String> {
     crate::core::fs::presentation::entry(value)

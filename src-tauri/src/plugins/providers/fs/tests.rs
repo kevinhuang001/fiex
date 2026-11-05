@@ -1,5 +1,5 @@
 use super::*;
-use crate::plugins::provider_registry::FsOperation;
+use fiex_provider_contracts::FsOperation;
 use serde_json::json;
 
 fn entry(value: Value) -> Result<FsEntry, String> {

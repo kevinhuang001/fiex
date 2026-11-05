@@ -2,7 +2,7 @@ use super::{
     endpoint, proxy, types, FsEntry, FsListing, FsStream, FsWriteStream, Mount, Source,
     WriteRequest, MAX_ENTRIES, MAX_PAGES, PAGE_LIMIT,
 };
-use crate::plugins::provider_registry::FsOperation;
+use fiex_provider_contracts::FsOperation;
 use serde_json::{json, Value};
 
 impl Mount {

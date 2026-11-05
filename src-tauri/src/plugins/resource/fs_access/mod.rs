@@ -5,6 +5,7 @@ use cap_std::{
     ambient_authority,
     fs::{Dir, OpenOptions},
 };
+use fiex_fs::CHUNK as MAX_CHUNK;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -12,7 +13,6 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
-const MAX_CHUNK: usize = 256 * 1024;
 const MAX_HANDLES: usize = 32;
 
 mod operations;
