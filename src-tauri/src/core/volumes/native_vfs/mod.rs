@@ -8,6 +8,7 @@ use fiex_provider_contracts::{
     FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
     ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
 };
+use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 use serde_json::{json, Value};
 use std::{
@@ -73,7 +74,7 @@ fn registration() -> &'static RegisteredNativeVfs {
     static REGISTERED: OnceLock<RegisteredNativeVfs> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut registry: NativeProviderRegistry<dyn VfsProvider> =
-            NativeProviderRegistry::new(ProviderKind::Vfs);
+            NativeProviderRegistry::shared(ProviderKind::Vfs);
         let mut extensions = HashMap::new();
         for (id, owner, provider, provider_extensions) in [
             (
@@ -132,7 +133,8 @@ fn registration() -> &'static RegisteredNativeVfs {
             ),
         ] {
             registry
-                .register_owned(id, owner, 100, ProviderMatchRule::default(), provider)
+                .module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")))
+                .register(id, 100, ProviderMatchRule::default(), provider)
                 .expect("invalid native VFS registration");
             extensions.insert(id, provider_extensions);
         }
@@ -364,11 +366,11 @@ pub fn tree_path_key(path: &str) -> Option<String> {
     is_tree_path(path).then(|| path.to_owned())
 }
 
-pub fn view_for(path: &str) -> Option<&'static dyn VfsProvider> {
+pub fn view_for(path: &str) -> Option<Arc<dyn VfsProvider>> {
     registry().get(provider_id(path)?)
 }
 
-fn shared_view_for(path: &str) -> Option<&'static dyn VfsProvider> {
+fn shared_view_for(path: &str) -> Option<Arc<dyn VfsProvider>> {
     registry().get(shared_provider_id(path)?)
 }
 

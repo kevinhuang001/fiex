@@ -14,7 +14,7 @@ pub struct Resolver {
     pub plugin: Option<Box<crate::plugins::host::PluginInfo>>,
 }
 impl Resolver {
-    pub fn builtin(id: &'static str, priority: i64) -> Self {
+    pub fn builtin(id: impl Into<String>, priority: i64) -> Self {
         Self {
             id: id.into(),
             name: "Fiex".into(),

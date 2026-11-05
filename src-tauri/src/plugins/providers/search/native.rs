@@ -83,7 +83,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn SearchProvider> {
     static REGISTERED: OnceLock<NativeProviderRegistry<dyn SearchProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut providers: NativeProviderRegistry<dyn SearchProvider> =
-            NativeProviderRegistry::new(ProviderKind::Search);
+            NativeProviderRegistry::shared(ProviderKind::Search);
         providers
             .register(
                 BUILTIN_SEARCH,
@@ -116,7 +116,7 @@ pub(super) fn candidates(targets: &[fiex_provider_contracts::MatchResource]) -> 
         .collect()
 }
 
-pub(super) fn provider(id: &str) -> Option<&'static dyn SearchProvider> {
+pub(super) fn provider(id: &str) -> Option<Arc<dyn SearchProvider>> {
     registry().get(id)
 }
 

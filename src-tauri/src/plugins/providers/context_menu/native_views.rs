@@ -10,6 +10,7 @@ use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, ProviderMatchR
 use fiex_provider_contracts::{
     ProviderError, ProviderInvocation, ProviderMatcher, ResourceMetadata,
 };
+use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 #[cfg(test)]
 use serde_json::json;
@@ -29,9 +30,10 @@ const PROVIDER_IDS: [&str; 4] = [
 ];
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    for (id, owner, storage_owner, selection, priority, implementation) in [
+    for (id, module_id, owner, storage_owner, selection, priority, implementation) in [
         (
             "builtin:reveal",
+            "core:recent",
             "core:recent",
             "recent",
             "single",
@@ -41,6 +43,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
         (
             "builtin:remove-from-recent",
             "core:recent",
+            "core:recent",
             "recent",
             "nonzero",
             79,
@@ -48,6 +51,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
         ),
         (
             "builtin:restore",
+            "core:trash",
             "core:trash",
             "core",
             "single",
@@ -57,6 +61,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
         (
             "builtin:empty-trash",
             "core:trash",
+            "core:trash",
             "core",
             "zero",
             8,
@@ -64,9 +69,13 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
         ),
     ] {
         values
-            .register_owned(
-                id,
+            .module(ModuleDescriptor::new(
+                module_id,
                 CoreOwnerKey::new(storage_owner),
+                env!("CARGO_PKG_VERSION"),
+            ))
+            .register(
+                id,
                 priority,
                 ProviderMatchRule {
                     selection: Some(selection.into()),

@@ -77,7 +77,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn ConnectionContextMenuProvid
         OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn ConnectionContextMenuProvider> =
-            NativeProviderRegistry::new(ProviderKind::ConnectionContextMenu);
+            NativeProviderRegistry::shared(ProviderKind::ConnectionContextMenu);
         let implementations: [(&str, i64, Arc<dyn ConnectionContextMenuProvider>); 4] = [
             (
                 "builtin:connection-edit",
@@ -180,12 +180,12 @@ fn registry_len() -> usize {
 }
 
 #[cfg(test)]
-fn descriptors() -> impl Iterator<Item = &'static fiex_provider_contracts::ProviderDescriptor> {
-    registry().descriptors()
+fn descriptors() -> impl Iterator<Item = fiex_provider_contracts::ProviderDescriptor> {
+    registry().descriptors().into_iter()
 }
 
 #[cfg(test)]
-fn get(id: &str) -> Option<&'static dyn ConnectionContextMenuProvider> {
+fn get(id: &str) -> Option<Arc<dyn ConnectionContextMenuProvider>> {
     registry().get(id)
 }
 

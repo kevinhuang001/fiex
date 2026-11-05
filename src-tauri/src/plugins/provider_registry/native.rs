@@ -1,32 +1,39 @@
-//! Typed native Core provider registrations share storage, ID validation,
-//! and duplicate checking with the SDK's provider-instance registry.
-//! Core retains static IDs solely to construct native EventRouter candidates.
+//! Application adapters over the shared Runtime registry.
+//!
+//! Runtime owns descriptors, implementation instances, module ownership and
+//! candidate matching. This layer only adapts candidates to the EventRouter
+//! and binds Core's request-scoped invocation services.
 use crate::plugins::events::Resolver;
-use fiex_provider_contracts::{
-    MatchResource, ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule,
-    ProviderMatcher,
-};
+#[cfg(test)]
+use fiex_provider_contracts::ProviderDescriptor;
+use fiex_provider_contracts::{MatchResource, ProviderKind, ProviderMatchRule};
+use fiex_runtime::{ModuleDescriptor, ProviderCandidate, TypedProviderRegistry};
 use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::sync::Arc;
 
-pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync> {
-    entries: ProviderInstances<T>,
-    ids: Vec<&'static str>,
-    owners: HashMap<&'static str, CoreOwnerKey>,
-    events: HashMap<&'static str, BTreeSet<&'static str>>,
+pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync + 'static> {
+    entries: TypedProviderRegistry<T>,
 }
 
-impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
+impl<T: ?Sized + Send + Sync + 'static> NativeProviderRegistry<T> {
+    #[cfg(test)]
     pub fn new(kind: ProviderKind) -> Self {
         Self {
-            entries: ProviderInstances::new(kind),
-            ids: Vec::new(),
-            owners: HashMap::new(),
-            events: HashMap::new(),
+            entries: TypedProviderRegistry::new(kind),
         }
+    }
+
+    pub fn shared(kind: ProviderKind) -> Self {
+        Self {
+            entries: TypedProviderRegistry::shared(kind),
+        }
+    }
+
+    pub fn module<'a>(
+        &'a mut self,
+        descriptor: ModuleDescriptor,
+    ) -> fiex_runtime::ModuleRegistrar<'a, T> {
+        self.entries.module(descriptor)
     }
 
     pub fn register(
@@ -36,73 +43,10 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         rule: ProviderMatchRule,
         implementation: Arc<T>,
     ) -> Result<(), String> {
-        self.register_inner(
-            id,
-            CoreOwnerKey::new("core"),
-            None,
-            priority,
-            rule,
-            implementation,
-        )
+        self.entries.register(id, priority, rule, implementation)
     }
 
-    /// Register a native capability and bind its private state namespace in
-    /// the same trusted operation. Wire descriptors never carry this owner.
-    pub fn register_owned(
-        &mut self,
-        id: &'static str,
-        owner: CoreOwnerKey,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        self.register_inner(id, owner, None, priority, rule, implementation)
-    }
-
-    /// Hook subscriptions are a registry property because their event name is
-    /// not part of the resource MatchRule or the serializable descriptor.
-    pub fn register_for_event(
-        &mut self,
-        id: &'static str,
-        event: &'static str,
-        owner: CoreOwnerKey,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        if event.is_empty() {
-            return Err("native provider event is empty".into());
-        }
-        self.register_inner(id, owner, Some(event), priority, rule, implementation)
-    }
-
-    fn register_inner(
-        &mut self,
-        id: &'static str,
-        owner: CoreOwnerKey,
-        event: Option<&'static str>,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        self.entries.register(
-            ProviderDescriptor {
-                id: id.into(),
-                kind: self.entries.kind(),
-                priority,
-                r#match: rule,
-            },
-            implementation,
-        )?;
-        self.ids.push(id);
-        self.owners.insert(id, owner);
-        if let Some(event) = event {
-            self.events.entry(id).or_default().insert(event);
-        }
-        Ok(())
-    }
-
-    pub fn get(&self, id: &str) -> Option<&T> {
+    pub fn get(&self, id: &str) -> Option<Arc<T>> {
         self.entries.get(id)
     }
 
@@ -111,7 +55,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
     }
 
     pub fn owner(&self, id: &str) -> Option<CoreOwnerKey> {
-        self.owners.get(id).copied()
+        self.entries.owner(id)
     }
 
     pub fn management_storage_for(
@@ -144,38 +88,28 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         )
     }
 
-    /// Select by an implementation-owned resource match, not a URI switch
-    /// in the generic broker. A rejected or unknown resource has no owner.
     #[cfg(test)]
-    pub fn descriptor(&self, id: &str) -> Option<&ProviderDescriptor> {
+    pub fn descriptor(&self, id: &str) -> Option<ProviderDescriptor> {
         self.entries.descriptor(id)
     }
 
     #[cfg(test)]
-    pub fn candidates(&self, mut eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
-        let mut providers = self
-            .ids
-            .iter()
-            .filter_map(|id| {
-                let implementation = self.entries.get(id)?;
-                let descriptor = self.entries.descriptor(id)?;
-                eligible(implementation).then(|| Resolver::builtin(id, descriptor.priority))
-            })
-            .collect::<Vec<_>>();
-        providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
-        providers
+    pub fn candidates(&self, eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
+        self.to_resolvers(self.entries.candidates(eligible))
     }
 
-    /// Select native providers with the same declarative rule evaluator used
-    /// for plugin manifests. `directory` is a trusted Core snapshot used only
-    /// when there is no selected target (for example, blank-canvas menus).
     pub fn matched_candidates(
         &self,
         targets: &[MatchResource],
         directory: Option<&MatchResource>,
         selection_count: usize,
     ) -> Vec<Resolver> {
-        self.matched_candidates_for(None, targets, directory, selection_count)
+        self.to_resolvers(self.entries.matched_candidates(
+            None,
+            targets,
+            directory,
+            selection_count,
+        ))
     }
 
     pub fn event_candidates(
@@ -185,35 +119,17 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         directory: Option<&MatchResource>,
         selection_count: usize,
     ) -> Vec<Resolver> {
-        self.matched_candidates_for(Some(event), targets, directory, selection_count)
+        self.to_resolvers(
+            self.entries
+                .event_candidates(event, targets, directory, selection_count),
+        )
     }
 
-    fn matched_candidates_for(
-        &self,
-        event: Option<&str>,
-        targets: &[MatchResource],
-        directory: Option<&MatchResource>,
-        selection_count: usize,
-    ) -> Vec<Resolver> {
-        let mut providers = self
-            .ids
-            .iter()
-            .filter_map(|id| {
-                let subscribed = self.events.get(id);
-                let event_matches = match event {
-                    Some(event) => subscribed.is_some_and(|events| events.contains(event)),
-                    None => subscribed.is_none(),
-                };
-                if !event_matches {
-                    return None;
-                }
-                let descriptor = self.entries.descriptor(id)?;
-                ProviderMatcher::matches(&descriptor.r#match, targets, directory, selection_count)
-                    .then(|| Resolver::builtin(id, descriptor.priority))
-            })
-            .collect::<Vec<_>>();
-        providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
-        providers
+    fn to_resolvers(&self, candidates: Vec<ProviderCandidate>) -> Vec<Resolver> {
+        candidates
+            .into_iter()
+            .map(|candidate| Resolver::builtin(candidate.id, candidate.priority))
+            .collect()
     }
 
     #[cfg(test)]
@@ -222,7 +138,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
     }
 
     #[cfg(test)]
-    pub fn descriptors(&self) -> impl Iterator<Item = &ProviderDescriptor> {
+    pub fn descriptors(&self) -> Vec<ProviderDescriptor> {
         self.entries.descriptors()
     }
 }
@@ -289,10 +205,10 @@ mod tests {
         let mut entries: NativeProviderRegistry<dyn Handler> =
             NativeProviderRegistry::new(ProviderKind::Hook);
         entries
+            .module(ModuleDescriptor::new("core:recent", owner, "1"))
             .register_for_event(
                 "core:recent.hook",
-                "afterOpen",
-                owner,
+                Some("afterOpen"),
                 100,
                 ProviderMatchRule::default(),
                 Arc::new(First),

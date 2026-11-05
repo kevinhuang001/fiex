@@ -46,7 +46,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn PreviewProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn PreviewProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn PreviewProvider> =
-            NativeProviderRegistry::new(ProviderKind::Preview);
+            NativeProviderRegistry::shared(ProviderKind::Preview);
         for kind in [
             Builtin::Text,
             Builtin::Image,

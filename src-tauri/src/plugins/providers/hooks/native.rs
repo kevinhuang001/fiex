@@ -3,6 +3,7 @@
 use super::RecentHook;
 use crate::plugins::{events::Resolver, provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{HookProvider, ProviderKind, ProviderMatchRule};
+use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 use std::sync::{Arc, OnceLock};
 
@@ -10,12 +11,16 @@ fn registry() -> &'static NativeProviderRegistry<dyn HookProvider> {
     static REGISTERED: OnceLock<NativeProviderRegistry<dyn HookProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut registry: NativeProviderRegistry<dyn HookProvider> =
-            NativeProviderRegistry::new(ProviderKind::Hook);
+            NativeProviderRegistry::shared(ProviderKind::Hook);
         registry
+            .module(ModuleDescriptor::new(
+                "core:recent",
+                CoreOwnerKey::new("recent"),
+                env!("CARGO_PKG_VERSION"),
+            ))
             .register_for_event(
                 "core:recent.hook",
-                "afterOpen",
-                CoreOwnerKey::new("recent"),
+                Some("afterOpen"),
                 100,
                 ProviderMatchRule::default(),
                 Arc::new(RecentHook),

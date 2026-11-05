@@ -43,7 +43,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn InfoProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn InfoProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn InfoProvider> =
-            NativeProviderRegistry::new(ProviderKind::Info);
+            NativeProviderRegistry::shared(ProviderKind::Info);
         values
             .register(
                 "core.metadata",
