@@ -32,6 +32,18 @@ impl From<&RecycleBinItemMetadata> for ItemIdentity {
     }
 }
 
+impl From<ItemIdentity> for RecycleBinItemMetadata {
+    fn from(identity: ItemIdentity) -> Self {
+        Self {
+            id: identity.id,
+            name: identity.name,
+            original: identity.original,
+            deleted_unix: identity.deleted_unix,
+            folder: identity.folder,
+        }
+    }
+}
+
 pub struct RecycleBin {
     backend: Arc<dyn RecycleBinBackend>,
 }
@@ -62,7 +74,8 @@ impl RecycleBin {
     pub fn stat(&self, uri: &str) -> Result<FsEntry, String> {
         let encoded = encoded_identity(uri)?;
         let (expected, _) = self.resolve_item(encoded)?;
-        Ok(entry(&expected).with_revision(expected.deleted_unix.to_string()))
+        let metadata = RecycleBinItemMetadata::from(expected);
+        Ok(entry(&metadata).with_revision(metadata.deleted_unix.to_string()))
     }
 
     #[cfg(not(windows))]
@@ -190,5 +203,18 @@ mod tests {
             item.id
         );
         assert_eq!(entry.link_target.as_deref(), Some(item.original.as_str()));
+    }
+
+    #[test]
+    fn internal_identity_projects_back_to_platform_metadata() {
+        let metadata = RecycleBinItemMetadata {
+            id: "shell-item-42".into(),
+            name: "Folder".into(),
+            original: "C:\\Users\\Alex\\Folder".into(),
+            deleted_unix: 1_783_252_800,
+            folder: true,
+        };
+        let identity = ItemIdentity::from(&metadata);
+        assert_eq!(RecycleBinItemMetadata::from(identity), metadata);
     }
 }
