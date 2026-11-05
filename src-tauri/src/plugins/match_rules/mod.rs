@@ -4,6 +4,7 @@
 //! resource (or directory/selection) satisfies it. Missing or empty rules match
 //! everything.
 use fiex_provider_contracts::MatchResource;
+pub use fiex_resource::mime_for;
 use serde_json::Value;
 use std::ops::Deref;
 
@@ -53,58 +54,6 @@ pub fn validate(
     allow_selection: bool,
 ) -> Result<(), String> {
     fiex_provider_contracts::ProviderMatchRule::validate(value, allow_selection)
-}
-
-/// Small extension → MIME map for resources whose directory entry has no MIME.
-pub fn mime_for(ext: &str) -> String {
-    match ext.trim_start_matches('.').to_ascii_lowercase().as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "bmp" => "image/bmp",
-        "ico" => "image/x-icon",
-        "tif" | "tiff" => "image/tiff",
-        "avif" => "image/avif",
-        "heic" => "image/heic",
-        "pdf" => "application/pdf",
-        "zip" => "application/zip",
-        "7z" => "application/x-7z-compressed",
-        "rar" => "application/vnd.rar",
-        "gz" | "tgz" => "application/gzip",
-        "tar" => "application/x-tar",
-        "bz2" => "application/x-bzip2",
-        "xz" => "application/x-xz",
-        "mp4" | "m4v" => "video/mp4",
-        "webm" => "video/webm",
-        "mkv" => "video/x-matroska",
-        "mov" => "video/quicktime",
-        "avi" => "video/x-msvideo",
-        "wmv" => "video/x-ms-wmv",
-        "mp3" => "audio/mpeg",
-        "wav" => "audio/wav",
-        "flac" => "audio/flac",
-        "m4a" => "audio/mp4",
-        "ogg" | "oga" => "audio/ogg",
-        "opus" => "audio/opus",
-        "aac" => "audio/aac",
-        "json" => "application/json",
-        "xml" => "application/xml",
-        "html" | "htm" => "text/html",
-        "css" => "text/css",
-        "scss" => "text/x-scss",
-        "less" => "text/x-less",
-        "csv" => "text/csv",
-        "tsv" => "text/tab-separated-values",
-        "md" | "markdown" => "text/markdown",
-        "txt" | "log" | "rst" | "json5" | "toml" | "yaml" | "yml" | "ini" | "conf" | "cfg"
-        | "env" | "sh" | "bat" | "ps1" | "py" | "rs" | "go" | "java" | "kt" | "c" | "cc"
-        | "cpp" | "h" | "hpp" | "cs" | "php" | "rb" | "swift" | "sql" | "js" | "jsx" | "ts"
-        | "tsx" | "vue" | "svelte" | "dart" | "lua" | "r" | "tex" => "text/plain",
-        _ => "application/octet-stream",
-    }
-    .into()
 }
 
 #[cfg(test)]

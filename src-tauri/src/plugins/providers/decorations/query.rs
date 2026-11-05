@@ -37,7 +37,7 @@ pub fn query_with_plugins(
     let resources = ordered
         .iter()
         .map(|e| {
-            crate::plugins::resource::resource_context::ResourceSnapshot::from_entry(
+            crate::plugins::resource::resource_context::from_entry(
                 &e.path,
                 &crate::core::files::Entry {
                     path: e.path.clone(),
@@ -196,9 +196,7 @@ pub fn query_with_plugins(
 #[cfg(test)]
 mod ref_target_tests {
     use super::*;
-    use crate::plugins::{
-        contracts::ResourceMetadata, resource::resource_context::ResourceSnapshot,
-    };
+    use crate::plugins::contracts::ResourceMetadata;
 
     #[test]
     fn only_core_issued_resource_refs_select_decoration_targets() {
@@ -210,7 +208,7 @@ mod ref_target_tests {
                 ..Default::default()
             },
         );
-        let target = ResourceSnapshot::from_metadata(
+        let target = crate::plugins::resource::resource_context::from_metadata(
             "/authorized/matching-name",
             ResourceMetadata::default(),
         );
@@ -220,7 +218,7 @@ mod ref_target_tests {
             path_for_target(&target.reference, &entries, &resources_by_ref),
             Some("/authorized/matching-name")
         );
-        let forged = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+        let forged = crate::plugins::resource::resource_context::from_metadata(
             "/forged/path",
             ResourceMetadata::default(),
         );

@@ -1,9 +1,7 @@
 //! Trusted invocation context and common projections for native VFS providers.
 use super::*;
 use crate::core::files::Entry;
-use crate::plugins::{
-    native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     FsEntry, FsKind, FsListing, FsRequest, ProviderError, ProviderInvocation, ResourceMetadata,
 };
@@ -57,7 +55,7 @@ pub(super) fn target_invocation(
     } else {
         "file"
     };
-    let mut target = ResourceSnapshot::from_metadata(
+    let mut target = crate::plugins::resource::resource_context::from_metadata(
         path,
         ResourceMetadata {
             kind: kind.into(),
@@ -89,13 +87,18 @@ pub(super) fn broker_invocation(
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
-    let mut target = ResourceSnapshot::from_metadata(&source.path, ResourceMetadata::default());
+    let mut target = crate::plugins::resource::resource_context::from_metadata(
+        &source.path,
+        ResourceMetadata::default(),
+    );
     target.reference = source.reference.clone();
     target.operations = Some(Default::default());
     let mut targets = vec![target];
     if let Some(destination) = destination {
-        let mut target =
-            ResourceSnapshot::from_metadata(&destination.path, ResourceMetadata::default());
+        let mut target = crate::plugins::resource::resource_context::from_metadata(
+            &destination.path,
+            ResourceMetadata::default(),
+        );
         target.reference = destination.reference.clone();
         target.operations = Some(Default::default());
         targets.push(target);

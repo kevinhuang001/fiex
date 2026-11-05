@@ -3,13 +3,13 @@ use super::builtin::Context;
 use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-#[cfg(test)]
-use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::ContextMenuProvider;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
 #[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
+#[cfg(test)]
+use fiex_resource::FileCapabilities;
 use rayon::prelude::*;
 #[cfg(test)]
 use serde_json::json;

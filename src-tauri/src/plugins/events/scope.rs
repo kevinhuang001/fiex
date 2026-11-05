@@ -26,8 +26,13 @@ pub fn prepare(
         if params.get("targets").is_none() {
             params["targets"] = json!(paths
                 .iter()
-                .map(|path| ResourceSnapshot::new(&path.to_string_lossy(), path)
-                    .project(plugin, "", true, false))
+                .map(
+                    |path| crate::plugins::resource::resource_context::new_resource_snapshot(
+                        &path.to_string_lossy(),
+                        path
+                    )
+                    .project(plugin, "", true, false)
+                )
                 .collect::<Vec<_>>());
         }
         let targets = params["targets"]
@@ -139,7 +144,7 @@ pub fn resource_scope(
     // blank-canvas actions and multi-selection policies keep exact semantics.
     params["selectionCount"] = json!(resources.len());
     if let Some(directory) = directory {
-        let snapshot = ResourceSnapshot::resolve(directory)?;
+        let snapshot = crate::plugins::resource::resource_context::resolve(directory)?;
         if !snapshot.is_dir {
             return Err("event directory is not a directory".into());
         }
@@ -269,10 +274,7 @@ pub fn resource_scope(
 /// addition to the per-operation checks enforced by ResourceBroker. Derive
 /// that policy from the trusted view and its effective capability snapshot,
 /// never from a special URI or provider name.
-fn read_only_vfs(
-    path: &str,
-    capabilities: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
-) -> bool {
+fn read_only_vfs(path: &str, capabilities: Option<fiex_resource::FileCapabilities>) -> bool {
     let (view, _) = crate::plugins::match_rules::typed_locations_for(path);
     if view
         .is_none_or(|location| location.resource_type != fiex_provider_contracts::ResourceType::Vfs)

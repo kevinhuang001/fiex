@@ -59,7 +59,7 @@ fn trash_and_permanent_delete_are_independent_core_actions() {
         "/tmp",
         vec!["/tmp/item".into()],
         vec![],
-        crate::plugins::resource::file_capabilities::FileCapabilities {
+        fiex_resource::FileCapabilities {
             trash: true,
             remove: true,
             ..Default::default()

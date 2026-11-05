@@ -1,8 +1,12 @@
 use super::*;
+use std::fs;
 #[test]
 fn unknown_schemes_fail_before_local_metadata_discovery() {
     for path in ["unknown://not-registered", "unknown:opaque-reference"] {
-        assert!(ResourceSnapshot::resolve(path).is_err(), "{path}");
+        assert!(
+            crate::plugins::resource::resource_context::resolve(path).is_err(),
+            "{path}"
+        );
     }
 }
 
@@ -11,7 +15,10 @@ fn metadata_projection_does_not_grant_read_and_reuses_identity() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("example.txt");
     fs::write(&file, b"abc").unwrap();
-    let snapshot = ResourceSnapshot::new(file.to_str().unwrap(), &file);
+    let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
+        file.to_str().unwrap(),
+        &file,
+    );
     let without_grant = snapshot.context("org.example", false, false);
     let with_meta = snapshot.context("org.example", true, false);
     assert_eq!(
@@ -27,7 +34,7 @@ fn metadata_projection_does_not_grant_read_and_reuses_identity() {
 
 #[test]
 fn projected_context_carries_trusted_view_storage_and_effective_operations() {
-    let resource = ResourceSnapshot::from_metadata(
+    let resource = crate::plugins::resource::resource_context::from_metadata(
         crate::core::volumes::applications::URI,
         ResourceMetadata {
             name: "Applications".into(),

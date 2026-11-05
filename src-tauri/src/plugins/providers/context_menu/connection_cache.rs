@@ -2,8 +2,8 @@
 //! owned by the connection adapter and unchanged by capability gating.
 
 use super::file_ops::{item, Selection};
-use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::{MenuActivity, MenuActivityKind, MenuItem};
+use fiex_resource::FileCapabilities;
 
 pub(super) struct ConnectionCache;
 

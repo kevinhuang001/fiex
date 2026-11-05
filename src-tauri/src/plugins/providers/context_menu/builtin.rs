@@ -1,9 +1,9 @@
 //! Builtin menu policy. The frontend receives data, never provider closures.
 use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
-use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::MenuExecuteResult;
+use fiex_resource::FileCapabilities;
 #[cfg(test)]
 use serde_json::Value;
 use std::sync::Arc;
@@ -133,13 +133,15 @@ impl Context {
         let resources = Arc::new(
             entries
                 .iter()
-                .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+                .map(|entry| {
+                    crate::plugins::resource::resource_context::from_entry(&entry.path, entry)
+                })
                 .collect::<Vec<_>>(),
         );
         let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
         let directory_resource = directory_entry
             .as_ref()
-            .map(|entry| ResourceSnapshot::from_entry(directory, entry));
+            .map(|entry| crate::plugins::resource::resource_context::from_entry(directory, entry));
         let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         let mut context = Self {
@@ -195,7 +197,7 @@ impl Context {
     ) -> Self {
         let mut resources = entries
             .iter()
-            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+            .map(|entry| crate::plugins::resource::resource_context::from_entry(&entry.path, entry))
             .collect::<Vec<_>>();
         for resource in &mut resources {
             resource.operations = Some(capabilities);
@@ -211,14 +213,15 @@ impl Context {
         for target in &mut match_targets {
             target.capabilities.operations = allowed_operations.clone();
         }
-        let mut directory_resource = Some(ResourceSnapshot::from_metadata(
-            directory,
-            crate::plugins::contracts::ResourceMetadata {
-                name: directory.into(),
-                kind: "directory".into(),
-                ..Default::default()
-            },
-        ));
+        let mut directory_resource =
+            Some(crate::plugins::resource::resource_context::from_metadata(
+                directory,
+                crate::plugins::contracts::ResourceMetadata {
+                    name: directory.into(),
+                    kind: "directory".into(),
+                    ..Default::default()
+                },
+            ));
         if let Some(resource) = directory_resource.as_mut() {
             resource.operations = Some(capabilities);
         }

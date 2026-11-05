@@ -1,4 +1,3 @@
-use super::ResourceSnapshot;
 use crate::plugins::contracts::ResourceRef;
 
 /// Private Core-UI binding. Plugin iframe SDKs receive only `reference`; the
@@ -19,7 +18,7 @@ pub fn bind_selected(
             .map_err(String::from)?
             == crate::core::fs::provider_registry::ResourceAccess::Provider
         {
-            let snapshot = ResourceSnapshot::resolve(&binding.path)?;
+            let snapshot = crate::plugins::resource::resource_context::resolve(&binding.path)?;
             if snapshot.reference != binding.reference {
                 return Err("ScopeDenied: resource reference does not match selected node".into());
             }
@@ -39,7 +38,8 @@ pub fn bind_selected(
         }
         let path = std::path::Path::new(&binding.path);
         scope.authorize(&binding.path)?;
-        let snapshot = ResourceSnapshot::new(&binding.path, path);
+        let snapshot =
+            crate::plugins::resource::resource_context::new_resource_snapshot(&binding.path, path);
         if snapshot.reference != binding.reference {
             return Err("ScopeDenied: resource reference does not match selected node".into());
         }

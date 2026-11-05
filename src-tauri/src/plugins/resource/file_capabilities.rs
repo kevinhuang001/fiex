@@ -12,74 +12,7 @@
 //! operation the current provider or node does not support.
 use crate::core::files::Entry;
 use crate::plugins::provider_registry::FsOperation;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct FileCapabilities {
-    pub list: bool,
-    pub stat: bool,
-    pub search: bool,
-    pub read: bool,
-    pub write: bool,
-    pub create: bool,
-    pub rename: bool,
-    pub trash: bool,
-    pub remove: bool,
-}
-
-impl FileCapabilities {
-    pub const ALL: Self = Self {
-        list: true,
-        stat: true,
-        search: true,
-        read: true,
-        write: true,
-        create: true,
-        rename: true,
-        trash: true,
-        remove: true,
-    };
-
-    pub fn intersect(self, other: Self) -> Self {
-        Self {
-            list: self.list && other.list,
-            stat: self.stat && other.stat,
-            search: self.search && other.search,
-            read: self.read && other.read,
-            write: self.write && other.write,
-            create: self.create && other.create,
-            rename: self.rename && other.rename,
-            trash: self.trash && other.trash,
-            remove: self.remove && other.remove,
-        }
-    }
-
-    /// Each protocol operation has an independent capability.
-    pub fn allows(self, operation: FsOperation) -> bool {
-        match operation {
-            FsOperation::List => self.list,
-            FsOperation::Stat => self.stat,
-            FsOperation::Search => self.search,
-            FsOperation::Read => self.read,
-            FsOperation::Write => self.write,
-            FsOperation::Mkdir => self.create,
-            FsOperation::Rename => self.rename,
-            FsOperation::Trash => self.trash,
-            FsOperation::Remove => self.remove,
-        }
-    }
-
-    pub fn has_mutation_capability(self) -> bool {
-        self.write || self.create || self.rename || self.trash || self.remove
-    }
-
-    pub fn into_allowed_ops(self) -> Vec<String> {
-        FsOperation::ALL
-            .into_iter()
-            .filter(|operation| self.allows(*operation))
-            .map(|operation| operation.as_str().to_owned())
-            .collect()
-    }
-}
+use fiex_resource::FileCapabilities;
 
 /// Intersect a provider declaration with one node's own restrictions.
 fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {

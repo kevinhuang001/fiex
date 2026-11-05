@@ -137,7 +137,7 @@ pub(crate) async fn open_path(path: String) -> Result<(), String> {
     if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {
         return Err(crate::i18n::t("回收站项目请使用“放回原处”或“彻底删除”").into());
     }
-    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
+    let snapshot = crate::plugins::resource::resource_context::resolve(&path)?;
     let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
     tauri::async_runtime::spawn_blocking(move || {
         if !crate::core::volumes::native_vfs::open(&path)? {

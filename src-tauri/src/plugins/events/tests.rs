@@ -93,7 +93,10 @@ fn resource_identity_is_not_an_operation_grant() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("selected.txt");
     std::fs::write(&file, b"abc").unwrap();
-    let resource = ResourceSnapshot::new(file.to_str().unwrap(), &file);
+    let resource = crate::plugins::resource::resource_context::new_resource_snapshot(
+        file.to_str().unwrap(),
+        &file,
+    );
     let value = json!(resource.project("plugin", "session", true, false));
     let mut operation = crate::plugins::resource::fs_access::Scope::selected(
         dir.path(),

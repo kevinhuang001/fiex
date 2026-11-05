@@ -61,7 +61,7 @@ pub(crate) fn authorize_locator(
         return Err("NeedsAuthorization: mapped resource requires a user action".into());
     }
 
-    let snapshot = ResourceSnapshot::resolve(locator)?;
+    let snapshot = crate::plugins::resource::resource_context::resolve(locator)?;
     authorize_snapshot(snapshot, current_scope, owner, user_action, operation)
 }
 
@@ -162,7 +162,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("mapped.txt");
         std::fs::write(&path, b"mapped").unwrap();
-        let snapshot = ResourceSnapshot::new(&path.to_string_lossy(), &path);
+        let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
+            &path.to_string_lossy(),
+            &path,
+        );
         let scope = Scope::selected(directory.path(), &[]).unwrap();
         scope
             .bind_mapped_resource(snapshot.clone(), FsOperation::Read)
@@ -187,7 +190,10 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let path = root.join("child.txt");
         std::fs::write(&path, b"child").unwrap();
-        let snapshot = ResourceSnapshot::new(&root.to_string_lossy(), &root);
+        let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
+            &root.to_string_lossy(),
+            &root,
+        );
         let scope = Scope::selected(directory.path(), &[]).unwrap();
         scope
             .bind_mapped_resource(snapshot.clone(), FsOperation::List)
@@ -211,7 +217,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("mapped.txt");
         std::fs::write(&path, b"mapped").unwrap();
-        let snapshot = ResourceSnapshot::new(&path.to_string_lossy(), &path);
+        let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
+            &path.to_string_lossy(),
+            &path,
+        );
         let mut scope = Scope::selected(directory.path(), &[]).unwrap();
         scope.set_user_action_context(UserActionContext::for_test());
         scope
@@ -227,7 +236,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let source = directory.path().join("mapped.txt");
         std::fs::write(&source, b"mapped").unwrap();
-        let snapshot = ResourceSnapshot::from_metadata(
+        let snapshot = crate::plugins::resource::resource_context::from_metadata(
             "recent://test",
             crate::plugins::contracts::ResourceMetadata {
                 kind: "file".into(),

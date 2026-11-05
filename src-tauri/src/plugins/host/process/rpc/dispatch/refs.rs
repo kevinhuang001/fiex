@@ -60,8 +60,7 @@ pub(super) fn intercept(
         if !bound && user_action.is_none() {
             return Err("NeedsAuthorization: mapped resource requires a user action".into());
         }
-        let snapshot =
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(locator)?;
+        let snapshot = crate::plugins::resource::resource_context::resolve(locator)?;
         running.ensure_permission(mapped_capability(operation, snapshot.is_dir))?;
         let (resource, snapshot) = crate::core::fs::mapped_access::authorize_snapshot(
             snapshot,

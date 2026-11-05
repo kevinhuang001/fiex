@@ -50,7 +50,7 @@ fn provider_ids(ctx: &super::builtin::Context) -> Vec<String> {
 fn mount_selection(
     path: &str,
     is_dir: bool,
-    capabilities: crate::plugins::resource::file_capabilities::FileCapabilities,
+    capabilities: fiex_resource::FileCapabilities,
 ) -> super::builtin::Context {
     super::builtin::Context::for_test_caps(
         path.rsplit_once('/').map_or(path, |(parent, _)| parent),

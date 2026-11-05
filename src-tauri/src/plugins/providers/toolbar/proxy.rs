@@ -31,7 +31,7 @@ impl CoreToolbarInvocation {
         directory: &str,
         request: ProviderRequestContext,
     ) -> Self {
-        let directory_resource = ResourceSnapshot::from_metadata(
+        let directory_resource = crate::plugins::resource::resource_context::from_metadata(
             directory,
             crate::plugins::contracts::ResourceMetadata {
                 kind: "directory".into(),

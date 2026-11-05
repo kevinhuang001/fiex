@@ -40,7 +40,7 @@ impl CoreDecorationInvocation {
         entries: Arc<HashMap<String, DecorationEntry>>,
         resources: Arc<Vec<ResourceSnapshot>>,
     ) -> Result<Self, String> {
-        let directory_resource = ResourceSnapshot::from_metadata(
+        let directory_resource = crate::plugins::resource::resource_context::from_metadata(
             &directory,
             crate::plugins::contracts::ResourceMetadata {
                 kind: "directory".into(),
@@ -63,7 +63,7 @@ impl CoreDecorationInvocation {
         entries: Arc<HashMap<String, DecorationEntry>>,
         resources: Arc<Vec<ResourceSnapshot>>,
     ) -> Self {
-        let directory_resource = ResourceSnapshot::from_metadata(
+        let directory_resource = crate::plugins::resource::resource_context::from_metadata(
             &directory,
             crate::plugins::contracts::ResourceMetadata {
                 kind: "directory".into(),
@@ -87,7 +87,7 @@ impl CoreDecorationInvocation {
         plugin: PluginInfo,
         request: ProviderRequestContext,
     ) -> Self {
-        let directory_resource = ResourceSnapshot::from_metadata(
+        let directory_resource = crate::plugins::resource::resource_context::from_metadata(
             &directory,
             crate::plugins::contracts::ResourceMetadata {
                 kind: "directory".into(),

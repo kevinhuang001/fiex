@@ -132,7 +132,7 @@ pub(super) fn resolve(
         entries
             .values()
             .map(|entry| {
-                crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                crate::plugins::resource::resource_context::from_metadata(
                     &entry.path,
                     crate::plugins::contracts::ResourceMetadata {
                         name: entry.name.clone(),

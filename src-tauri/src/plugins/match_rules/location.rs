@@ -59,8 +59,8 @@ pub(crate) fn typed_locations_for_snapshot(
 ) -> (Option<ResourceLocation>, Option<ResourceLocation>) {
     let (view, own_storage) = typed_locations_for(&resource.display);
     let storage = match &resource.storage_projection {
-        crate::core::files::StorageProjection::Owned => own_storage,
-        crate::core::files::StorageProjection::Projected(source) => source.clone(),
+        fiex_resource::StorageProjection::Owned => own_storage,
+        fiex_resource::StorageProjection::Projected(source) => source.clone(),
     };
     (view, storage)
 }
@@ -137,15 +137,12 @@ mod tests {
         let projected = descriptor("fs", "core:local-fs", "local").unwrap();
         let entry = crate::core::files::Entry {
             path: "recent://entry".into(),
-            storage_projection: crate::core::files::StorageProjection::Projected(Some(
+            storage_projection: fiex_resource::StorageProjection::Projected(Some(
                 projected.clone(),
             )),
             ..Default::default()
         };
-        let resource = crate::plugins::resource::resource_context::ResourceSnapshot::from_entry(
-            &entry.path,
-            &entry,
-        );
+        let resource = crate::plugins::resource::resource_context::from_entry(&entry.path, &entry);
         let (view, storage) = typed_locations_for_snapshot(&resource);
         assert_eq!(view.unwrap().provider_id, "core:recent");
         assert_eq!(storage, Some(projected));

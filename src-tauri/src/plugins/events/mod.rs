@@ -1,5 +1,5 @@
 //! Core event pipeline: discover → dispatch → validate → collect.
-use crate::plugins::resource::resource_context::ResourceSnapshot;
+use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use serde_json::{json, Value};
 pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;

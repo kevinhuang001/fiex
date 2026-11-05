@@ -143,7 +143,10 @@ mod tests {
             missing_commands: vec![],
         };
         let absent = std::env::temp_dir().join("fiex-match-must-not-open.txt");
-        let resource = ResourceSnapshot::new(absent.to_str().unwrap(), &absent);
+        let resource = crate::plugins::resource::resource_context::new_resource_snapshot(
+            absent.to_str().unwrap(),
+            &absent,
+        );
         let result =
             super::super::invoke_resources(&plugin, "info.resolve", json!({}), &[resource], None);
         assert_eq!(result.unwrap_err(), "provider does not match event targets");
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn core_assigns_view_and_storage_before_plugin_candidate_matching() {
         let path = crate::core::volumes::applications::URI;
-        let resource = ResourceSnapshot::from_metadata(
+        let resource = crate::plugins::resource::resource_context::from_metadata(
             path,
             ResourceMetadata {
                 kind: "directory".into(),
@@ -201,7 +204,7 @@ mod tests {
             "view":{"providerIds":["core:applications"]}, "kinds":["directory"]
         }}});
         assert!(matches("contextMenu.resolve", &extensions, &selected, path));
-        let local = ResourceSnapshot::from_metadata(
+        let local = crate::plugins::resource::resource_context::from_metadata(
             "/tmp/fiex-matcher-local",
             ResourceMetadata {
                 kind: "directory".into(),

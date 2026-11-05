@@ -5,7 +5,7 @@ use super::builtin::{builtin_view, Builtin};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use crate::plugins::resource::resource_context::ResourceSnapshot;
+use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{
     LocationMatch, MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
     ProviderKind, ProviderMatchExclude, ProviderMatchRule, ResourceMetadata,
@@ -182,7 +182,10 @@ mod tests {
         let directory = candidates("", "", true);
         assert_eq!(directory.len(), 1);
         assert_eq!(directory[0].id, "builtin:fallback");
-        let resource = ResourceSnapshot::from_metadata("/unavailable", Default::default());
+        let resource = crate::plugins::resource::resource_context::from_metadata(
+            "/unavailable",
+            Default::default(),
+        );
         assert!(open("not-registered", &resource).is_err());
         assert_eq!(
             open("builtin:fallback", &resource).unwrap().kind,
