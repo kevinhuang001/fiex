@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use super::*;
 
 #[cfg(all(test, target_os = "linux"))]
