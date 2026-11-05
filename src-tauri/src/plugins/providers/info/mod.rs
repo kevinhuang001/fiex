@@ -4,11 +4,11 @@
 //! Core builds an `EventContext` after permission projection, invokes the
 //! matching provider, and merges validated sections with native
 //! metadata and media probes.
-pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+pub use fiex_info::{timestamp_text, InfoRow, InfoSection};
 use fiex_provider_contracts::{InfoProvider, ProviderRequest};
 use serde_json::json;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     InfoRow {
@@ -41,7 +41,6 @@ fn provider_error_section(provider: &crate::plugins::events::Resolver, error: &s
 }
 
 mod media;
-mod metadata;
 mod native;
 mod proxy;
 pub use media::media_sections;
@@ -55,7 +54,20 @@ pub(crate) fn calculate_directory_size(
     path: &std::path::Path,
     cancelled: &std::sync::atomic::AtomicBool,
 ) -> Result<u64, String> {
-    metadata::directory_size_with_cancel(path, cancelled)
+    fiex_info::directory_size_with_cancel(path, cancelled)
+}
+
+fn localized_text(source: &'static str) -> String {
+    crate::i18n::t(source).into()
+}
+
+fn localized_format(source: &'static str, values: &[(&str, String)]) -> String {
+    crate::i18n::format(source, values)
+}
+
+pub(crate) fn localization() -> &'static fiex_info::Localization {
+    static LOCALIZATION: OnceLock<fiex_info::Localization> = OnceLock::new();
+    LOCALIZATION.get_or_init(|| fiex_info::Localization::new(localized_text, localized_format))
 }
 
 #[cfg(feature = "desktop")]

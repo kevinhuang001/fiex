@@ -2,11 +2,12 @@
 //! registered once, then selected with the same validated shared descriptors
 //! used to describe SDK provider instances. No native ID dispatch table lives
 //! inside the EventRouter or the per-request endpoint.
-use super::{media::media_sections, metadata::metadata_section, InfoSection};
+use super::{localization, media::media_sections, InfoSection};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
+use fiex_info::metadata_section;
 use fiex_provider_contracts::{
     InfoProvider, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
@@ -21,6 +22,7 @@ impl InfoProvider for MetadataInfo {
             &resource.local,
             resource.stat.as_ref(),
             resource.metadata(),
+            localization(),
         )])
     }
 }
