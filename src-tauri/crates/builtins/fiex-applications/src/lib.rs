@@ -11,9 +11,12 @@ pub const APP_SEGMENT: &str = "app_";
 pub const STORAGE_SCOPE: &str = "tree";
 pub const STATE_KEY: &str = "state";
 const STATE_VALUE_LIMIT: usize = 16 * 1024 * 1024 - 1024;
-
 mod icon_cache;
 pub use icon_cache::cached_icon_with;
+mod catalog;
+pub use catalog::{
+    system_id, ApplicationCatalog, ApplicationsBackend, CatalogApplication, InstalledApplication,
+};
 mod tree;
 pub use tree::{parent_uri, validate_child_in};
 

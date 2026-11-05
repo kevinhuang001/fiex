@@ -1,0 +1,111 @@
+use super::*;
+use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+struct TestBackend {
+    calls: AtomicUsize,
+    applications: Mutex<Vec<InstalledApplication>>,
+}
+
+impl ApplicationsBackend for TestBackend {
+    fn enumerate_installed(&self) -> Result<Vec<InstalledApplication>, String> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.applications.lock().unwrap().clone())
+    }
+
+    fn open_system_application(&self, _: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn classify_host_application(&self, _: &std::path::Path, _: Option<&str>) -> bool {
+        false
+    }
+
+    fn is_user_application(&self, _: &std::path::Path) -> bool {
+        false
+    }
+
+    fn validate_import_asset(&self, _: &std::path::Path, _: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+fn store(owner: &'static str) -> ApplicationsStore {
+    let storage = OwnerBoundStorage::from_registry(CoreOwnerKey::new(owner))
+        .scoped("tree")
+        .unwrap();
+    storage.delete("state").unwrap();
+    ApplicationsStore::new(storage)
+}
+
+fn application(name: &str) -> InstalledApplication {
+    InstalledApplication {
+        stable_locator: "/system/Editor.app".into(),
+        display_name: name.into(),
+        icon_source: Some("/system/Editor.app".into()),
+        extension: "app".into(),
+        modified: 42,
+    }
+}
+
+#[test]
+fn catalog_caches_reads_and_preserves_stable_identity_across_refreshes() {
+    let store = store("applications-catalog-refresh-test");
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor")]),
+    });
+    let catalog = ApplicationCatalog::new(store.clone(), backend.clone());
+    let initial = catalog.entries().unwrap();
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(catalog.entries().unwrap(), initial);
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+
+    backend.applications.lock().unwrap()[0] = application("Editor Renamed");
+    let refreshed = catalog.refresh().unwrap();
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(refreshed[0].uri, initial[0].uri);
+    assert_eq!(refreshed[0].display_name, "Editor Renamed");
+    let persisted = store.snapshot().unwrap();
+    let id = refreshed[0]
+        .uri
+        .strip_prefix(crate::URI)
+        .unwrap()
+        .strip_prefix(crate::APP_SEGMENT)
+        .unwrap();
+    assert_eq!(persisted.apps[id].display_name, "Editor Renamed");
+}
+
+#[test]
+fn missing_system_app_is_retained_as_unavailable_with_its_identity() {
+    let store = store("applications-catalog-unavailable-test");
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor")]),
+    });
+    let catalog = ApplicationCatalog::new(store.clone(), backend.clone());
+    let uri = catalog.entries().unwrap()[0].uri.clone();
+    backend.applications.lock().unwrap().clear();
+    assert!(catalog.refresh().unwrap().is_empty());
+
+    let id = uri
+        .strip_prefix(crate::URI)
+        .unwrap()
+        .strip_prefix(crate::APP_SEGMENT)
+        .unwrap();
+    let state = store.snapshot().unwrap();
+    assert!(state.apps[id].unavailable);
+    assert!(app_uri_in(&state, id).is_some());
+}
+
+#[test]
+fn system_application_identity_depends_only_on_the_stable_locator() {
+    assert_eq!(
+        system_id("/Applications/Editor.app"),
+        system_id("/Applications/Editor.app")
+    );
+    assert_ne!(
+        system_id("/Applications/Editor.app"),
+        system_id("/Applications/Other.app")
+    );
+}

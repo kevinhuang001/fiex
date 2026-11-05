@@ -5,13 +5,13 @@ pub fn open(uri: &str) -> Result<(), String> {
     match app.source {
         ApplicationSource::Imported { .. } => {
             let path = super::state::asset_path(uri)?;
-            if !platform::is_user_application(&path) {
+            if !super::catalog().is_user_application(&path) {
                 return Err(crate::i18n::t("无法启动应用").into());
             }
             platform::open_stored(&path)
         }
         ApplicationSource::System { stable_locator } => {
-            platform::platform_open(&super::encode(&stable_locator))
+            super::catalog().open_system_application(&stable_locator)
         }
     }
 }

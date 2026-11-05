@@ -1,4 +1,6 @@
 //! Platform-specific Applications enumeration and launch behavior.
+mod backend;
+pub(super) use backend::backend;
 use std::path::Path;
 
 /// Platform-owned classifier shared by Applications imports, exports and
