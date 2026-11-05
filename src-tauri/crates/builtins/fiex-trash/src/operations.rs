@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::journal;
-use crate::restore_fs::{free_destination, move_entry, remove_entry};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::restore_fs::remove_entry;
+use crate::restore_fs::{free_destination, move_entry};
 
 const CANCELLED: &str = "Cancelled: user cancelled operation";
 
