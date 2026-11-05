@@ -44,7 +44,7 @@ pub fn cached_icon(_source: &str) -> Option<String> {
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::sync::OnceLock;
+use std::{collections::HashMap, sync::OnceLock};
 
 pub const URI: &str = fiex_applications::URI;
 
@@ -103,6 +103,12 @@ pub fn system_entries() -> Result<Vec<Entry>, String> {
     catalog()
         .entries()
         .map(|entries| entries.into_iter().map(catalog_entry).collect())
+}
+
+pub fn decoration_info(
+    paths: &[String],
+) -> HashMap<String, fiex_applications::ApplicationDecorationInfo> {
+    catalog().decoration_info(paths)
 }
 
 fn catalog_entry(application: fiex_applications::CatalogApplication) -> Entry {

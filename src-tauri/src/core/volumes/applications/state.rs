@@ -6,8 +6,9 @@ mod migration;
 mod mutations;
 mod removal;
 mod reservations;
-pub(super) use assets::{applications_root_path, asset_path, imported_asset_path};
+pub(super) use assets::asset_path;
 pub(super) use entries::{app_entry, entry, folder_children, folder_entry, source};
+pub(super) use fiex_applications::imported_asset_path;
 pub(super) use mutations::{
     create_folder, move_nodes, parent_uri, remove_empty_folder, remove_node, rename_folder,
     rename_imported, rename_node, validate_child, validate_remove,

@@ -42,7 +42,7 @@ fn fiex_dir() -> Result<PathBuf, String> {
 }
 
 fn app_root() -> Result<PathBuf, String> {
-    super::applications_root_path()
+    fiex_applications::applications_root_path()
 }
 
 fn plan_path() -> Result<PathBuf, String> {

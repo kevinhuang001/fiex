@@ -34,15 +34,19 @@ pub(super) fn resolve_in(
     directory: &str,
     entries: &HashMap<String, DecorationEntry>,
 ) -> Vec<Decoration> {
+    let application_info = if kind == NativeKind::ApplicationIcon {
+        let paths = entries.keys().cloned().collect::<Vec<_>>();
+        crate::core::volumes::applications::decoration_info(&paths)
+    } else {
+        HashMap::new()
+    };
     let mut decorations = Vec::new();
     for entry in entries.values() {
         if kind == NativeKind::ApplicationIcon {
+            let info = application_info.get(&entry.path);
             let recognized = entry.mime == "application/x-fiex-application"
-                && crate::core::volumes::applications::is_system_app(&entry.path);
-            if directory != crate::core::volumes::applications::URI
-                && !crate::core::volumes::applications::is_user(&entry.path)
-                && !crate::core::volumes::applications::is_system_app(&entry.path)
-            {
+                && info.is_some_and(|info| info.is_system);
+            if directory != crate::core::volumes::applications::URI && info.is_none() {
                 continue;
             }
             let mut decoration = Decoration {
@@ -54,7 +58,7 @@ pub(super) fn resolve_in(
                 },
                 ..Default::default()
             };
-            decoration.icon_path = application_icon(entry);
+            decoration.icon_path = application_icon(entry, info);
             decorations.push(decoration);
             continue;
         }
@@ -79,18 +83,14 @@ pub(super) fn resolve_in(
     decorations
 }
 
-fn application_icon(entry: &DecorationEntry) -> Option<String> {
-    use crate::core::volumes::applications;
-    if applications::is_user(&entry.path) {
-        let path = applications::asset_path(&entry.path).ok()?;
-        return applications::cached_icon(&path.to_string_lossy());
+fn application_icon(
+    entry: &DecorationEntry,
+    info: Option<&fiex_applications::ApplicationDecorationInfo>,
+) -> Option<String> {
+    if let Some(source) = info.and_then(|info| info.icon_source.as_deref()) {
+        return crate::core::volumes::applications::cached_icon(source);
     }
-    let source = if entry.mime == "application/x-fiex-application" {
-        entry.link_target.as_deref()?
-    } else if entry.extension.eq_ignore_ascii_case("app") {
-        entry.path.as_str()
-    } else {
-        return None;
-    };
-    applications::cached_icon(source)
+    (info.is_none() && entry.extension.eq_ignore_ascii_case("app"))
+        .then(|| crate::core::volumes::applications::cached_icon(&entry.path))
+        .flatten()
 }
