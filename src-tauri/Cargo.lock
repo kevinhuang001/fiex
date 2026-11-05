@@ -1863,7 +1863,9 @@ dependencies = [
 name = "fiex-applications"
 version = "0.1.0"
 dependencies = [
+ "fiex-storage",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

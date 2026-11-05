@@ -6,4 +6,6 @@ rust-version = "1.90"
 publish = false
 
 [dependencies]
+fiex-storage = { path = "../../foundation/fiex-storage" }
 serde = { workspace = true }
+serde_json = { workspace = true }

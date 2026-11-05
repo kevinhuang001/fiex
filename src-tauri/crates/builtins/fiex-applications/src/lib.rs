@@ -1,4 +1,5 @@
 //! Applications module state types and virtual-tree identity rules.
+use fiex_storage::{native::NativeScopedStorage, CoreOwnerKey};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
@@ -6,6 +7,15 @@ pub const URI: &str = "applications://";
 pub const SCHEMA: u32 = 1;
 pub const FOLDER_SEGMENT: &str = "folder_";
 pub const APP_SEGMENT: &str = "app_";
+pub const STORAGE_SCOPE: &str = "tree";
+pub const STATE_KEY: &str = "state";
+const STATE_VALUE_LIMIT: usize = 16 * 1024 * 1024 - 1024;
+
+/// Stable storage identity shared by every provider registered by this module.
+/// Keep its name, scope, key, and size quota aligned with the on-disk format.
+pub fn owner_key() -> CoreOwnerKey {
+    CoreOwnerKey::new("applications").with_value_limit(STORAGE_SCOPE, STATE_KEY, STATE_VALUE_LIMIT)
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ApplicationsState {
@@ -65,6 +75,58 @@ pub struct PendingTarget {
     pub asset_id: Option<String>,
     pub extension: String,
     pub kind: PendingKind,
+}
+
+/// Owns the durable tree state format and its optimistic update rules.
+#[derive(Clone)]
+pub struct ApplicationsStore {
+    storage: NativeScopedStorage,
+}
+
+impl ApplicationsStore {
+    pub fn new(storage: NativeScopedStorage) -> Self {
+        Self { storage }
+    }
+
+    pub fn snapshot(&self) -> Result<ApplicationsState, String> {
+        let Some(value) = self.storage.get(STATE_KEY)? else {
+            return Ok(ApplicationsState {
+                schema: SCHEMA,
+                ..Default::default()
+            });
+        };
+        let state: ApplicationsState = serde_json::from_value(value)
+            .map_err(|error| format!("Applications state is corrupted: {error}"))?;
+        if state.schema != SCHEMA {
+            return Err("unsupported Applications state schema".into());
+        }
+        validate_state(&state)?;
+        Ok(state)
+    }
+
+    pub fn update<F>(&self, mut mutate: F) -> Result<ApplicationsState, String>
+    where
+        F: FnMut(&mut ApplicationsState) -> Result<(), String>,
+    {
+        self.storage
+            .update(STATE_KEY, |current: Option<ApplicationsState>| {
+                let mut state = current.unwrap_or_else(|| ApplicationsState {
+                    schema: SCHEMA,
+                    ..Default::default()
+                });
+                if state.schema != SCHEMA {
+                    return Err("unsupported Applications state schema".into());
+                }
+                let previous = state.clone();
+                mutate(&mut state)?;
+                if state == previous {
+                    return Ok(state);
+                }
+                state.revision = state.revision.wrapping_add(1);
+                validate_state(&state)?;
+                Ok(state)
+            })
+    }
 }
 
 pub fn validate_state(state: &ApplicationsState) -> Result<(), String> {
@@ -219,6 +281,46 @@ mod tests {
             name: id.into(),
             order: 0,
         }
+    }
+
+    #[test]
+    fn store_validates_updates_and_advances_revision_once() {
+        let storage = fiex_storage::native::OwnerBoundStorage::from_registry(CoreOwnerKey::new(
+            "applications-store-tests",
+        ))
+        .scoped("tree")
+        .unwrap();
+        storage.delete("state").unwrap();
+        let store = ApplicationsStore::new(storage.clone());
+
+        let initial = store.snapshot().unwrap();
+        assert_eq!(initial.schema, SCHEMA);
+        assert_eq!(initial.revision, 0);
+
+        let updated = store
+            .update(|state| {
+                state
+                    .folders
+                    .insert("root-folder".into(), folder("root-folder", None));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(updated.revision, 1);
+
+        let unchanged = store.update(|_| Ok(())).unwrap();
+        assert_eq!(unchanged, updated);
+
+        assert!(store
+            .update(|state| {
+                state.folders.insert(
+                    "orphan-folder".into(),
+                    folder("orphan-folder", Some("missing-parent")),
+                );
+                Ok(())
+            })
+            .is_err());
+        assert_eq!(store.snapshot().unwrap(), updated);
+        storage.delete("state").unwrap();
     }
 
     #[test]
