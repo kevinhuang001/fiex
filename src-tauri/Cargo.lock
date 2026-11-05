@@ -1801,6 +1801,7 @@ dependencies = [
  "ed25519-dalek",
  "fiex-plugin-sdk",
  "fiex-provider-contracts",
+ "fiex-resource",
  "fiex-storage",
  "file_icon_provider",
  "fontdb",
@@ -1870,6 +1871,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fiex-resource"
+version = "0.1.0"
+dependencies = [
+ "fiex-provider-contracts",
+ "getrandom 0.2.17",
+ "hex",
+ "sha2 0.10.9",
 ]
 
 [[package]]
