@@ -8,8 +8,10 @@ use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+mod path_trash;
 mod recycle_bin;
 
+pub use path_trash::TrashDirectory;
 pub use recycle_bin::{RecycleBin, RECYCLE_BIN_URI};
 
 pub const TRASH_URI: &str = "trash://";
@@ -30,6 +32,11 @@ pub fn is_recycle_bin_uri(uri: &str) -> bool {
 pub fn system_recycle_bin() -> &'static RecycleBin {
     static BACKEND: OnceLock<RecycleBin> = OnceLock::new();
     BACKEND.get_or_init(RecycleBin::system)
+}
+
+pub fn system_trash_directory() -> &'static TrashDirectory {
+    static BACKEND: OnceLock<TrashDirectory> = OnceLock::new();
+    BACKEND.get_or_init(TrashDirectory::system)
 }
 
 /// Core supplies only trusted URI resolution, platform operations, and the

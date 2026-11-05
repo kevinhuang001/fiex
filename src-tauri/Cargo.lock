@@ -1955,11 +1955,14 @@ name = "fiex-trash"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dirs 6.0.0",
  "fiex-platform",
  "fiex-provider-contracts",
  "fiex-storage",
+ "mime_guess",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
