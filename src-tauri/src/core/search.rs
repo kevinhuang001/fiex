@@ -28,7 +28,7 @@ const BATCH_SIZE: usize = 50;
 const BATCH_INTERVAL: Duration = Duration::from_millis(120);
 /// Content readers stay bounded and skip format extraction, avoiding a disk
 /// walk that reads every byte of every supported document on each keystroke.
-const CONTENT_FILE_LIMIT: u64 = 2 * 1024 * 1024;
+pub(crate) use fiex_search::CONTENT_FILE_LIMIT;
 
 /// Search mode is shared with SDK VFS and provider DTOs.
 pub use fiex_provider_contracts::SearchMode;

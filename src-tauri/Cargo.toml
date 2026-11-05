@@ -53,6 +53,7 @@ fiex-resource = { path = "crates/foundation/fiex-resource" }
 fiex-runtime = { path = "crates/foundation/fiex-runtime" }
 fiex-platform = { path = "crates/platform/fiex-platform" }
 fiex-fs = { path = "crates/foundation/fiex-fs" }
+fiex-search = { path = "crates/foundation/fiex-search" }
 fiex-recent = { path = "crates/builtins/fiex-recent" }
 fiex-applications = { path = "crates/builtins/fiex-applications" }
 fiex-trash = { path = "crates/builtins/fiex-trash" }

@@ -1807,6 +1807,7 @@ dependencies = [
  "fiex-recent",
  "fiex-resource",
  "fiex-runtime",
+ "fiex-search",
  "fiex-storage",
  "fiex-trash",
  "file_icon_provider",
@@ -1942,6 +1943,15 @@ version = "0.1.0"
 dependencies = [
  "fiex-provider-contracts",
  "fiex-storage",
+]
+
+[[package]]
+name = "fiex-search"
+version = "0.1.0"
+dependencies = [
+ "fiex-provider-contracts",
+ "ignore",
+ "tempfile",
 ]
 
 [[package]]
