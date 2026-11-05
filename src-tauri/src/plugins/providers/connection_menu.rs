@@ -22,6 +22,14 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use validation::valid_items;
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn ConnectionContextMenuProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 #[cfg(test)]
 use native::items as builtin_items;
 

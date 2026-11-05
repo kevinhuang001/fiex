@@ -10,7 +10,7 @@ use fiex_storage::CoreOwnerKey;
 use serde_json::json;
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 mod application_provider;
@@ -147,91 +147,79 @@ impl VfsProvider for NativeVfsAdapter {
     }
 }
 
-struct RegisteredNativeVfs {
-    providers: NativeProviderRegistry<dyn RegisteredNativeVfsProvider>,
-}
-
-fn registration() -> &'static RegisteredNativeVfs {
-    static REGISTERED: OnceLock<RegisteredNativeVfs> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut registry: NativeProviderRegistry<dyn RegisteredNativeVfsProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Vfs);
-        for (id, owner, provider, uri_schemes, provider_extensions) in [
-            (
-                "core:recent",
-                CoreOwnerKey::new("recent"),
-                fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
-                fiex_recent::recent_uri_schemes(),
-                NativeVfsExtensions {
-                    validate_child: Some(validate_recent_child),
-                    ..NativeVfsExtensions::default()
-                },
-            ),
-            (
-                "core:applications",
-                fiex_applications::owner_key(),
-                Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
-                APPLICATIONS_URI_SCHEMES,
-                NativeVfsExtensions {
-                    #[cfg(feature = "desktop")]
-                    open: Some(applications::open),
-                    validate_child: Some(applications::validate_child),
-                    child_path: Some(applications_child_path),
-                    parent_path: Some(applications::parent_uri),
-                    same_mount_move: Some(application_provider::move_within_mount),
-                },
-            ),
-            (
-                "core:trash",
-                fiex_trash::owner_key(),
-                fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
-                fiex_trash::uri_schemes(),
-                NativeVfsExtensions {
-                    validate_child: Some(trash_vfs::validate_child),
-                    ..NativeVfsExtensions::default()
-                },
-            ),
-            (
-                "core:local-fs",
-                CoreOwnerKey::new("core"),
-                Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
-                NO_URI_SCHEMES,
-                NativeVfsExtensions {
-                    child_path: Some(host_child_path),
-                    ..NativeVfsExtensions::default()
-                },
-            ),
-            (
-                "core:usb-fs",
-                CoreOwnerKey::new("core"),
-                Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
-                NO_URI_SCHEMES,
-                NativeVfsExtensions {
-                    validate_child: Some(usb_validate_child),
-                    child_path: Some(usb_child_path),
-                    ..NativeVfsExtensions::default()
-                },
-            ),
-        ] {
-            let provider: Arc<dyn RegisteredNativeVfsProvider> = Arc::new(NativeVfsAdapter {
-                provider,
-                extensions: provider_extensions,
-            });
-            let mut module =
-                registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
+pub(crate) fn register(registry: &mut NativeProviderRegistry<dyn RegisteredNativeVfsProvider>) {
+    for (id, owner, provider, uri_schemes, provider_extensions) in [
+        (
+            "core:recent",
+            CoreOwnerKey::new("recent"),
+            fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
+            fiex_recent::recent_uri_schemes(),
+            NativeVfsExtensions {
+                validate_child: Some(validate_recent_child),
+                ..NativeVfsExtensions::default()
+            },
+        ),
+        (
+            "core:applications",
+            fiex_applications::owner_key(),
+            Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
+            APPLICATIONS_URI_SCHEMES,
+            NativeVfsExtensions {
+                #[cfg(feature = "desktop")]
+                open: Some(applications::open),
+                validate_child: Some(applications::validate_child),
+                child_path: Some(applications_child_path),
+                parent_path: Some(applications::parent_uri),
+                same_mount_move: Some(application_provider::move_within_mount),
+            },
+        ),
+        (
+            "core:trash",
+            fiex_trash::owner_key(),
+            fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
+            fiex_trash::uri_schemes(),
+            NativeVfsExtensions {
+                validate_child: Some(trash_vfs::validate_child),
+                ..NativeVfsExtensions::default()
+            },
+        ),
+        (
+            "core:local-fs",
+            CoreOwnerKey::new("core"),
+            Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
+            NO_URI_SCHEMES,
+            NativeVfsExtensions {
+                child_path: Some(host_child_path),
+                ..NativeVfsExtensions::default()
+            },
+        ),
+        (
+            "core:usb-fs",
+            CoreOwnerKey::new("core"),
+            Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
+            NO_URI_SCHEMES,
+            NativeVfsExtensions {
+                validate_child: Some(usb_validate_child),
+                child_path: Some(usb_child_path),
+                ..NativeVfsExtensions::default()
+            },
+        ),
+    ] {
+        let provider: Arc<dyn RegisteredNativeVfsProvider> = Arc::new(NativeVfsAdapter {
+            provider,
+            extensions: provider_extensions,
+        });
+        let mut module =
+            registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
+        module
+            .register(id, 100, ProviderMatchRule::default(), provider)
+            .expect("invalid native VFS registration");
+        for scheme in uri_schemes {
             module
-                .register(id, 100, ProviderMatchRule::default(), provider)
-                .expect("invalid native VFS registration");
-            for scheme in uri_schemes {
-                module
-                    .register_vfs_uri(id, scheme)
-                    .expect("invalid native VFS URI route");
-            }
+                .register_vfs_uri(id, scheme)
+                .expect("invalid native VFS URI route");
         }
-        RegisteredNativeVfs {
-            providers: registry,
-        }
-    })
+    }
 }
 
 pub(crate) fn recent_services() -> Arc<dyn fiex_recent::RecentModuleServices> {
@@ -242,8 +230,9 @@ pub(crate) fn trash_services() -> Arc<dyn fiex_trash::TrashModuleServices> {
     trash_provider::services()
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn RegisteredNativeVfsProvider> {
-    &registration().providers
+fn registry() -> NativeProviderRegistry<dyn RegisteredNativeVfsProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Vfs)
 }
 
 /// Resolve the native VFS identity at the URI boundary. General services use

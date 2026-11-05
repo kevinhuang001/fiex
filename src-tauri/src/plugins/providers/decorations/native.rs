@@ -14,10 +14,7 @@ use fiex_provider_contracts::{
     DecorationContribution, DecorationProvider, LocationMatch, MatchResource, ProviderError,
     ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-};
+use std::{collections::HashMap, sync::Arc};
 
 struct BuiltinDecoration(NativeKind);
 impl DecorationProvider for BuiltinDecoration {
@@ -71,49 +68,48 @@ pub(super) fn invocation(
     registry().invocation(id, method, params, resources, directory)
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> = OnceLock::new();
-    REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn DecorationProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Decoration);
-        for (id, priority, kind) in [
-            ("builtin:tags", -12, NativeKind::Tags),
-            (
-                "builtin:connection-status",
-                -10,
-                NativeKind::ConnectionStatus,
-            ),
-            ("builtin:application-icon", -9, NativeKind::ApplicationIcon),
-        ] {
-            let rule = match kind {
-                NativeKind::Tags => ProviderMatchRule {
-                    storage: Some(LocationMatch {
-                        types: Some(vec!["fs".into()]),
-                        ..Default::default()
-                    }),
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn DecorationProvider>) {
+    for (id, priority, kind) in [
+        ("builtin:tags", -12, NativeKind::Tags),
+        (
+            "builtin:connection-status",
+            -10,
+            NativeKind::ConnectionStatus,
+        ),
+        ("builtin:application-icon", -9, NativeKind::ApplicationIcon),
+    ] {
+        let rule = match kind {
+            NativeKind::Tags => ProviderMatchRule {
+                storage: Some(LocationMatch {
+                    types: Some(vec!["fs".into()]),
                     ..Default::default()
-                },
-                NativeKind::ConnectionStatus => ProviderMatchRule {
-                    storage: Some(LocationMatch {
-                        types: Some(vec!["vfs".into()]),
-                        ..Default::default()
-                    }),
+                }),
+                ..Default::default()
+            },
+            NativeKind::ConnectionStatus => ProviderMatchRule {
+                storage: Some(LocationMatch {
+                    types: Some(vec!["vfs".into()]),
                     ..Default::default()
-                },
-                NativeKind::ApplicationIcon => ProviderMatchRule {
-                    view: Some(LocationMatch {
-                        provider_ids: Some(vec!["core:applications".into()]),
-                        ..Default::default()
-                    }),
+                }),
+                ..Default::default()
+            },
+            NativeKind::ApplicationIcon => ProviderMatchRule {
+                view: Some(LocationMatch {
+                    provider_ids: Some(vec!["core:applications".into()]),
                     ..Default::default()
-                },
-            };
-            values
-                .register(id, priority, rule, Arc::new(BuiltinDecoration(kind)))
-                .expect("invalid native DecorationProvider");
-        }
+                }),
+                ..Default::default()
+            },
+        };
         values
-    })
+            .register(id, priority, rule, Arc::new(BuiltinDecoration(kind)))
+            .expect("invalid native DecorationProvider");
+    }
+}
+
+fn registry() -> NativeProviderRegistry<dyn DecorationProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Decoration)
 }
 
 pub(super) fn providers(targets: &[MatchResource], directory: &str) -> Vec<Resolver> {

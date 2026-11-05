@@ -11,7 +11,7 @@ use fiex_info::metadata_section;
 use fiex_provider_contracts::{
     InfoProvider, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 struct MetadataInfo;
 impl InfoProvider for MetadataInfo {
@@ -41,33 +41,32 @@ impl InfoProvider for MediaInfo {
 
 /// Each registered native implementation has one persistent, typed Arc.
 /// The request-scoped ResourceSnapshot never enters this global registry.
-fn registry() -> &'static NativeProviderRegistry<dyn InfoProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn InfoProvider>> = OnceLock::new();
-    REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn InfoProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Info);
-        values
-            .register(
-                "core.metadata",
-                1000,
-                ProviderMatchRule::default(),
-                Arc::new(MetadataInfo),
-            )
-            .expect("invalid metadata InfoProvider");
-        values
-            .register(
-                "core.media",
-                100,
-                ProviderMatchRule {
-                    mime_types: vec!["audio/*".into(), "video/*".into()],
-                    kinds: vec!["file".into()],
-                    ..Default::default()
-                },
-                Arc::new(MediaInfo),
-            )
-            .expect("invalid media InfoProvider");
-        values
-    })
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn InfoProvider>) {
+    values
+        .register(
+            "core.metadata",
+            1000,
+            ProviderMatchRule::default(),
+            Arc::new(MetadataInfo),
+        )
+        .expect("invalid metadata InfoProvider");
+    values
+        .register(
+            "core.media",
+            100,
+            ProviderMatchRule {
+                mime_types: vec!["audio/*".into(), "video/*".into()],
+                kinds: vec!["file".into()],
+                ..Default::default()
+            },
+            Arc::new(MediaInfo),
+        )
+        .expect("invalid media InfoProvider");
+}
+
+fn registry() -> NativeProviderRegistry<dyn InfoProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Info)
 }
 
 pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {

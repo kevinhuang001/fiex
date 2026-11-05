@@ -3,14 +3,18 @@ use crate::core::volumes::{recycle, trash_vfs};
 
 #[test]
 fn only_view_specific_actions_have_native_view_providers() {
+    let registry = registry();
     assert_eq!(
-        PROVIDER_IDS,
-        [
-            "builtin:reveal",
-            "builtin:remove-from-recent",
-            "builtin:restore",
-            "builtin:empty-trash"
-        ]
+        registry.module_id("builtin:open").as_deref(),
+        Some("core:actions")
+    );
+    assert_eq!(
+        registry.module_id("builtin:remove-from-recent").as_deref(),
+        Some("core:recent")
+    );
+    assert_eq!(
+        registry.module_id("builtin:restore").as_deref(),
+        Some("core:trash")
     );
     assert!(providers("applications://", &["applications://system-app".into()]).is_empty());
 }

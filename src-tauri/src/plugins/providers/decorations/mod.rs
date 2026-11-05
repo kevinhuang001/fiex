@@ -11,6 +11,14 @@ mod proxy;
 mod query;
 mod types;
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn fiex_provider_contracts::DecorationProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }

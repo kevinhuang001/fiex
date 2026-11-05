@@ -30,31 +30,6 @@ pub(super) fn item(
     providers::item(id, title, icon, shortcut)
 }
 
-const PROVIDER_IDS: [&str; 22] = [
-    "builtin:open",
-    "builtin:preview",
-    "builtin:info",
-    "builtin:tags",
-    "builtin:new-folder",
-    "builtin:new-file",
-    "builtin:rename",
-    "builtin:batch-rename",
-    "builtin:copy",
-    "builtin:cut",
-    "builtin:duplicate",
-    "builtin:copy-path",
-    "builtin:pin",
-    "builtin:unpin",
-    "builtin:cache",
-    "builtin:uncache",
-    "builtin:conflict-resolution",
-    "builtin:move-to-trash",
-    "builtin:delete-permanently",
-    "builtin:reveal",
-    "builtin:restore",
-    "builtin:empty-trash",
-];
-
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
     pub(super) paths: &'a [String],
@@ -69,7 +44,7 @@ impl Selection<'_> {
     }
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
 }
 
@@ -105,14 +80,15 @@ pub(super) fn invocation_for(
 }
 
 pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
-    registry()
+    let registry = registry();
+    registry
         .matched_candidates(
             &context.match_targets,
             context.directory_target.as_ref(),
             context.paths.len(),
         )
         .into_iter()
-        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .filter(|candidate| registry.module_id(&candidate.id).as_deref() == Some("core:actions"))
         .collect()
 }
 
@@ -122,14 +98,15 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
 pub(super) fn preflight_availability(
     context: &Context,
 ) -> super::builtin::MenuPreflightAvailability {
-    let matched = registry()
+    let registry = registry();
+    let matched = registry
         .matched_candidates(
             &context.match_targets,
             context.directory_target.as_ref(),
             context.paths.len(),
         )
         .into_iter()
-        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .filter(|candidate| registry.module_id(&candidate.id).as_deref() == Some("core:actions"))
         .map(|candidate| candidate.id)
         .collect::<std::collections::HashSet<_>>();
     let capabilities = context.capabilities();

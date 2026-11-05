@@ -14,7 +14,7 @@ use serde_json::json;
 mod providers;
 #[cfg(test)]
 use serde_json::Value;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 fn context(invocation: &dyn ProviderInvocation) -> Result<&Context, ProviderError> {
     NativeProviderInvocation::local_data(invocation)
@@ -72,41 +72,39 @@ fn available_action(
     Ok(item_id.to_owned())
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn ConnectionContextMenuProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ConnectionContextMenuProvider>> =
-        OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn ConnectionContextMenuProvider> =
-            NativeProviderRegistry::shared(ProviderKind::ConnectionContextMenu);
-        let implementations: [(&str, i64, Arc<dyn ConnectionContextMenuProvider>); 4] = [
-            (
-                "builtin:connection-edit",
-                100,
-                Arc::new(Edit) as Arc<dyn ConnectionContextMenuProvider>,
-            ),
-            (
-                "builtin:connection-session",
-                90,
-                Arc::new(Session) as Arc<dyn ConnectionContextMenuProvider>,
-            ),
-            (
-                "builtin:connection-sync",
-                80,
-                Arc::new(SyncMenu) as Arc<dyn ConnectionContextMenuProvider>,
-            ),
-            (
-                "builtin:connection-close",
-                70,
-                Arc::new(Close) as Arc<dyn ConnectionContextMenuProvider>,
-            ),
-        ];
-        for (id, priority, provider) in implementations {
-            values
-                .register(id, priority, ProviderMatchRule::default(), provider)
-                .expect("invalid native connection-menu registration");
-        }
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn ConnectionContextMenuProvider>) {
+    let implementations: [(&str, i64, Arc<dyn ConnectionContextMenuProvider>); 4] = [
+        (
+            "builtin:connection-edit",
+            100,
+            Arc::new(Edit) as Arc<dyn ConnectionContextMenuProvider>,
+        ),
+        (
+            "builtin:connection-session",
+            90,
+            Arc::new(Session) as Arc<dyn ConnectionContextMenuProvider>,
+        ),
+        (
+            "builtin:connection-sync",
+            80,
+            Arc::new(SyncMenu) as Arc<dyn ConnectionContextMenuProvider>,
+        ),
+        (
+            "builtin:connection-close",
+            70,
+            Arc::new(Close) as Arc<dyn ConnectionContextMenuProvider>,
+        ),
+    ];
+    for (id, priority, provider) in implementations {
         values
-    })
+            .register(id, priority, ProviderMatchRule::default(), provider)
+            .expect("invalid native connection-menu registration");
+    }
+}
+
+fn registry() -> NativeProviderRegistry<dyn ConnectionContextMenuProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::ConnectionContextMenu)
 }
 
 pub(super) fn providers(targets: &[MatchResource]) -> Vec<Resolver> {

@@ -62,6 +62,10 @@ impl<T: ?Sized + Send + Sync + 'static> NativeProviderRegistry<T> {
         self.entries.owner(id)
     }
 
+    pub fn module_id(&self, id: &str) -> Option<String> {
+        self.entries.module_descriptor(id).map(|module| module.id)
+    }
+
     pub fn management_storage_for(
         &self,
         id: &str,
