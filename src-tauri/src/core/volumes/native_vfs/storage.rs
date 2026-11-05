@@ -1,5 +1,5 @@
 //! Platform storage implementations projected through the shared VFS DTOs.
-use super::{applications, recycle, trash_vfs, APPLICATIONS_URI, RECENT_URI};
+use super::{applications, recycle, trash_vfs, APPLICATIONS_URI};
 use crate::core::files::Entry;
 use fiex_provider_contracts::FsOperation;
 
@@ -37,29 +37,6 @@ pub(super) fn root_entry(id: &str, path: &str, operations: &[FsOperation]) -> En
             .map(|operation| operation.as_str().to_owned())
             .collect(),
         ..Default::default()
-    }
-}
-
-pub(super) fn recent_stat(
-    path: &str,
-    operations: &[FsOperation],
-    storage: &crate::core::recent::RecentStorage,
-) -> Result<Entry, String> {
-    if path == RECENT_URI {
-        Ok(root_entry("core:recent", path, operations))
-    } else {
-        crate::core::recent::entry_for_alias_with_storage(path, storage)
-    }
-}
-
-pub(super) fn recent_list(
-    path: &str,
-    storage: &crate::core::recent::RecentStorage,
-) -> Result<Vec<Entry>, String> {
-    if path == RECENT_URI {
-        crate::core::recent::entries_with_storage(storage)
-    } else {
-        Err("Unsupported: builtin node has no children".into())
     }
 }
 

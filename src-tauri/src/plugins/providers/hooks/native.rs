@@ -1,6 +1,6 @@
 //! Core hooks use the same typed registration, matching, and owner binding as
 //! other native provider kinds.
-use super::RecentHook;
+
 use crate::plugins::{events::Resolver, provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{HookProvider, ProviderKind, ProviderMatchRule};
 use fiex_runtime::ModuleDescriptor;
@@ -23,7 +23,8 @@ fn registry() -> &'static NativeProviderRegistry<dyn HookProvider> {
                 Some("afterOpen"),
                 100,
                 ProviderMatchRule::default(),
-                Arc::new(RecentHook),
+                fiex_recent::RecentModule::new(crate::core::volumes::native_vfs::recent_services())
+                    .hook(),
             )
             .expect("invalid Recent Hook registration");
         registry

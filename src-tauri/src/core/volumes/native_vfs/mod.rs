@@ -7,7 +7,7 @@ use fiex_provider_contracts::{
 };
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -32,7 +32,6 @@ pub use broker::{
 pub(crate) use presentation::navigable_source;
 pub(crate) use presentation::recent_navigation_source;
 pub use presentation::{default_view, icon_for, opaque, resource_entry};
-use recent_provider::RecentView;
 pub use shared::core_entry;
 use shared::target_invocation;
 use storage_provider::StorageProvider;
@@ -41,7 +40,6 @@ use trash_provider::TrashView;
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 const NO_URI_SCHEMES: &[&str] = &[];
-const RECENT_URI_SCHEMES: &[&str] = &["recent"];
 const APPLICATIONS_URI_SCHEMES: &[&str] = &["applications"];
 const TRASH_URI_SCHEMES: &[&str] = &["trash", "recyclebin"];
 
@@ -81,8 +79,8 @@ fn registration() -> &'static RegisteredNativeVfs {
             (
                 "core:recent",
                 CoreOwnerKey::new("recent"),
-                Arc::new(RecentView) as Arc<dyn VfsProvider>,
-                RECENT_URI_SCHEMES,
+                fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
+                fiex_recent::recent_uri_schemes(),
                 NativeVfsExtensions {
                     validate_child: Some(validate_recent_child),
                     ..NativeVfsExtensions::default()
@@ -155,6 +153,10 @@ fn registration() -> &'static RegisteredNativeVfs {
             extensions,
         }
     })
+}
+
+pub(crate) fn recent_services() -> Arc<dyn fiex_recent::RecentModuleServices> {
+    recent_provider::services()
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
