@@ -1,14 +1,12 @@
 //! Typed native Core provider registrations share storage, ID validation,
 //! and duplicate checking with the SDK's provider-instance registry.
 //! Core retains static IDs solely to construct native EventRouter candidates.
-use crate::{
-    infrastructure::provider_storage::{native::OwnerBoundStorage, CoreOwnerKey},
-    plugins::events::Resolver,
-};
+use crate::plugins::events::Resolver;
 use fiex_provider_contracts::{
     MatchResource, ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule,
     ProviderMatcher,
 };
+use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
 use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
@@ -120,7 +118,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         &self,
         id: &str,
         scope: &str,
-    ) -> Result<crate::infrastructure::provider_storage::native::NativeScopedStorage, String> {
+    ) -> Result<fiex_storage::native::NativeScopedStorage, String> {
         let owner = self
             .owner(id)
             .ok_or_else(|| format!("native provider is not registered: {id}"))?;
@@ -232,7 +230,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::provider_storage::CoreOwnerKey;
+    use fiex_storage::CoreOwnerKey;
 
     trait Handler: Send + Sync {
         fn call(&self) -> u32;

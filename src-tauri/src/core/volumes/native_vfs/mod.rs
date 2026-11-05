@@ -2,13 +2,13 @@
 use super::{applications, recycle, trash_vfs};
 use crate::{
     core::files::Entry,
-    infrastructure::provider_storage::CoreOwnerKey,
     plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
 };
 use fiex_provider_contracts::{
     FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
     ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
 };
+use fiex_storage::CoreOwnerKey;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -87,7 +87,11 @@ fn registration() -> &'static RegisteredNativeVfs {
             ),
             (
                 "core:applications",
-                CoreOwnerKey::new("applications"),
+                CoreOwnerKey::new("applications").with_value_limit(
+                    "tree",
+                    "state",
+                    16 * 1024 * 1024 - 1024,
+                ),
                 Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
                 NativeVfsExtensions {
                     #[cfg(feature = "desktop")]
@@ -373,7 +377,7 @@ fn shared_view_for(path: &str) -> Option<&'static dyn VfsProvider> {
 pub(crate) fn management_storage_for_provider(
     provider_id: &str,
     scope: &str,
-) -> Result<crate::infrastructure::provider_storage::native::NativeScopedStorage, String> {
+) -> Result<fiex_storage::native::NativeScopedStorage, String> {
     registry().management_storage_for(provider_id, scope)
 }
 

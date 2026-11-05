@@ -1,6 +1,8 @@
 //! Single persistent engine shared by Native Core Modules and authenticated
 //! Plugin Modules. Callers supply a trusted OwnerId, never a wire value.
-use super::owner::{CoreOwnerKey, OwnerId};
+#[cfg(test)]
+use super::owner::CoreOwnerKey;
+use super::owner::OwnerId;
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -14,10 +16,9 @@ const MAX_SCOPE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CACHED_SCOPES: usize = 128;
 
 fn max_value_bytes(owner: &OwnerId, scope: &str, key: &str) -> usize {
-    if owner.is_core(CoreOwnerKey::new("applications")) && scope == "tree" && key == "state" {
-        MAX_SCOPE_BYTES - 1024
-    } else {
-        MAX_VALUE_BYTES
+    match owner {
+        OwnerId::Core(core) => core.max_value_bytes(scope, key, MAX_VALUE_BYTES),
+        OwnerId::Plugin(_) => MAX_VALUE_BYTES,
     }
 }
 
@@ -343,8 +344,12 @@ mod tests {
     }
 
     #[test]
-    fn applications_tree_can_use_atomic_scope_quota_without_raising_plugin_limit() {
-        let applications = OwnerId::core(CoreOwnerKey::new("applications"));
+    fn module_owned_value_quota_does_not_raise_plugin_limit() {
+        let applications = OwnerId::core(CoreOwnerKey::new("quota-test").with_value_limit(
+            "tree",
+            "state",
+            MAX_SCOPE_BYTES - 1024,
+        ));
         let plugin = OwnerId::plugin("valid.plugin");
         assert_eq!(
             max_value_bytes(&applications, "tree", "state"),

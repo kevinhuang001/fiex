@@ -1,11 +1,9 @@
 //! Core hooks use the same typed registration, matching, and owner binding as
 //! other native provider kinds.
 use super::RecentHook;
-use crate::{
-    infrastructure::provider_storage::CoreOwnerKey,
-    plugins::{events::Resolver, provider_registry::native::NativeProviderRegistry},
-};
+use crate::plugins::{events::Resolver, provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{HookProvider, ProviderKind, ProviderMatchRule};
+use fiex_storage::CoreOwnerKey;
 use std::sync::{Arc, OnceLock};
 
 fn registry() -> &'static NativeProviderRegistry<dyn HookProvider> {

@@ -1,3 +1,12 @@
+[workspace]
+members = [".", "crates/*/*"]
+resolver = "2"
+
+[workspace.dependencies]
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
 [package]
 name = "fiex"
 version = "0.7.11"
@@ -38,6 +47,7 @@ tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
 futures = "0.3"
+fiex-storage = { path = "crates/foundation/fiex-storage" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
