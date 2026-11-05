@@ -17,28 +17,14 @@ mod icon_cache;
 pub use icon_cache::cached_icon_with;
 mod catalog;
 pub use catalog::{
-    system_id, ApplicationCatalog, ApplicationDecorationInfo, ApplicationsBackend,
-    CatalogApplication, InstalledApplication,
+    system_id, ApplicationCatalog, ApplicationsBackend, CatalogApplication, InstalledApplication,
 };
 mod tree;
 pub use tree::{parent_uri, validate_child_in};
-
-/// Whether a launch target is an executable application format supported by
-/// the Applications view. URL handlers and ordinary documents are excluded.
-pub fn is_executable_target(value: &str) -> bool {
-    if value.contains("://") {
-        return false;
-    }
-    let extension = std::path::Path::new(value)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    matches!(
-        extension.as_str(),
-        "exe" | "com" | "bat" | "cmd" | "msc" | "cpl" | "scr" | "ps1" | "appref-ms" | "jar"
-    )
-}
+mod presentation;
+pub use presentation::ApplicationDecorationInfo;
+mod target;
+pub use target::is_executable_target;
 
 /// Stable storage identity shared by every provider registered by this module.
 /// Keep its name, scope, key, and size quota aligned with the on-disk format.
