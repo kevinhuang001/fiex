@@ -4,22 +4,23 @@
 use super::types::Decoration;
 #[cfg(test)]
 use super::types::DecorationEntry;
-use super::{
-    builtin::{self, NativeKind},
-    invocation,
-};
+use super::{builtin, invocation};
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
-    DecorationContribution, DecorationProvider, LocationMatch, MatchResource, ProviderError,
-    ProviderInvocation, ProviderKind, ProviderMatchRule,
+    DecorationContribution, DecorationProvider, MatchResource, ProviderError, ProviderInvocation,
+    ProviderKind,
 };
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 use std::{collections::HashMap, sync::Arc};
 
-struct BuiltinDecoration(NativeKind);
-impl DecorationProvider for BuiltinDecoration {
+struct NativeDecorationServices;
+
+impl fiex_decorations::DecorationModuleServices for NativeDecorationServices {
     fn resolve(
         &self,
+        kind: fiex_decorations::NativeKind,
         ctx: &dyn ProviderInvocation,
     ) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
@@ -28,7 +29,7 @@ impl DecorationProvider for BuiltinDecoration {
             .iter()
             .map(|resource| (resource.display.as_str(), resource))
             .collect::<HashMap<_, _>>();
-        builtin::resolve_in(self.0, &services.directory, services.entries.as_ref())
+        builtin::resolve_in(kind, &services.directory, services.entries.as_ref())
             .into_iter()
             .map(|decoration| {
                 let target = resources_by_path
@@ -69,40 +70,21 @@ pub(super) fn invocation(
 }
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn DecorationProvider>) {
-    for (id, priority, kind) in [
-        ("builtin:tags", -12, NativeKind::Tags),
-        (
-            "builtin:connection-status",
-            -10,
-            NativeKind::ConnectionStatus,
-        ),
-        ("builtin:application-icon", -9, NativeKind::ApplicationIcon),
-    ] {
-        let rule = match kind {
-            NativeKind::Tags => ProviderMatchRule {
-                storage: Some(LocationMatch {
-                    types: Some(vec!["fs".into()]),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            NativeKind::ConnectionStatus => ProviderMatchRule {
-                storage: Some(LocationMatch {
-                    types: Some(vec!["vfs".into()]),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            NativeKind::ApplicationIcon => ProviderMatchRule {
-                view: Some(LocationMatch {
-                    provider_ids: Some(vec!["core:applications".into()]),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-        };
-        values
-            .register(id, priority, rule, Arc::new(BuiltinDecoration(kind)))
+    let mut module = values.module(ModuleDescriptor::new(
+        fiex_decorations::MODULE_ID,
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
+    for registration in
+        fiex_decorations::DecorationModule::new(Arc::new(NativeDecorationServices)).registrations()
+    {
+        module
+            .register(
+                registration.id,
+                registration.priority,
+                registration.rule,
+                registration.provider,
+            )
             .expect("invalid native DecorationProvider");
     }
 }

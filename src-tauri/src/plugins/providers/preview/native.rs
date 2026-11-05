@@ -1,24 +1,31 @@
 //! Persistent, typed native PreviewProvider registrations. Every Core
 //! preview implementation lives behind the same validated descriptor shape
 //! as its IPC peer; only the transport-specific adapter differs.
-use super::builtin::{builtin_view, Builtin};
+use super::builtin::builtin_view;
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchExclude, ProviderMatchRule, ResourceMetadata,
+    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
+    ResourceMetadata,
 };
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 #[cfg(test)]
 use serde_json::json;
 use std::sync::Arc;
 
-struct BuiltinPreview(Builtin);
-impl PreviewProvider for BuiltinPreview {
-    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<PreviewView, ProviderError> {
+struct NativePreviewServices;
+
+impl fiex_preview::PreviewModuleServices for NativePreviewServices {
+    fn open(
+        &self,
+        kind: fiex_preview::Builtin,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<PreviewView, ProviderError> {
         let resource = NativeProviderInvocation::resource(ctx, 0)?;
-        let path = if self.0 == Builtin::Fallback {
+        let path = if kind == fiex_preview::Builtin::Fallback {
             resource.local.clone()
         } else {
             let user_action = NativeProviderInvocation::user_action(ctx)?;
@@ -26,71 +33,26 @@ impl PreviewProvider for BuiltinPreview {
                 .export_path(user_action)
                 .map_err(ProviderError::internal)?
         };
-        let view =
-            builtin_view(self.0, &path, &resource.display).map_err(ProviderError::internal)?;
+        let view = builtin_view(kind, &path, &resource.display).map_err(ProviderError::internal)?;
         serde_json::from_value(view).map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
 
-fn application_view_exclude() -> ProviderMatchExclude {
-    ProviderMatchExclude {
-        view: Some(LocationMatch {
-            provider_ids: Some(vec!["core:applications".into()]),
-            ..Default::default()
-        }),
-        ..Default::default()
-    }
-}
-
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn PreviewProvider>) {
-    for kind in [
-        Builtin::Text,
-        Builtin::Image,
-        Builtin::Media,
-        Builtin::Pdf,
-        Builtin::Fallback,
-    ] {
-        let rule = match kind {
-            Builtin::Text => ProviderMatchRule {
-                mime_types: vec![
-                    "text/*".into(),
-                    "application/json".into(),
-                    "application/xml".into(),
-                    "application/javascript".into(),
-                ],
-                kinds: vec!["file".into()],
-                exclude: Some(application_view_exclude()),
-                ..Default::default()
-            },
-            Builtin::Image => ProviderMatchRule {
-                mime_types: vec!["image/*".into()],
-                kinds: vec!["file".into()],
-                exclude: Some(application_view_exclude()),
-                ..Default::default()
-            },
-            Builtin::Media => ProviderMatchRule {
-                mime_types: vec!["audio/*".into(), "video/*".into()],
-                kinds: vec!["file".into()],
-                exclude: Some(application_view_exclude()),
-                ..Default::default()
-            },
-            Builtin::Pdf => ProviderMatchRule {
-                mime_types: vec!["application/pdf".into()],
-                kinds: vec!["file".into()],
-                exclude: Some(application_view_exclude()),
-                ..Default::default()
-            },
-            Builtin::Fallback => ProviderMatchRule {
-                exclude: Some(application_view_exclude()),
-                ..Default::default()
-            },
-        };
-        values
+    let mut module = values.module(ModuleDescriptor::new(
+        fiex_preview::MODULE_ID,
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
+    for registration in
+        fiex_preview::PreviewModule::new(Arc::new(NativePreviewServices)).registrations()
+    {
+        module
             .register(
-                kind.id(),
-                kind.priority(),
-                rule,
-                Arc::new(BuiltinPreview(kind)),
+                registration.id,
+                registration.priority,
+                registration.rule,
+                registration.provider,
             )
             .expect("invalid native PreviewProvider");
     }

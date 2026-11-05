@@ -9,6 +9,8 @@ use std::{fs, path::Path};
 
 const MAX_TEXT: usize = 256 * 1024;
 
+pub const MODULE_ID: &str = "core:preview";
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Text,
@@ -17,6 +19,10 @@ pub enum Builtin {
     Pdf,
     Fallback,
 }
+
+mod providers;
+
+pub use providers::{PreviewModule, PreviewModuleServices, PreviewProviderRegistration};
 
 impl Builtin {
     pub const fn id(self) -> &'static str {

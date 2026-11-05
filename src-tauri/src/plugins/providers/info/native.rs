@@ -2,66 +2,68 @@
 //! registered once, then selected with the same validated shared descriptors
 //! used to describe SDK provider instances. No native ID dispatch table lives
 //! inside the EventRouter or the per-request endpoint.
-use super::{localization, media::media_sections, InfoSection};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
-use fiex_info::metadata_section;
-use fiex_provider_contracts::{
-    InfoProvider, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
-};
+use fiex_provider_contracts::{InfoProvider, ProviderError, ProviderInvocation, ProviderKind};
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
 
-struct MetadataInfo;
-impl InfoProvider for MetadataInfo {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
-        let resource = NativeProviderInvocation::resource(ctx, 0)?;
-        Ok(vec![metadata_section(
-            &resource.display,
-            &resource.local,
-            resource.stat.as_ref(),
-            resource.metadata(),
-            localization(),
-        )])
-    }
-}
+#[cfg(test)]
+use super::InfoSection;
 
-struct MediaInfo;
-impl InfoProvider for MediaInfo {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+struct NativeInfoServices;
+
+impl fiex_info::InfoModuleServices for NativeInfoServices {
+    fn metadata_input(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<fiex_info::InfoMetadataInput, ProviderError> {
+        let resource = NativeProviderInvocation::resource(ctx, 0)?;
+        Ok(fiex_info::InfoMetadataInput {
+            display: resource.display.clone(),
+            local: resource.local.clone(),
+            stat: resource.stat.clone(),
+            metadata: resource.metadata().cloned(),
+        })
+    }
+
+    fn media_path(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<std::path::PathBuf, ProviderError> {
         let resource = NativeProviderInvocation::resource(ctx, 0)?;
         let user_action = NativeProviderInvocation::user_action(ctx)?;
-        let path = resource
+        resource
             .export_path(user_action)
-            .map_err(ProviderError::internal)?;
-        Ok(media_sections(&path))
+            .map_err(ProviderError::internal)
+    }
+
+    fn localization(&self) -> fiex_info::Localization {
+        *super::localization()
     }
 }
 
 /// Each registered native implementation has one persistent, typed Arc.
 /// The request-scoped ResourceSnapshot never enters this global registry.
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn InfoProvider>) {
-    values
-        .register(
-            "core.metadata",
-            1000,
-            ProviderMatchRule::default(),
-            Arc::new(MetadataInfo),
-        )
-        .expect("invalid metadata InfoProvider");
-    values
-        .register(
-            "core.media",
-            100,
-            ProviderMatchRule {
-                mime_types: vec!["audio/*".into(), "video/*".into()],
-                kinds: vec!["file".into()],
-                ..Default::default()
-            },
-            Arc::new(MediaInfo),
-        )
-        .expect("invalid media InfoProvider");
+    let mut module = values.module(ModuleDescriptor::new(
+        fiex_info::MODULE_ID,
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
+    for registration in fiex_info::InfoModule::new(Arc::new(NativeInfoServices)).registrations() {
+        module
+            .register(
+                registration.id,
+                registration.priority,
+                registration.rule,
+                registration.provider,
+            )
+            .expect("invalid native InfoProvider");
+    }
 }
 
 fn registry() -> NativeProviderRegistry<dyn InfoProvider> {

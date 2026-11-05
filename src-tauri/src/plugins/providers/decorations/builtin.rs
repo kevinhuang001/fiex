@@ -1,13 +1,7 @@
 //! Builtin decorations share EventRouter and Collector with plugin providers.
 use super::types::{Decoration, DecorationEntry, NativeBadge};
+use fiex_decorations::NativeKind;
 use std::collections::HashMap;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum NativeKind {
-    Tags,
-    ConnectionStatus,
-    ApplicationIcon,
-}
 
 fn badge(text: &'static str, color: &str, status: Option<&str>, icon: Option<&str>) -> NativeBadge {
     let text = crate::i18n::t(text).to_string();
