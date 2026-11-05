@@ -1,10 +1,5 @@
 //! Windows volume helpers shared by the desktop and USB adapters.
 
-use std::os::windows::process::CommandExt;
-
-/// Do not flash a console window for the short-lived Shell helper.
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
 /// Drive letter for a Windows mount path such as `E:`, `E:\` or `E:\folder`.
 /// Volume-GUID paths have no letter and return `None`.
 pub(crate) fn drive_letter(path: &str) -> Option<char> {
@@ -39,24 +34,18 @@ for ($i = 0; $i -lt 40; $i++) {
   if (-not (Test-Path "${drive}:\")) { exit 0 }
   Start-Sleep -Milliseconds 250
 }
-exit 3
+throw 'FIEX_EJECT_BUSY'
 "#;
-    let mut command = std::process::Command::new("powershell");
-    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    command.env("FIEX_EJECT_DRIVE", drive.to_string());
-    command.creation_flags(CREATE_NO_WINDOW);
-    let output = command.output().map_err(|error| error.to_string())?;
-    if output.status.success() {
-        return Ok(());
+    let drive_text = drive.to_string();
+    let result = crate::core::volumes::windows_shell::run_with_env(
+        script,
+        &[("FIEX_EJECT_DRIVE", drive_text.as_str())],
+    );
+    match result {
+        Ok(_) => Ok(()),
+        Err(error) if error.contains("FIEX_EJECT_BUSY") => {
+            Err(crate::i18n::t("无法弹出该设备，请确认没有程序正在使用它").into())
+        }
+        Err(_) => Err(crate::i18n::t("无法弹出该设备").into()),
     }
-    if output.status.code() == Some(3) {
-        return Err(crate::i18n::t("无法弹出该设备，请确认没有程序正在使用它").into());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let message = stderr.trim();
-    Err(if message.is_empty() {
-        crate::i18n::t("无法弹出该设备").into()
-    } else {
-        message.into()
-    })
 }

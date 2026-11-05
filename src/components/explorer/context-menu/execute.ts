@@ -27,10 +27,13 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
       if (entry) props.open(entry)
       break
     case 'reveal':
-      // Core resolves Recent aliases to local sources inside the command; the
-      // webview only ever passes the opaque alias.
       return (async () => {
-        for (const path of effect.paths) await call('reveal_path', { path })
+        const alias = effect.paths[0]
+        if (!alias) throw new Error('Recent navigation requires one selected alias')
+        const target = await call<{ parent: string; target: string }>('recent_navigation_target', {
+          alias,
+        })
+        x.navigateTo(target.parent, target.target)
       })()
     case 'preview':
       if (entry) props.previewEntry(entry)

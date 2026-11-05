@@ -151,18 +151,6 @@ pub(crate) async fn open_path(path: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub(crate) fn reveal_path(path: String) -> Result<(), String> {
-    // Recent aliases are opaque to the host OS. Resolve the original local
-    // source inside Core and reveal that, without exposing it to the webview.
-    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:recent") {
-        let source = crate::core::volumes::native_vfs::recent_reveal_source(&path)
-            .ok_or_else(|| crate::i18n::t("无法在文件管理器中显示该位置").to_string())?;
-        return terminals::reveal(&source);
-    }
-    crate::plugins::mounts::reject_local(&path)?;
-    terminals::reveal(&path)
-}
-#[tauri::command]
 pub(crate) fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {
     for path in &paths {
         crate::plugins::mounts::reject_local(path)?;
@@ -177,17 +165,38 @@ pub(crate) fn open_full_disk_access() -> Result<(), String> {
 pub(crate) fn relaunch_elevated(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::{
+            core::PCWSTR,
+            Win32::{UI::Shell::ShellExecuteW, UI::WindowsAndMessaging::SW_SHOWNORMAL},
+        };
+
         let exe = std::env::current_exe().map_err(|error| error.to_string())?;
-        let script = format!(
-            "Start-Process -FilePath '{}' -Verb RunAs",
-            exe.to_string_lossy().replace('\'', "''")
-        );
-        std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .creation_flags(0x08000000)
-            .spawn()
-            .map_err(|error| error.to_string())?;
+        let verb = "runas"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let executable = exe
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let result = unsafe {
+            ShellExecuteW(
+                None,
+                PCWSTR(verb.as_ptr()),
+                PCWSTR(executable.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result.0 as isize <= 32 {
+            return Err(format!(
+                "Windows could not launch Fiex elevated ({})",
+                result.0 as isize
+            ));
+        }
         app.exit(0);
         Ok(())
     }

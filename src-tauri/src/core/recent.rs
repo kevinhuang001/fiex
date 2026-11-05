@@ -386,6 +386,55 @@ mod tests {
         assert_eq!(probe_existence(file.to_str().unwrap()), Existence::Missing);
     }
 
+    #[test]
+    fn remove_aliases_changes_only_the_selected_storage_records() {
+        let store = crate::core::volumes::native_vfs::management_storage_for_provider(
+            "core:recent",
+            "remove-test",
+        )
+        .unwrap();
+        let ids = [
+            opaque_id().unwrap(),
+            opaque_id().unwrap(),
+            opaque_id().unwrap(),
+        ];
+        let records = ids
+            .iter()
+            .enumerate()
+            .map(|(index, id)| RecentRecord {
+                id: id.clone(),
+                locator: format!("/fiex-recent-test/{index}.txt"),
+                name: format!("{index}.txt"),
+                extension: "txt".into(),
+                mime: "text/plain".into(),
+                size: Some(1),
+                modified: None,
+                accessed_at: index as i64,
+            })
+            .collect::<Vec<_>>();
+        store
+            .set(RECORDS_KEY, serde_json::to_value(&records).unwrap())
+            .unwrap();
+
+        let selected = vec![
+            format!("recent://{}", ids[0]),
+            format!("recent://{}", ids[1]),
+        ];
+        assert_eq!(
+            remove_aliases_with_storage(&selected, &store).unwrap(),
+            selected
+        );
+        assert!(source_for_with_storage(&format!("recent://{}", ids[0]), &store).is_err());
+        assert!(source_for_with_storage(&format!("recent://{}", ids[1]), &store).is_err());
+        assert_eq!(
+            source_for_with_storage(&format!("recent://{}", ids[2]), &store).unwrap(),
+            "/fiex-recent-test/2.txt"
+        );
+
+        store.delete(RECORDS_KEY).unwrap();
+        store.delete(LEGACY_MIGRATION_KEY).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn broken_local_symlink_is_present_in_recent() {

@@ -81,7 +81,8 @@ fn generic_open_does_not_require_read_and_preview_keeps_its_read_rule() {
         },
     );
     assert_eq!(action_items(&ctx, "builtin:open")[0]["id"], "open");
-    assert_eq!(action_items(&ctx, "builtin:info")[0]["id"], "info");
+    assert!(action_items(&ctx, "builtin:info").is_empty());
+    assert!(action_items(&ctx, "builtin:copy-path").is_empty());
     assert!(action_items(&ctx, "builtin:preview").is_empty());
 }
 

@@ -40,6 +40,7 @@ export function useExplorer(
     searching: listing.searching,
     searchStats: listing.searchStats,
     navigate: nav.navigate,
+    navigateTo: nav.navigateTo,
     reload: listing.reload,
     back: nav.back,
     forward: nav.forward,

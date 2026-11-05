@@ -28,6 +28,49 @@ pub(crate) async fn file_parent(path: String) -> Result<String, String> {
         .map_err(|error| error.to_string())?
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RecentNavigationTarget {
+    parent: String,
+    target: String,
+}
+
+#[tauri::command]
+pub(crate) async fn recent_navigation_target(
+    alias: String,
+) -> Result<RecentNavigationTarget, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if crate::core::volumes::native_vfs::provider_id(&alias) != Some("core:recent") {
+            return Err("InvalidVfsUri: expected a Recent alias".into());
+        }
+        let source = crate::core::recent::source_for(&alias)?;
+        let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
+        let target = crate::core::fs::trusted_with_user_action(
+            &source,
+            "core:recent-navigation",
+            user_action,
+        )?;
+        if target.desktop_entry().map_err(String::from)?.is_dir {
+            return Err("Recent navigation target is not a file".into());
+        }
+        let parent = crate::core::fs::parent_path(&source)?;
+        let directory = crate::core::fs::trusted_with_user_action(
+            &parent,
+            "core:recent-navigation",
+            user_action,
+        )?;
+        if !directory.is_dir().map_err(String::from)? {
+            return Err("Recent source parent is no longer a directory".into());
+        }
+        Ok(RecentNavigationTarget {
+            parent,
+            target: source,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
     crate::core::fs::trusted(path, "core:stat")?
         .desktop_entry()

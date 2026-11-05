@@ -64,6 +64,8 @@ export function useListing(
     history,
     navigate,
     setSelected,
+    pendingSelection,
+    clearPendingSelection,
     setRenaming,
     setError,
   } = nav
@@ -226,6 +228,14 @@ export function useListing(
   }, [enabled, path, listedPath, query])
 
   useEffect(() => {
+    if (!pendingSelection || pendingSelection.directory !== path || listedPath !== path) return
+    if (entries.some((entry) => entry.path === pendingSelection.target)) {
+      setSelected([pendingSelection.target])
+      clearPendingSelection(pendingSelection.generation)
+    }
+  }, [pendingSelection, path, listedPath, entries, setSelected, clearPendingSelection])
+
+  useEffect(() => {
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
@@ -320,6 +330,16 @@ export function useListing(
         navigate(l.path)
         return
       }
+      const pending = nav.pendingSelection
+      if (pending?.directory === path) {
+        if (l.entries.some((entry) => entry.path === pending.target)) {
+          setSelected([pending.target])
+          clearPendingSelection(pending.generation)
+        } else if (snapshot.complete) {
+          clearPendingSelection(pending.generation)
+          setError(t('无法定位已打开的文件'))
+        }
+      }
       cachePresentations(l.entries, snapshot.decorations)
       publishPresentationIcons(l.entries, snapshot.presentationPending)
       const previousPainted = paintedSnapshot?.listing.entries ?? null
@@ -394,6 +414,8 @@ export function useListing(
     prefs.descending,
     revalidation,
     query,
+    nav.pendingSelection,
+    clearPendingSelection,
   ])
   useEffect(() => {
     if (

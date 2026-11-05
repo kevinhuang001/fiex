@@ -22,9 +22,19 @@ pub fn default_view(path: &str) -> Option<&'static str> {
     (provider_id(path) == Some("core:applications")).then_some("icons")
 }
 
-/// A Recent alias can be revealed only when its original resource still exists
-/// on a local filesystem. Remote, USBFS and plugin-mount sources are excluded.
-pub(crate) fn recent_reveal_source(alias: &str) -> Option<String> {
+/// Check a persisted locator against its current provider and parent rules.
+pub(crate) fn navigable_source(source: &str) -> Option<String> {
+    let resource = crate::core::fs::trusted(source, "core:recent-navigation").ok()?;
+    let entry = resource.desktop_entry().ok()?;
+    if entry.is_dir || crate::core::fs::parent_path(source).is_err() {
+        return None;
+    }
+    Some(source.to_owned())
+}
+
+/// A Recent alias can navigate only when Core can still stat its source and
+/// resolve that source's provider-owned parent.
+pub(crate) fn recent_navigation_source(alias: &str) -> Option<String> {
     let source = crate::core::recent::source_for(alias).ok()?;
-    revealable_source(&source).then_some(source)
+    navigable_source(&source)
 }

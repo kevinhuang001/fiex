@@ -59,7 +59,7 @@ impl ContextMenuProvider for Reveal {
         let [path] = paths.as_slice() else {
             return Ok(Vec::new());
         };
-        Ok(if native_vfs::recent_reveal_source(path).is_some() {
+        Ok(if native_vfs::recent_navigation_source(path).is_some() {
             vec![item(
                 "reveal",
                 crate::i18n::t("打开文件所在位置").into(),
@@ -80,7 +80,7 @@ impl ContextMenuProvider for Reveal {
         if id != "reveal"
             || paths
                 .first()
-                .and_then(|path| native_vfs::recent_reveal_source(path))
+                .and_then(|path| native_vfs::recent_navigation_source(path))
                 .is_none()
         {
             return Err(ProviderError::invalid_params(

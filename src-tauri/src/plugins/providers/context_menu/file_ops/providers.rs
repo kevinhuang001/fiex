@@ -71,9 +71,9 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
     let mut delete_permanently = required("nonzero", &[FsOperation::Remove]);
     delete_permanently.exclude = Some(exclude_views(&["core:recent"]));
     let mut info = selection("single");
-    info.exclude = Some(exclude_views(&["core:trash"]));
+    info.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
     let mut copy_path = selection("nonzero");
-    copy_path.exclude = Some(exclude_views(&["core:trash"]));
+    copy_path.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
     let mut tags = ProviderMatchRule {
         selection: Some("nonzero".into()),
         storage: Some(LocationMatch {

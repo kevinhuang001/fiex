@@ -109,16 +109,17 @@ export function FileViews(props: Props) {
     overscan: 12,
   })
   useEffect(() => {
-    if (!x.renaming) return
-    const index = flat.findIndex((row) => row.entry?.path === x.renaming)
+    const target = x.renaming ?? x.selected.at(-1)
+    if (!target) return
+    const index = flat.findIndex((row) => row.entry?.path === target)
     if (prefs.view === 'list' && index >= 0) virtual.scrollToIndex(index)
     const frame = requestAnimationFrame(() =>
       container.current
-        ?.querySelector(`[data-path="${CSS.escape(x.renaming!)}"]`)
+        ?.querySelector(`[data-path="${CSS.escape(target)}"]`)
         ?.scrollIntoView({ block: 'nearest' }),
     )
     return () => cancelAnimationFrame(frame)
-  }, [x.renaming, flat, prefs.view, virtual])
+  }, [x.renaming, x.selected, flat, prefs.view, virtual])
   const onKeyDown = (event: React.KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault()

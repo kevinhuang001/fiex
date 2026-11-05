@@ -16,6 +16,14 @@ fn only_view_specific_actions_have_native_view_providers() {
 }
 
 #[test]
+fn recent_menu_uses_the_recent_providers_storage_owner() {
+    assert_eq!(
+        super::registry().owner("builtin:remove-from-recent"),
+        crate::core::volumes::native_vfs::owner_for_provider("core:recent")
+    );
+}
+
+#[test]
 fn restore_is_single_selection_and_empty_trash_is_root_only() {
     let paths = vec!["trash://one".into(), "trash://two".into()];
     assert_eq!(
@@ -42,16 +50,19 @@ fn restore_is_single_selection_and_empty_trash_is_root_only() {
             .is_empty()
     );
     assert!(providers("recent://", &[]).is_empty());
-    let recent = vec!["recent://one".into(), "recent://two".into()];
-    assert_eq!(
-        providers("recent://", &recent)[0].id,
-        "builtin:remove-from-recent"
-    );
-    let resolved = resolve("builtin:remove-from-recent", "recent://", &recent).unwrap();
-    assert_eq!(
-        resolved["items"].as_array().unwrap()[0]["id"],
-        "removeFromRecent"
-    );
+    let recent_single = vec!["recent://one".into()];
+    let recent_multiple = vec!["recent://one".into(), "recent://two".into()];
+    for recent in [&recent_single, &recent_multiple] {
+        assert!(providers("recent://", recent)
+            .iter()
+            .any(|provider| provider.id == "builtin:remove-from-recent"));
+        let resolved = resolve("builtin:remove-from-recent", "recent://", recent).unwrap();
+        assert_eq!(
+            resolved["items"].as_array().unwrap()[0]["id"],
+            "removeFromRecent"
+        );
+    }
+    assert!(providers("recent://", &[]).is_empty());
     assert!(providers("/tmp", &[]).is_empty());
 }
 

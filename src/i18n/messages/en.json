@@ -1414,5 +1414,6 @@
   "无法预览": "Preview unavailable",
   "插件面板无法加载": "Plugin panel failed to load",
   "连接失败": "Connection failed",
-  "无法读取文件夹": "Could not read folder"
+  "无法读取文件夹": "Could not read folder",
+  "无法定位已打开的文件": "The opened file could not be located"
 }

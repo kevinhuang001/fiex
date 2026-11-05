@@ -445,20 +445,10 @@ Get-Partition | Where-Object { $usb -contains $_.DiskNumber } | ForEach-Object {
   }
 } | ConvertTo-Json -Compress
 "#;
-    let mut command = std::process::Command::new("powershell");
-    command.args(["-NoProfile", "-Command", script]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    let Ok(output) = command.output() else {
+    let Ok(output) = crate::core::volumes::windows_shell::run(script) else {
         return Vec::new();
     };
-    if !output.status.success() {
-        return Vec::new();
-    }
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&output) else {
         return Vec::new();
     };
     let items = match value {
@@ -660,23 +650,19 @@ $letter = $partition.DriveLetter
 if ($letter) { $path = "$letter`:" + '\' } else { $path = '' }
 [pscustomobject]@{ Path = $path; FileSystem = $volume.FileSystem } | ConvertTo-Json -Compress
 "#;
-    let mut command = std::process::Command::new("powershell");
-    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    command.env("FIEX_USB_DISK", disk);
-    command.env("FIEX_USB_PARTITION", partition);
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(0x08000000);
-    let output = command.output().map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(if error.is_empty() {
-            crate::i18n::t("无法使用系统驱动挂载该设备").into()
+    let output = crate::core::volumes::windows_shell::run_with_env(
+        script,
+        &[("FIEX_USB_DISK", disk), ("FIEX_USB_PARTITION", partition)],
+    )
+    .map_err(|error| {
+        if error.starts_with("PowerShell exited") {
+            format!("{}: {error}", crate::i18n::t("无法使用系统驱动挂载该设备"))
         } else {
             error
-        });
-    }
+        }
+    })?;
     let value: serde_json::Value =
-        serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
+        serde_json::from_str(&output).map_err(|error| error.to_string())?;
     let path = value
         .get("Path")
         .and_then(serde_json::Value::as_str)
