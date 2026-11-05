@@ -64,14 +64,16 @@ pub(crate) async fn empty_trash(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
     let flag = cancel.flag();
-    tauri::async_runtime::spawn_blocking(move || volumes::empty_trash(&flag))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        fiex_trash::empty_trash(&flag).map_err(volumes::trash_vfs::map_error)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub(crate) fn trash_restore_needs_folder(paths: Vec<String>) -> bool {
-    volumes::restore_needs_folder(&paths)
+    fiex_trash::restore_needs_folder(&paths)
 }
 
 #[tauri::command]
@@ -88,7 +90,8 @@ pub(crate) async fn restore_from_trash(
     }
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || {
-        volumes::restore_from_trash(&paths, fallback.as_deref(), &flag)
+        fiex_trash::restore_from_trash(&paths, fallback.as_deref(), &flag)
+            .map_err(volumes::trash_vfs::map_error)
     })
     .await
     .map_err(|error| error.to_string())?

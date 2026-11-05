@@ -22,19 +22,3 @@ fn project_listing(listing: FsListing) -> Vec<Entry> {
 pub fn list() -> Result<Vec<Entry>, String> {
     fiex_trash::system_recycle_bin().list().map(project_listing)
 }
-
-pub fn stat(uri: &str) -> Result<Entry, String> {
-    fiex_trash::system_recycle_bin().stat(uri).map(project)
-}
-
-pub fn restore(encoded: &str) -> Result<(), String> {
-    fiex_trash::system_recycle_bin().restore(encoded)
-}
-
-pub fn purge(encoded: &str) -> Result<(), String> {
-    fiex_trash::system_recycle_bin().purge(encoded)
-}
-
-pub fn empty() -> Result<usize, String> {
-    fiex_trash::system_recycle_bin().empty()
-}

@@ -146,7 +146,7 @@ impl Operations {
                     }
                 }
                 Undo::Created(path) => {
-                    crate::core::volumes::move_to_trash(path).map_err(|error| error.to_string())
+                    fiex_trash::move_to_trash(path).map_err(|error| error.to_string())
                 }
             };
             if let Err(e) = result {

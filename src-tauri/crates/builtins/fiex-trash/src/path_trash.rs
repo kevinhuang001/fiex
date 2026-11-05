@@ -69,24 +69,6 @@ impl TrashDirectory {
         }
     }
 
-    pub fn action_path(&self, path: &str) -> Result<String, String> {
-        if !self.handles(path) {
-            return Ok(path.into());
-        }
-        if path == TRASH_URI {
-            return Err("ScopeDenied: cannot mutate the Trash root".into());
-        }
-        #[cfg(not(windows))]
-        {
-            self.physical(path)
-                .map(|path| path.to_string_lossy().into_owned())
-        }
-        #[cfg(windows)]
-        {
-            Err("InvalidVfsUri: use the issued Recycle Bin node identity".into())
-        }
-    }
-
     pub fn list(&self, uri: &str) -> Result<FsListing, String> {
         self.check_access()?;
         #[cfg(windows)]
@@ -152,19 +134,37 @@ impl TrashDirectory {
         self.check_access()?;
         #[cfg(not(windows))]
         {
-            let path = self.physical(uri)?;
-            let metadata = std::fs::symlink_metadata(&path).map_err(io_error)?;
-            if metadata.is_dir() && !metadata.file_type().is_symlink() {
-                std::fs::remove_dir_all(path).map_err(io_error)
-            } else {
-                std::fs::remove_file(path).map_err(io_error)
-            }
+            crate::journal::with_lock(|| self.purge_path(uri))
         }
         #[cfg(windows)]
         {
             let _ = uri;
             Err("InvalidVfsUri: use the issued Recycle Bin node identity".into())
         }
+    }
+
+    #[cfg(not(windows))]
+    fn purge_path(&self, uri: &str) -> Result<(), String> {
+        let path = self.physical(uri)?;
+        let metadata = std::fs::symlink_metadata(&path).map_err(io_error)?;
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            std::fs::remove_dir_all(&path).map_err(io_error)?;
+        } else {
+            std::fs::remove_file(&path).map_err(io_error)?;
+        }
+        let root = self.root_path()?;
+        if path.parent() == Some(root.as_path()) {
+            if let Some(name) = path.file_name() {
+                crate::journal::forget_locked(&name.to_string_lossy());
+                #[cfg(target_os = "linux")]
+                if let Some(trash) = root.parent() {
+                    let name = name.to_string_lossy();
+                    let _ =
+                        std::fs::remove_file(trash.join("info").join(format!("{name}.trashinfo")));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn entry(&self, uri: &str) -> Result<FsEntry, String> {

@@ -1,7 +1,6 @@
 //! Core projection adapter for the Trash module's opaque path identities.
 use crate::core::files::Entry;
 use fiex_provider_contracts::{FsEntry, FsListing};
-use std::path::PathBuf;
 
 pub const URI: &str = fiex_trash::TRASH_URI;
 
@@ -17,7 +16,7 @@ fn project_listing(listing: FsListing) -> Vec<Entry> {
     listing.entries.into_iter().map(project).collect()
 }
 
-fn map_error(error: String) -> String {
+pub fn map_error(error: String) -> String {
     if error.starts_with("NotFound: cannot locate the system Trash") {
         return crate::i18n::t("无法定位废纸篓").into();
     }
@@ -41,32 +40,12 @@ pub fn check_access() -> Result<(), String> {
     backend().check_access().map_err(map_error)
 }
 
-pub fn physical(uri: &str) -> Result<PathBuf, String> {
-    backend().physical(uri).map_err(map_error)
-}
-
-pub fn action_path(path: &str) -> Result<String, String> {
-    backend().action_path(path).map_err(map_error)
-}
-
 pub fn list(uri: &str) -> Result<Vec<Entry>, String> {
     backend().list(uri).map(project_listing).map_err(map_error)
 }
 
 pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
     backend().validate_child(parent, child).map_err(map_error)
-}
-
-pub fn purge(uri: &str) -> Result<(), String> {
-    backend().purge(uri).map_err(map_error)
-}
-
-pub fn entry(uri: &str) -> Result<Entry, String> {
-    let mut entry = backend().entry(uri).map(project).map_err(map_error)?;
-    if uri == URI {
-        entry.name = crate::i18n::t("废纸篓").into();
-    }
-    Ok(entry)
 }
 
 pub fn is_tree(path: &str) -> bool {
