@@ -210,29 +210,26 @@ fn macos_put_back(trashed: &Path) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "linux")]
 fn remove_trash_metadata(source: &Path) {
-    #[cfg(target_os = "linux")]
     let Some(files) = trash_path() else {
         return;
     };
-    #[cfg(not(target_os = "linux"))]
-    return;
-    #[cfg(target_os = "linux")]
     if source.parent() != Some(files.as_path()) {
         return;
     }
-    #[cfg(target_os = "linux")]
     let Some(trash) = files.parent() else {
         return;
     };
-    #[cfg(target_os = "linux")]
     let Some(name) = source.file_name() else {
         return;
     };
-    #[cfg(target_os = "linux")]
     let _ = std::fs::remove_file(
         trash
             .join("info")
             .join(format!("{}.trashinfo", name.to_string_lossy())),
     );
 }
+
+#[cfg(not(target_os = "linux"))]
+fn remove_trash_metadata(_: &Path) {}
