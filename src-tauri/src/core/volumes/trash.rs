@@ -14,7 +14,7 @@ pub use journal::*;
 pub(crate) fn move_to_trash(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        return super::windows_shell::move_to_trash(path);
+        super::windows_shell::move_to_trash(path)
     }
     #[cfg(not(target_os = "windows"))]
     {

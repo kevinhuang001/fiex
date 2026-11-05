@@ -72,6 +72,8 @@ export function useListing(
   currentViewKeyRef.current = viewKey
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
   const [directoryAllowedOps, setDirectoryAllowedOps] = useState<string[]>([])
   const [virtualVolume, setVirtualVolume] = useState(false)
@@ -260,7 +262,15 @@ export function useListing(
     if (paintedSnapshot) {
       paintedByPath.current.delete(viewKey)
       paintedByPath.current.set(viewKey, paintedSnapshot)
-      if (renderedKeyRef.current !== viewKey) {
+      if (
+        renderedKeyRef.current !== viewKey ||
+        !sameVisibleListing(
+          entriesRef.current,
+          paintedSnapshot.listing.entries,
+          prefs.sort,
+          prefs.descending,
+        )
+      ) {
         renderedKeyRef.current = viewKey
         renderedPathRef.current = path
         setRenderedPath(path)

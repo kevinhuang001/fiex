@@ -45,8 +45,6 @@ pub(crate) fn move_to_trash(path: &std::path::Path) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn canonicalize_trash_target(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    use std::path::PathBuf;
-
     let target = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -61,7 +59,7 @@ fn canonicalize_trash_target(path: &std::path::Path) -> Result<std::path::PathBu
         .file_name()
         .ok_or_else(|| format!("{}: missing file name", path.display()))?;
     let parent = dunce::canonicalize(parent).map_err(|error| error.to_string())?;
-    Ok(PathBuf::from(parent).join(name))
+    Ok(parent.join(name))
 }
 
 #[cfg(target_os = "windows")]
