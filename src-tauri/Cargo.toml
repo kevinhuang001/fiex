@@ -40,7 +40,7 @@ desktop = [
     "fiex-applications/desktop",
 ]
 ci-driver = ["desktop", "usbfs"]
-usbfs = ["dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
+usbfs = ["dep:fiex-usb-fs", "fiex-usb-fs/driver"]
 tauri-plugin-single-instance = ["dep:tauri-plugin-single-instance"]
 
 [build-dependencies]
@@ -62,14 +62,11 @@ fiex-preview = { path = "crates/builtins/fiex-preview" }
 fiex-decorations = { path = "crates/builtins/fiex-decorations" }
 fiex-actions = { path = "crates/builtins/fiex-actions" }
 fiex-local-fs = { path = "crates/builtins/fiex-local-fs" }
+fiex-usb-fs = { path = "crates/builtins/fiex-usb-fs", optional = true, default-features = false }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
-rust-fs-ext4 = { version = "0.8", optional = true }
-rust-fs-btrfs = { version = "0.10", optional = true }
-apfs = { version = "0.4", optional = true }
-hfsplus = { version = "0.4", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
@@ -138,10 +135,6 @@ opt-level = 2
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-
-[package.metadata.cargo-machete]
-# Imported under their facade names (`fs_ext4`, `fs_btrfs`).
-ignored = ["rust-fs-btrfs", "rust-fs-ext4"]
 
 # Fiex vendors arapuca to drop the Win32k-syscall mitigation that makes every
 # COM-importing plugin fail at DLL initialization (0xC0000142) on Windows.
