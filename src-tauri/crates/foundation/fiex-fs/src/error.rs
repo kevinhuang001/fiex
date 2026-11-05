@@ -1,6 +1,6 @@
-//! Typed filesystem failures shared by Core VFS providers. The string prefix
-//! is retained for older wire callers while internal policy checks match on
-//! the structured kind instead of parsing messages.
+//! Typed filesystem failures shared by filesystem providers and adapters.
+//! The string prefix remains the wire representation while internal policy
+//! checks match on the structured kind.
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,5 +1,6 @@
 //! Resource stream handles around the shared VFS provider products.
-use super::{FsError, FsErrorKind, FsOperation, ResourceBroker, CHUNK};
+use super::{FsError, FsErrorKind, FsOperation, ResourceBroker};
+use fiex_fs::{ReadHandle, WriteHandle, CHUNK};
 use fiex_provider_contracts::{FsRead, FsWrite};
 use serde_json::Value;
 use std::{
@@ -12,17 +13,6 @@ type ProviderReadAt = Box<
     dyn FnMut(u64, usize) -> Result<(Vec<u8>, bool), fiex_provider_contracts::ProviderError> + Send,
 >;
 static RESERVED: AtomicU64 = AtomicU64::new(0);
-
-pub trait ReadHandle: Send {
-    fn size(&self) -> u64;
-    fn read_at(&mut self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String>;
-}
-
-pub trait WriteHandle: Send {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), String>;
-    fn seek(&mut self, kind: &str, offset: i64) -> Result<u64, String>;
-    fn commit(self: Box<Self>) -> Result<Value, String>;
-}
 
 /// A sequential shared-provider reader with a bounded working buffer. Bytes
 /// already consumed are retained in a private temporary file so Core's
