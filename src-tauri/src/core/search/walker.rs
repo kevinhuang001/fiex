@@ -93,15 +93,55 @@ pub(crate) fn run_native_search_stream(
     cancelled: &dyn Fn() -> bool,
     emit: &mut dyn FnMut(Entry) -> Result<(), String>,
 ) -> Result<bool, String> {
-    let stats = walk_entries(
-        root,
-        query,
-        mode,
-        hidden,
-        ignores,
-        limit.clamp(1, RESULT_LIMIT),
-        cancelled,
-        emit,
-    )?;
-    Ok(stats.truncated || stats.incomplete)
+    let failed = std::sync::atomic::AtomicBool::new(false);
+    let failure = Mutex::new(None::<String>);
+    let should_cancel = || cancelled() || failed.load(std::sync::atomic::Ordering::Relaxed);
+    let truncated = {
+        let mut emit_batches = |batch: SearchBatch| {
+            for entry in batch.entries {
+                if should_cancel() {
+                    break;
+                }
+                if let Err(error) = emit(entry) {
+                    if let Ok(mut failure) = failure.lock() {
+                        *failure = Some(error);
+                    }
+                    failed.store(true, std::sync::atomic::Ordering::Relaxed);
+                    break;
+                }
+            }
+        };
+        let mut sink = BatchSink::new(
+            &mut emit_batches,
+            Instant::now(),
+            limit.clamp(1, RESULT_LIMIT),
+        );
+        sink.engine = Some("builtin".into());
+        let stats = walk_entries(
+            root,
+            query,
+            mode,
+            hidden,
+            ignores,
+            limit.clamp(1, RESULT_LIMIT),
+            &should_cancel,
+            &mut |entry| {
+                sink.push(entry);
+                Ok(())
+            },
+        )?;
+        sink.truncated |= stats.truncated;
+        sink.skipped = stats.skipped;
+        sink.scanned = stats.scanned;
+        sink.incomplete |= stats.incomplete;
+        sink.flush(false);
+        sink.truncated || sink.incomplete
+    };
+    if let Some(error) = failure
+        .into_inner()
+        .unwrap_or_else(|error| error.into_inner())
+    {
+        return Err(error);
+    }
+    Ok(truncated)
 }
