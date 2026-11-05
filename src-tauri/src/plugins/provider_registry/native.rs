@@ -6,7 +6,7 @@
 use crate::plugins::events::Resolver;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderDescriptor;
-use fiex_provider_contracts::{MatchResource, ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{MatchResource, ProviderKind};
 use fiex_runtime::{ModuleDescriptor, ProviderCandidate, TypedProviderRegistry};
 use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
 use std::sync::Arc;
@@ -34,16 +34,6 @@ impl<T: ?Sized + Send + Sync + 'static> NativeProviderRegistry<T> {
         descriptor: ModuleDescriptor,
     ) -> fiex_runtime::ModuleRegistrar<'a, T> {
         self.entries.module(descriptor)
-    }
-
-    pub fn register(
-        &mut self,
-        id: &'static str,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        self.entries.register(id, priority, rule, implementation)
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<T>> {
@@ -154,6 +144,7 @@ impl<T: ?Sized + Send + Sync + 'static> NativeProviderRegistry<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fiex_provider_contracts::ProviderMatchRule;
     use fiex_storage::CoreOwnerKey;
 
     trait Handler: Send + Sync {
@@ -171,32 +162,39 @@ mod tests {
     fn registry_validates_and_retains_typed_handlers() {
         let mut entries: NativeProviderRegistry<dyn Handler> =
             NativeProviderRegistry::new(ProviderKind::Info);
-        entries
-            .register(
-                "core.example",
-                100,
-                ProviderMatchRule::default(),
-                Arc::new(First),
-            )
-            .unwrap();
+        {
+            let mut module = entries.module(ModuleDescriptor::new(
+                "core:example",
+                CoreOwnerKey::new("core"),
+                "1",
+            ));
+            module
+                .register(
+                    "core.example",
+                    100,
+                    ProviderMatchRule::default(),
+                    Arc::new(First),
+                )
+                .unwrap();
+            assert!(module
+                .register(
+                    "core.example",
+                    90,
+                    ProviderMatchRule::default(),
+                    Arc::new(First)
+                )
+                .is_err());
+            assert!(module
+                .register(
+                    "invalid/id",
+                    10,
+                    ProviderMatchRule::default(),
+                    Arc::new(First)
+                )
+                .is_err());
+        }
         assert_eq!(entries.len(), 1);
         assert_eq!(entries.get("core.example").unwrap().call(), 7);
-        assert!(entries
-            .register(
-                "core.example",
-                90,
-                ProviderMatchRule::default(),
-                Arc::new(First)
-            )
-            .is_err());
-        assert!(entries
-            .register(
-                "invalid/id",
-                10,
-                ProviderMatchRule::default(),
-                Arc::new(First)
-            )
-            .is_err());
         let selected = entries.candidates(|handler| handler.call() == 7);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].id, "core.example");
