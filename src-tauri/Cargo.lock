@@ -1861,7 +1861,9 @@ dependencies = [
 name = "fiex-fs"
 version = "0.1.0"
 dependencies = [
+ "fiex-provider-contracts",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
