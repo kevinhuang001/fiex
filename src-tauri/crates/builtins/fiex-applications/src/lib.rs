@@ -1,0 +1,317 @@
+//! Applications module state types and virtual-tree identity rules.
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
+
+pub const URI: &str = "applications://";
+pub const SCHEMA: u32 = 1;
+pub const FOLDER_SEGMENT: &str = "folder_";
+pub const APP_SEGMENT: &str = "app_";
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationsState {
+    pub schema: u32,
+    pub revision: u64,
+    #[serde(default)]
+    pub migration_id: Option<String>,
+    #[serde(default)]
+    pub folders: BTreeMap<String, VirtualFolder>,
+    #[serde(default)]
+    pub apps: BTreeMap<String, ApplicationNode>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VirtualFolder {
+    pub id: String,
+    pub parent: Option<String>,
+    pub name: String,
+    pub order: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationNode {
+    pub id: String,
+    pub parent: Option<String>,
+    pub display_name: String,
+    pub source: ApplicationSource,
+    pub order: i64,
+    #[serde(default)]
+    pub unavailable: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ApplicationSource {
+    System {
+        stable_locator: String,
+    },
+    Imported {
+        asset_id: String,
+        #[serde(default)]
+        extension: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PendingKind {
+    Folder,
+    Application,
+}
+
+#[derive(Clone, Debug)]
+pub struct PendingTarget {
+    pub uri: String,
+    pub parent_uri: String,
+    pub name: String,
+    pub asset_id: Option<String>,
+    pub extension: String,
+    pub kind: PendingKind,
+}
+
+pub fn validate_state(state: &ApplicationsState) -> Result<(), String> {
+    for (id, folder) in &state.folders {
+        if id != &folder.id || !valid_id(id) || folder.name.is_empty() {
+            return Err("invalid Applications folder state".into());
+        }
+        if folder
+            .parent
+            .as_ref()
+            .is_some_and(|parent| !state.folders.contains_key(parent))
+        {
+            return Err("Applications folder parent is missing".into());
+        }
+        let mut visited = HashSet::new();
+        let mut ancestor = folder.parent.as_deref();
+        while let Some(parent) = ancestor {
+            if !visited.insert(parent) || parent == id {
+                return Err("Applications folder cycle detected".into());
+            }
+            ancestor = state
+                .folders
+                .get(parent)
+                .and_then(|node| node.parent.as_deref());
+        }
+    }
+    for (id, app) in &state.apps {
+        if id != &app.id || !valid_id(id) || app.display_name.is_empty() {
+            return Err("invalid Applications entry state".into());
+        }
+        if app
+            .parent
+            .as_ref()
+            .is_some_and(|parent| !state.folders.contains_key(parent))
+        {
+            return Err("Applications entry parent is missing".into());
+        }
+        match &app.source {
+            ApplicationSource::System { stable_locator } if stable_locator.is_empty() => {
+                return Err("system application locator is empty".into());
+            }
+            ApplicationSource::Imported {
+                asset_id,
+                extension,
+            } if !valid_id(asset_id) || !valid_extension(extension) => {
+                return Err("invalid imported application asset id".into());
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+pub fn valid_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+pub fn valid_extension(value: &str) -> bool {
+    value.len() <= 16 && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+pub fn folder_uri(id: &str) -> String {
+    format!("{URI}{FOLDER_SEGMENT}{id}")
+}
+
+pub fn app_uri(id: &str) -> String {
+    format!("{URI}{APP_SEGMENT}{id}")
+}
+
+pub fn folder_id(uri: &str) -> Option<String> {
+    node_id(uri, FOLDER_SEGMENT)
+}
+
+pub fn app_id(uri: &str) -> Option<String> {
+    node_id(uri, APP_SEGMENT)
+}
+
+fn node_id(uri: &str, leaf_prefix: &str) -> Option<String> {
+    let relative = uri.strip_prefix(URI)?;
+    let segments = relative.split('/');
+    let mut last = None;
+    for segment in segments {
+        if segment.is_empty() {
+            return None;
+        }
+        if let Some(previous) = last.replace(segment) {
+            let parent_id = previous.strip_prefix(FOLDER_SEGMENT)?;
+            if !valid_id(parent_id) {
+                return None;
+            }
+        }
+    }
+    let id = last?.strip_prefix(leaf_prefix)?;
+    valid_id(id).then(|| id.to_owned())
+}
+
+pub fn child_uri(parent_uri: &str, segment: &str) -> String {
+    if parent_uri == URI {
+        format!("{parent_uri}{segment}")
+    } else {
+        format!("{}/{segment}", parent_uri.trim_end_matches('/'))
+    }
+}
+
+pub fn folder_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
+    let mut segments = Vec::new();
+    let mut current = state.folders.get(id)?;
+    loop {
+        segments.push(format!("{FOLDER_SEGMENT}{}", current.id));
+        let Some(parent) = current.parent.as_deref() else {
+            break;
+        };
+        current = state.folders.get(parent)?;
+    }
+    segments.reverse();
+    Some(format!("{}{}", URI, segments.join("/")))
+}
+
+pub fn app_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
+    let app = state.apps.get(id)?;
+    let mut segments = Vec::new();
+    let mut parent = app.parent.as_deref();
+    while let Some(parent_id) = parent {
+        let folder = state.folders.get(parent_id)?;
+        segments.push(format!("{FOLDER_SEGMENT}{}", folder.id));
+        parent = folder.parent.as_deref();
+    }
+    segments.reverse();
+    segments.push(format!("{APP_SEGMENT}{id}"));
+    Some(format!("{}{}", URI, segments.join("/")))
+}
+
+pub fn parent_uri_matches(state: &ApplicationsState, uri: &str) -> bool {
+    if uri == URI {
+        return true;
+    }
+    folder_id(uri).is_some_and(|id| folder_uri_in(state, &id).as_deref() == Some(uri))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn folder(id: &str, parent: Option<&str>) -> VirtualFolder {
+        VirtualFolder {
+            id: id.into(),
+            parent: parent.map(str::to_owned),
+            name: id.into(),
+            order: 0,
+        }
+    }
+
+    #[test]
+    fn virtual_identity_is_opaque_and_independent_of_display_name() {
+        let id = "folder-0123456789abcdef";
+        let before = folder_uri(id);
+        let mut node = folder(id, None);
+        node.name = "Design".into();
+        let after_rename = folder_uri(&node.id);
+        assert_eq!(before, after_rename);
+        assert_eq!(folder_id(&before).as_deref(), Some(id));
+        assert!(folder_id("applications://folder_../escape").is_none());
+    }
+
+    #[test]
+    fn virtual_paths_follow_the_visible_folder_tree_without_type_directories() {
+        let mut state = ApplicationsState {
+            schema: SCHEMA,
+            ..Default::default()
+        };
+        state
+            .folders
+            .insert("root-folder".into(), folder("root-folder", None));
+        state.folders.insert(
+            "child-folder".into(),
+            folder("child-folder", Some("root-folder")),
+        );
+        state.apps.insert(
+            "root-app".into(),
+            ApplicationNode {
+                id: "root-app".into(),
+                parent: None,
+                display_name: "Root app".into(),
+                source: ApplicationSource::System {
+                    stable_locator: "root-app-locator".into(),
+                },
+                order: 0,
+                unavailable: false,
+            },
+        );
+        state.apps.insert(
+            "nested-app".into(),
+            ApplicationNode {
+                id: "nested-app".into(),
+                parent: Some("child-folder".into()),
+                display_name: "Nested app".into(),
+                source: ApplicationSource::System {
+                    stable_locator: "nested-app-locator".into(),
+                },
+                order: 0,
+                unavailable: false,
+            },
+        );
+        assert_eq!(
+            folder_uri_in(&state, "root-folder").as_deref(),
+            Some("applications://folder_root-folder")
+        );
+        assert_eq!(
+            folder_uri_in(&state, "child-folder").as_deref(),
+            Some("applications://folder_root-folder/folder_child-folder")
+        );
+        assert_eq!(
+            app_uri_in(&state, "root-app").as_deref(),
+            Some("applications://app_root-app")
+        );
+        assert_eq!(
+            app_uri_in(&state, "nested-app").as_deref(),
+            Some("applications://folder_root-folder/folder_child-folder/app_nested-app")
+        );
+        assert!(app_id("applications://app_root-app/app_nested-app").is_none());
+    }
+
+    #[test]
+    fn state_validation_rejects_cycles_and_missing_parents() {
+        let mut state = ApplicationsState {
+            schema: SCHEMA,
+            ..Default::default()
+        };
+        state
+            .folders
+            .insert("folder-a".into(), folder("folder-a", Some("folder-b")));
+        state
+            .folders
+            .insert("folder-b".into(), folder("folder-b", Some("folder-a")));
+        assert!(validate_state(&state).unwrap_err().contains("cycle"));
+
+        let mut state = ApplicationsState {
+            schema: SCHEMA,
+            ..Default::default()
+        };
+        state
+            .folders
+            .insert("folder-a".into(), folder("folder-a", Some("missing")));
+        assert!(validate_state(&state).unwrap_err().contains("parent"));
+    }
+}

@@ -53,6 +53,7 @@ fiex-runtime = { path = "crates/foundation/fiex-runtime" }
 fiex-platform = { path = "crates/platform/fiex-platform" }
 fiex-fs = { path = "crates/foundation/fiex-fs" }
 fiex-recent = { path = "crates/builtins/fiex-recent" }
+fiex-applications = { path = "crates/builtins/fiex-applications" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }

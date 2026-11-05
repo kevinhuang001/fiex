@@ -13,7 +13,7 @@ pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
 use std::sync::{Condvar, Mutex, OnceLock};
 
-pub const URI: &str = "applications://";
+pub const URI: &str = fiex_applications::URI;
 
 fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
     Entry {
