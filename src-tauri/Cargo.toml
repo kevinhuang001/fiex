@@ -61,6 +61,7 @@ fiex-info = { path = "crates/builtins/fiex-info" }
 fiex-preview = { path = "crates/builtins/fiex-preview" }
 fiex-decorations = { path = "crates/builtins/fiex-decorations" }
 fiex-actions = { path = "crates/builtins/fiex-actions" }
+fiex-local-fs = { path = "crates/builtins/fiex-local-fs" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
@@ -128,7 +129,6 @@ ds_store = "0.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rfd = { version = "0.15", optional = true, default-features = false }
-lnk = "0.5"
 
 [profile.release]
 strip = true
