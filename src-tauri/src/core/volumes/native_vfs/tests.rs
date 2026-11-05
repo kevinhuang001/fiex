@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 #[test]
 fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() {
     assert_eq!(registry().len(), 5);
@@ -56,6 +57,23 @@ fn native_resource_identity_is_declared_by_each_registered_provider() {
     assert_eq!(applications.provider_id, fiex_applications::PROVIDER_ID);
     assert_eq!(applications.storage_type, Some(ResourceType::Vfs));
     assert!(!applications.host_path);
+}
+
+#[test]
+fn invocation_metadata_kind_comes_from_the_registered_provider() {
+    for (path, expected) in [
+        (RECENT_URI, "directory"),
+        ("recent://opaque-alias", "file"),
+        (APPLICATIONS_URI, "directory"),
+        ("applications://folder_opaque-id", "directory"),
+        ("applications://app_opaque-id", "file"),
+        (trash_vfs::URI, "directory"),
+        ("trash://opaque-item/", "directory"),
+    ] {
+        let invocation = target_invocation(path, "core:test", "vfs.discover", json!({}));
+        let resource = &NativeProviderInvocation::resources(&invocation).unwrap()[0];
+        assert_eq!(resource.metadata().unwrap().kind, expected, "{path}");
+    }
 }
 
 #[test]

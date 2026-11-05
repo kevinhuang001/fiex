@@ -5,6 +5,33 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_trash::TrashModuleServices;
 use std::sync::Arc;
 
+fn trash_stat(path: &str, operations: &[FsOperation]) -> Result<crate::core::files::Entry, String> {
+    if trash_vfs::handles(path) {
+        return trash_vfs::entry(path);
+    }
+    if path == recycle::URI {
+        return Ok(storage::root_entry(
+            fiex_trash::PROVIDER_ID,
+            path,
+            operations,
+        ));
+    }
+    if recycle::is_virtual(path) {
+        return recycle::stat(path);
+    }
+    Err("Unsupported: unknown builtin node".into())
+}
+
+fn trash_list(path: &str) -> Result<Vec<crate::core::files::Entry>, String> {
+    if trash_vfs::handles(path) {
+        trash_vfs::list(path)
+    } else if path == recycle::URI {
+        recycle::list()
+    } else {
+        Err("Unsupported: builtin node has no children".into())
+    }
+}
+
 pub(super) fn services() -> Arc<dyn TrashModuleServices> {
     Arc::new(NativeTrashServices)
 }
@@ -35,15 +62,13 @@ impl TrashModuleServices for NativeTrashServices {
     }
 
     fn stat(&self, path: &str, operations: &[FsOperation]) -> Result<FsEntry, ProviderError> {
-        storage::trash_stat(path, operations)
+        trash_stat(path, operations)
             .map(shared_entry)
             .map_err(provider_error)
     }
 
     fn list(&self, path: &str) -> Result<FsListing, ProviderError> {
-        storage::trash_list(path)
-            .map(list_result)
-            .map_err(provider_error)
+        trash_list(path).map(list_result).map_err(provider_error)
     }
 
     fn purge(&self, path: &str) -> Result<(), ProviderError> {
@@ -59,7 +84,7 @@ impl TrashModuleServices for NativeTrashServices {
     }
 
     fn search(&self, root: &str, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
-        search_listing(root, request, storage::trash_list)
+        search_listing(root, request, trash_list)
     }
 
     fn selection(
