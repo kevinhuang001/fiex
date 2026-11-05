@@ -86,6 +86,7 @@ pub(super) fn forget_locked(name: &str) {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn clear_locked() {
     save(&[]);
 }

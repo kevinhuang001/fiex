@@ -114,6 +114,7 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
 fn empty_trash_locked(cancel: &AtomicBool) -> Result<usize, String> {
     #[cfg(target_os = "windows")]
     {
+        let _ = cancel;
         system_recycle_bin().empty()
     }
     #[cfg(target_os = "macos")]
@@ -139,6 +140,7 @@ fn empty_trash_locked(cancel: &AtomicBool) -> Result<usize, String> {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn empty_directory(
     directory: &Path,
     metadata: Option<&Path>,
