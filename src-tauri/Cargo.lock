@@ -1882,8 +1882,10 @@ dependencies = [
 name = "fiex-platform"
 version = "0.1.0"
 dependencies = [
+ "fiex-provider-contracts",
  "reqwest 0.12.28",
  "serde",
+ "trash",
  "winreg 0.55.0",
 ]
 
@@ -1952,8 +1954,12 @@ dependencies = [
 name = "fiex-trash"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "fiex-platform",
  "fiex-provider-contracts",
  "fiex-storage",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

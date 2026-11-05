@@ -6,9 +6,13 @@ use fiex_provider_contracts::{
 };
 use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
+use std::sync::OnceLock;
+
+mod recycle_bin;
+
+pub use recycle_bin::{RecycleBin, RECYCLE_BIN_URI};
 
 pub const TRASH_URI: &str = "trash://";
-pub const RECYCLE_BIN_URI: &str = "recyclebin://";
 const URI_SCHEMES: &[&str] = &["trash", "recyclebin"];
 
 pub fn owner_key() -> CoreOwnerKey {
@@ -17,6 +21,15 @@ pub fn owner_key() -> CoreOwnerKey {
 
 pub fn uri_schemes() -> &'static [&'static str] {
     URI_SCHEMES
+}
+
+pub fn is_recycle_bin_uri(uri: &str) -> bool {
+    recycle_bin::is_virtual(uri)
+}
+
+pub fn system_recycle_bin() -> &'static RecycleBin {
+    static BACKEND: OnceLock<RecycleBin> = OnceLock::new();
+    BACKEND.get_or_init(RecycleBin::system)
 }
 
 /// Core supplies only trusted URI resolution, platform operations, and the
