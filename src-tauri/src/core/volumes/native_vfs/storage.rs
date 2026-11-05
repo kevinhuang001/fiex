@@ -42,7 +42,7 @@ pub(super) fn root_entry(id: &str, path: &str, operations: &[FsOperation]) -> En
 
 pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
     if path == APPLICATIONS_URI {
-        return Ok(root_entry("core:applications", path, operations));
+        return Ok(root_entry(fiex_applications::PROVIDER_ID, path, operations));
     }
     if applications::is_system_app(path) {
         return applications::system_entry(path);
@@ -68,7 +68,7 @@ pub(super) fn trash_stat(path: &str, operations: &[FsOperation]) -> Result<Entry
         return trash_vfs::entry(path);
     }
     if path == recycle::URI {
-        return Ok(root_entry("core:trash", path, operations));
+        return Ok(root_entry(fiex_trash::PROVIDER_ID, path, operations));
     }
     if recycle::is_virtual(path) {
         return recycle::stat(path);

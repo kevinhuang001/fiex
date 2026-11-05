@@ -15,6 +15,7 @@ pub use path_trash::TrashDirectory;
 pub use recycle_bin::{RecycleBin, RECYCLE_BIN_URI};
 
 pub const TRASH_URI: &str = "trash://";
+pub const PROVIDER_ID: &str = "core:trash";
 const URI_SCHEMES: &[&str] = &["trash", "recyclebin"];
 
 pub fn owner_key() -> CoreOwnerKey {

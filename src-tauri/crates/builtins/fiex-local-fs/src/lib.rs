@@ -6,6 +6,8 @@
 
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
+pub const PROVIDER_ID: &str = "core:local-fs";
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EntryMetadata {
     pub name: String,

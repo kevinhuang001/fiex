@@ -32,7 +32,7 @@ fn pending_reservations() -> &'static Mutex<HashMap<String, PendingReservation>>
 }
 
 fn storage() -> fiex_storage::native::NativeScopedStorage {
-    super::super::native_vfs::management_storage_for_provider("core:applications", SCOPE)
+    super::super::native_vfs::management_storage_for_provider(fiex_applications::PROVIDER_ID, SCOPE)
         .expect("Applications provider registration binds its storage owner")
 }
 

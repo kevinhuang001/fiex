@@ -10,6 +10,8 @@ use std::collections::HashSet;
 
 mod module;
 
+pub const PROVIDER_ID: &str = "core:recent";
+
 pub use module::{
     recent_uri_schemes, Existence, RecentContextMenu, RecentHook, RecentModule,
     RecentModuleServices, RecentResource, RecentVfs,

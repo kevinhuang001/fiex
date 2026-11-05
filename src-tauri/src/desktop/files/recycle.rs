@@ -30,7 +30,7 @@ pub(crate) async fn recycle(
                 .file_name()
                 .and_then(|name| name.to_str());
             emit(index as u64 + 1, total, step);
-            match crate::core::fs::move_to_trash(&path, "core:trash") {
+            match crate::core::fs::move_to_trash(&path, fiex_trash::PROVIDER_ID) {
                 Ok(()) => result.paths.push(path),
                 Err(error) => result.errors.push(format!("{path}: {error}")),
             }

@@ -165,9 +165,7 @@ pub fn rename_for(
     );
     let request = FsRequest::new(&invocation, FsOperation::Rename).map_err(provider_error_text)?;
     let entry = provider.rename(&request).map_err(provider_error_text)?;
-    if source_id == "core:applications" {
-        applications::cancel_reservation(&destination.path);
-    }
+    super::after_rename(&destination.path);
     Ok(entry)
 }
 

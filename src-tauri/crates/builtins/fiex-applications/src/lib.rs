@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
 pub const URI: &str = "applications://";
+pub const PROVIDER_ID: &str = "core:applications";
 pub const SCHEMA: u32 = 1;
 pub const FOLDER_SEGMENT: &str = "folder_";
 pub const APP_SEGMENT: &str = "app_";

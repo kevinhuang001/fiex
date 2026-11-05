@@ -43,16 +43,13 @@ pub(crate) fn read_snapshot(
         None => return Ok(None),
     };
     super::mutation_overlay::paint(path, &mut data.listing);
-    if crate::core::volumes::native_vfs::provider_id(path) == Some("core:recent") {
-        if let Ok(storage) = crate::core::volumes::native_vfs::management_storage_for_provider(
-            "core:recent",
-            "history",
-        ) {
-            // A failed probe means Unknown, so keep the cached row. Only a
-            // successful metadata read that says NotFound may hide it.
-            let _ = crate::core::recent::filter_cached_entries(&mut data.listing.entries, &storage);
-        }
-    }
+    // Providers may attach owner-specific validation to cached snapshots.
+    // Errors preserve the snapshot; live list refresh remains responsible for
+    // reporting provider failures.
+    let _ = crate::core::volumes::native_vfs::revalidate_cached_listing(
+        path,
+        &mut data.listing.entries,
+    );
     data.listing = filtered(data.listing, hidden, ignores);
     Ok(Some(data))
 }

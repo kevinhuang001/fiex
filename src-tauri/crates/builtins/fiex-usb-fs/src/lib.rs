@@ -4,6 +4,8 @@
 //! parsing live here. Core adapts these filesystem entries to its provider
 //! entry model and owns authorization, presentation and OS ejection policy.
 
+pub const PROVIDER_ID: &str = "core:usb-fs";
+
 #[cfg(feature = "driver")]
 mod access;
 #[cfg(feature = "driver")]

@@ -22,6 +22,43 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
 }
 
 #[test]
+fn native_vfs_optional_behaviors_come_from_the_registered_provider_instance() {
+    assert!(is_tree_path(RECENT_URI));
+    assert!(is_tree_path(APPLICATIONS_URI));
+    assert!(is_tree_path(trash_vfs::URI));
+    assert!(!is_tree_path("unknown://item"));
+
+    assert_eq!(default_view(APPLICATIONS_URI), Some("icons"));
+    assert_eq!(default_view("/tmp"), None);
+    assert_eq!(
+        backing_path("/tmp/example"),
+        Some(PathBuf::from("/tmp/example"))
+    );
+    assert_eq!(backing_path(APPLICATIONS_URI), None);
+}
+
+#[test]
+fn native_resource_identity_is_declared_by_each_registered_provider() {
+    let local = identity("/tmp/fiex-native-identity").unwrap();
+    assert_eq!(local.provider_id, fiex_local_fs::PROVIDER_ID);
+    assert_eq!(local.storage_type, Some(ResourceType::Fs));
+    assert_eq!(local.mount_id, "local");
+    assert!(local.host_path);
+    assert!(is_filesystem_path("/tmp/fiex-native-identity"));
+
+    let recent = identity(RECENT_URI).unwrap();
+    assert_eq!(recent.provider_id, fiex_recent::PROVIDER_ID);
+    assert_eq!(recent.storage_type, None);
+    assert_eq!(reference_mount_id(RECENT_URI), Some(recent.mount_id));
+    assert!(!is_filesystem_path(RECENT_URI));
+
+    let applications = identity(APPLICATIONS_URI).unwrap();
+    assert_eq!(applications.provider_id, fiex_applications::PROVIDER_ID);
+    assert_eq!(applications.storage_type, Some(ResourceType::Vfs));
+    assert!(!applications.host_path);
+}
+
+#[test]
 fn path_only_recent_matching_does_not_resolve_persisted_sources() {
     let (view, storage) = crate::plugins::match_rules::typed_locations_for(RECENT_URI);
     assert_eq!(view.unwrap().provider_id, "core:recent");

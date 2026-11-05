@@ -82,7 +82,7 @@ pub(in crate::core::fs) fn desktop_listing(
         path: resource.path.clone(),
         entries,
         allowed_ops,
-        virtual_volume: native_vfs::shared_provider_id(&resource.path) != Some("core:local-fs"),
+        virtual_volume: !native_vfs::is_host_path(&resource.path),
         warnings,
         default_view: native_vfs::default_view(&resource.path).map(str::to_owned),
     })
@@ -91,6 +91,7 @@ pub(in crate::core::fs) fn desktop_listing(
 pub(in crate::core::fs) fn native_export_path(
     resource: &ResourceBroker,
 ) -> Option<std::path::PathBuf> {
-    (native_vfs::shared_provider_id(&resource.path) == Some("core:local-fs"))
-        .then(|| std::path::PathBuf::from(&resource.path))
+    native_vfs::is_host_path(&resource.path)
+        .then(|| native_vfs::backing_path(&resource.path))
+        .flatten()
 }

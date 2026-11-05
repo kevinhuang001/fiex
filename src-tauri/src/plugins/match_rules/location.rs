@@ -25,14 +25,18 @@ fn storage_location(path: &str) -> Option<ResourceLocation> {
 }
 
 fn projected_storage_location(source: &str) -> Option<ResourceLocation> {
-    let (kind, provider, mount) = crate::core::fs::provider_registry::identity(source)?;
-    if provider == "core:local-fs" && std::fs::symlink_metadata(source).is_err() {
+    let identity = crate::core::volumes::native_vfs::storage_identity(source)?;
+    if !identity.available {
         return None;
     }
-    if provider == "core:usb-fs" && mount == "core:usb:offline" {
+    if identity.host_path && std::fs::symlink_metadata(source).is_err() {
         return None;
     }
-    descriptor(kind, &provider, &mount)
+    let kind = match identity.storage_type? {
+        ResourceType::Fs => "fs",
+        ResourceType::Vfs => "vfs",
+    };
+    descriptor(kind, identity.provider_id, &identity.mount_id)
 }
 
 pub(crate) fn projected_storage_for_source(source: &str) -> Option<ResourceLocation> {
@@ -45,9 +49,7 @@ pub(crate) fn projected_storage_for_source(source: &str) -> Option<ResourceLocat
 pub fn typed_locations_for(path: &str) -> (Option<ResourceLocation>, Option<ResourceLocation>) {
     if let Some(provider_id) = crate::core::volumes::native_vfs::provider_id(path) {
         let current = descriptor("vfs", provider_id, provider_id);
-        let storage = (provider_id != "core:recent")
-            .then(|| current.clone())
-            .flatten();
+        let storage = storage_location(path);
         return (current, storage);
     }
     let storage = storage_location(path);

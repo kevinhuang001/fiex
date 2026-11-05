@@ -36,10 +36,10 @@ pub(super) struct MenuPreflightAvailability {
 /// of "fs" alone is not enough: raw USBFS is also FS but must not be
 /// accidentally passed to local operating-system commands.
 fn plain_local(path: &str) -> bool {
-    let (view, storage) = crate::plugins::match_rules::typed_locations_for(path);
-    matches!((view, storage),
-        (Some(view), Some(storage))
-            if view == storage && storage.provider_id == "core:local-fs")
+    matches!(
+        crate::core::fs::provider_registry::owner(path),
+        Ok(crate::core::fs::provider_registry::ResourceOwner::LocalFs)
+    )
 }
 
 impl Context {

@@ -54,11 +54,7 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
                 remove: !protected,
             }
         }
-        Ok(ResourceOwner::NativeVfs("core:usb-fs")) => {
-            let declared = crate::core::volumes::native_vfs::operations(path);
-            from_entry(&declared, entry)
-        }
-        Ok(ResourceOwner::NativeVfs(_)) => {
+        Ok(ResourceOwner::NativeVfs) => {
             let declared = crate::core::volumes::native_vfs::operations(path);
             from_entry(&declared, entry)
         }

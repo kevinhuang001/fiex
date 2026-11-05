@@ -3,7 +3,8 @@ use super::{applications, recycle, trash_vfs};
 use crate::{core::files::Entry, plugins::provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{
     FsEntry, FsListing, FsOperation, FsRead, FsRequest, FsWrite, PreflightHandlers, ProviderError,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ResourceType, SearchCapabilities,
+    VfsProvider,
 };
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
@@ -50,6 +51,28 @@ type SameMountMoveHandler = fn(
     &[crate::core::fs::ResourceBroker],
     &crate::core::fs::ResourceBroker,
 ) -> Result<Vec<String>, String>;
+type BackingPathHandler = fn(&str) -> Option<PathBuf>;
+type BindingValidator = fn(&str, &crate::plugins::contracts::ResourceRef) -> Result<(), String>;
+type RenameHandler = fn(&str);
+type TreePathMatcher = fn(&str) -> bool;
+type IconHandler = fn(&str) -> Option<String>;
+type DefaultViewHandler = fn(&str) -> Option<&'static str>;
+type OpenPolicyHandler = fn(&str, &Entry) -> Option<bool>;
+#[cfg(feature = "desktop")]
+type NavigationSourceHandler = fn(&str) -> Option<String>;
+type ProviderIdentityHandler = fn(&str, &'static str) -> Option<NativeVfsIdentity>;
+type ScopedValidateChildHandler =
+    fn(&crate::plugins::resource::fs_access::Scope, &str, &str) -> Result<(), String>;
+type CachedListingHandler = fn(&mut Vec<Entry>) -> Result<(), String>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NativeVfsIdentity {
+    pub(crate) provider_id: &'static str,
+    pub(crate) storage_type: Option<ResourceType>,
+    pub(crate) mount_id: String,
+    pub(crate) available: bool,
+    pub(crate) host_path: bool,
+}
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct NativeVfsExtensions {
@@ -59,6 +82,18 @@ pub(crate) struct NativeVfsExtensions {
     child_path: Option<ChildPathHandler>,
     parent_path: Option<ParentPathHandler>,
     same_mount_move: Option<SameMountMoveHandler>,
+    backing_path: Option<BackingPathHandler>,
+    validate_binding: Option<BindingValidator>,
+    after_rename: Option<RenameHandler>,
+    is_tree_path: Option<TreePathMatcher>,
+    icon: Option<IconHandler>,
+    default_view: Option<DefaultViewHandler>,
+    open_policy: Option<OpenPolicyHandler>,
+    #[cfg(feature = "desktop")]
+    navigation_source: Option<NavigationSourceHandler>,
+    provider_identity: Option<ProviderIdentityHandler>,
+    validate_scoped_child: Option<ScopedValidateChildHandler>,
+    revalidate_cached_listing: Option<CachedListingHandler>,
 }
 
 pub(crate) trait RegisteredNativeVfsProvider: VfsProvider {
@@ -150,17 +185,22 @@ impl VfsProvider for NativeVfsAdapter {
 pub(crate) fn register(registry: &mut NativeProviderRegistry<dyn RegisteredNativeVfsProvider>) {
     for (id, owner, provider, uri_schemes, provider_extensions) in [
         (
-            "core:recent",
+            fiex_recent::PROVIDER_ID,
             CoreOwnerKey::new("recent"),
             fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
             fiex_recent::recent_uri_schemes(),
             NativeVfsExtensions {
                 validate_child: Some(validate_recent_child),
+                is_tree_path: Some(recent_is_tree_path),
+                provider_identity: Some(recent_identity),
+                #[cfg(feature = "desktop")]
+                navigation_source: Some(resolve_recent_navigation_source),
+                revalidate_cached_listing: Some(revalidate_recent_listing),
                 ..NativeVfsExtensions::default()
             },
         ),
         (
-            "core:applications",
+            fiex_applications::PROVIDER_ID,
             fiex_applications::owner_key(),
             Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
             APPLICATIONS_URI_SCHEMES,
@@ -171,36 +211,53 @@ pub(crate) fn register(registry: &mut NativeProviderRegistry<dyn RegisteredNativ
                 child_path: Some(applications_child_path),
                 parent_path: Some(applications::parent_uri),
                 same_mount_move: Some(application_provider::move_within_mount),
+                backing_path: Some(application_provider::backing_path),
+                after_rename: Some(applications::cancel_reservation),
+                is_tree_path: Some(applications_is_tree_path),
+                icon: Some(applications_icon),
+                default_view: Some(applications_default_view),
+                provider_identity: Some(vfs_identity),
+                ..NativeVfsExtensions::default()
             },
         ),
         (
-            "core:trash",
+            fiex_trash::PROVIDER_ID,
             fiex_trash::owner_key(),
             fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
             fiex_trash::uri_schemes(),
             NativeVfsExtensions {
                 validate_child: Some(trash_vfs::validate_child),
+                is_tree_path: Some(trash_vfs::is_tree),
+                provider_identity: Some(vfs_identity),
+                #[cfg(feature = "desktop")]
+                open: Some(trash_open),
+                open_policy: Some(trash_open_policy),
                 ..NativeVfsExtensions::default()
             },
         ),
         (
-            "core:local-fs",
+            fiex_local_fs::PROVIDER_ID,
             CoreOwnerKey::new("core"),
-            Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
+            Arc::new(StorageProvider::new(fiex_local_fs::PROVIDER_ID)) as Arc<dyn VfsProvider>,
             NO_URI_SCHEMES,
             NativeVfsExtensions {
                 child_path: Some(host_child_path),
+                backing_path: Some(host_backing_path),
+                provider_identity: Some(host_identity),
+                validate_scoped_child: Some(validate_host_child),
                 ..NativeVfsExtensions::default()
             },
         ),
         (
-            "core:usb-fs",
+            fiex_usb_fs::PROVIDER_ID,
             CoreOwnerKey::new("core"),
-            Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
+            Arc::new(StorageProvider::new(fiex_usb_fs::PROVIDER_ID)) as Arc<dyn VfsProvider>,
             NO_URI_SCHEMES,
             NativeVfsExtensions {
                 validate_child: Some(usb_validate_child),
                 child_path: Some(usb_child_path),
+                validate_binding: Some(usb_ensure_current_binding),
+                provider_identity: Some(usb_identity),
                 ..NativeVfsExtensions::default()
             },
         ),
@@ -249,7 +306,7 @@ pub fn shared_provider_id(path: &str) -> Option<&'static str> {
         return Some(provider);
     }
     if crate::usbfs::route(path).is_some() {
-        return Some("core:usb-fs");
+        return Some(fiex_usb_fs::PROVIDER_ID);
     }
     if path.is_empty()
         || path.contains("://")
@@ -258,18 +315,169 @@ pub fn shared_provider_id(path: &str) -> Option<&'static str> {
     {
         return None;
     }
-    Some("core:local-fs")
+    Some(fiex_local_fs::PROVIDER_ID)
+}
+
+/// Resolve storage and presentation identity from the owning native module's
+/// registered descriptor. Providers without backing storage, such as Recent,
+/// still have a stable mount identity for references and cache validation.
+pub(crate) fn identity(path: &str) -> Option<NativeVfsIdentity> {
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().provider_identity?)(path, provider_id)
+}
+
+pub(crate) fn storage_identity(path: &str) -> Option<NativeVfsIdentity> {
+    identity(path).filter(|identity| identity.storage_type.is_some())
+}
+
+pub(crate) fn is_host_path(path: &str) -> bool {
+    identity(path).is_some_and(|identity| identity.host_path)
+}
+
+pub(crate) fn is_filesystem_path(path: &str) -> bool {
+    identity(path).is_some_and(|identity| identity.storage_type == Some(ResourceType::Fs))
+}
+
+pub(crate) fn reference_mount_id(path: &str) -> Option<String> {
+    identity(path).map(|identity| identity.mount_id)
+}
+
+pub(crate) fn validate_child_with_scope(
+    scope: &crate::plugins::resource::fs_access::Scope,
+    parent: &str,
+    child: &str,
+) -> Result<(), String> {
+    let provider_id =
+        shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
+    if let Some(validate) = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().validate_scoped_child)
+    {
+        return validate(scope, parent, child);
+    }
+    validate_child(parent, child)
+}
+
+pub(crate) fn revalidate_cached_listing(
+    path: &str,
+    entries: &mut Vec<Entry>,
+) -> Result<(), String> {
+    let Some(provider_id) = shared_provider_id(path) else {
+        return Ok(());
+    };
+    let Some(revalidate) = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().revalidate_cached_listing)
+    else {
+        return Ok(());
+    };
+    revalidate(entries)
+}
+
+pub(crate) fn open_policy(path: &str, entry: &Entry) -> Option<bool> {
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().open_policy?)(path, entry)
+}
+
+#[cfg(feature = "desktop")]
+pub(crate) fn navigation_source(path: &str) -> Option<String> {
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().navigation_source?)(path)
+}
+
+fn recent_identity(_path: &str, provider_id: &'static str) -> Option<NativeVfsIdentity> {
+    Some(NativeVfsIdentity {
+        provider_id,
+        storage_type: None,
+        mount_id: provider_id.into(),
+        available: true,
+        host_path: false,
+    })
+}
+
+fn vfs_identity(_path: &str, provider_id: &'static str) -> Option<NativeVfsIdentity> {
+    Some(NativeVfsIdentity {
+        provider_id,
+        storage_type: Some(ResourceType::Vfs),
+        mount_id: provider_id.into(),
+        available: true,
+        host_path: false,
+    })
+}
+
+fn host_identity(_path: &str, provider_id: &'static str) -> Option<NativeVfsIdentity> {
+    Some(NativeVfsIdentity {
+        provider_id,
+        storage_type: Some(ResourceType::Fs),
+        mount_id: "local".into(),
+        available: true,
+        host_path: true,
+    })
+}
+
+fn usb_identity(path: &str, provider_id: &'static str) -> Option<NativeVfsIdentity> {
+    let route = crate::usbfs::route(path)?;
+    let generation = crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into());
+    Some(NativeVfsIdentity {
+        provider_id,
+        storage_type: Some(ResourceType::Fs),
+        available: generation != "offline",
+        mount_id: format!("core:usb:{generation}"),
+        host_path: false,
+    })
+}
+
+fn validate_host_child(
+    scope: &crate::plugins::resource::fs_access::Scope,
+    parent: &str,
+    child: &str,
+) -> Result<(), String> {
+    scope.authorize(child)?;
+    if !Path::new(child).starts_with(parent) {
+        return Err("child outside selected resource".into());
+    }
+    Ok(())
+}
+
+fn revalidate_recent_listing(entries: &mut Vec<Entry>) -> Result<(), String> {
+    let storage = crate::core::volumes::native_vfs::management_storage_for_provider(
+        fiex_recent::PROVIDER_ID,
+        "history",
+    )?;
+    crate::core::recent::filter_cached_entries(entries, &storage)
+}
+
+#[cfg(feature = "desktop")]
+fn resolve_recent_navigation_source(alias: &str) -> Option<String> {
+    crate::core::recent::source_for(alias).ok()
+}
+
+fn trash_open_policy(_path: &str, entry: &Entry) -> Option<bool> {
+    Some(
+        entry.is_dir
+            && !entry.is_symlink
+            && entry
+                .allowed_ops
+                .iter()
+                .any(|operation| operation == "list"),
+    )
+}
+
+#[cfg(feature = "desktop")]
+fn trash_open(_path: &str) -> Result<(), String> {
+    Err(crate::i18n::t("回收站项目请使用“放回原处”或“彻底删除”").into())
 }
 
 /// Return a Core-local backing path only when the owning native provider
 /// deliberately exposes one. Plugin mounts and projected virtual identities
 /// never become host paths through this resolver.
 pub fn backing_path(path: &str) -> Option<PathBuf> {
-    match shared_provider_id(path)? {
-        "core:local-fs" => Some(PathBuf::from(path)),
-        "core:applications" => application_provider::backing_path(path),
-        _ => None,
-    }
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().backing_path?)(path)
 }
 
 /// Let a registered native provider handle resources whose platform open
@@ -320,9 +528,22 @@ pub(crate) fn ensure_current_binding(
     path: &str,
     reference: &crate::plugins::contracts::ResourceRef,
 ) -> Result<(), String> {
-    if shared_provider_id(path) != Some("core:usb-fs") {
+    let Some(provider_id) = shared_provider_id(path) else {
         return Ok(());
-    }
+    };
+    let Some(validate) = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().validate_binding)
+    else {
+        return Ok(());
+    };
+    validate(path, reference)
+}
+
+fn usb_ensure_current_binding(
+    path: &str,
+    reference: &crate::plugins::contracts::ResourceRef,
+) -> Result<(), String> {
     let current_mount = crate::core::fs::provider_registry::reference_mount_id(path)
         .ok_or("StaleRef: USB mount is no longer available")?;
     if reference.mount_id != current_mount {
@@ -347,12 +568,55 @@ fn unregistered_scheme(path: &str) -> bool {
 }
 
 pub fn is_tree_path(path: &str) -> bool {
-    path == RECENT_URI
-        || path == APPLICATIONS_URI
+    let Some(provider_id) = shared_provider_id(path) else {
+        return false;
+    };
+    let Some(matches) = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().is_tree_path)
+    else {
+        return false;
+    };
+    matches(path)
+}
+
+fn applications_is_tree_path(path: &str) -> bool {
+    path == APPLICATIONS_URI
         || applications::is_folder(path)
         || applications::is_app(path)
         || applications::is_user(path)
-        || trash_vfs::is_tree(path)
+}
+
+fn recent_is_tree_path(path: &str) -> bool {
+    path == RECENT_URI
+}
+
+fn applications_icon(path: &str) -> Option<String> {
+    if applications::is_user(path) {
+        return None;
+    }
+    let entry = applications::system_entry(path).ok()?;
+    applications::cached_icon(entry.link_target.as_deref()?)
+}
+
+fn applications_default_view(_path: &str) -> Option<&'static str> {
+    Some("icons")
+}
+
+fn host_backing_path(path: &str) -> Option<PathBuf> {
+    Some(PathBuf::from(path))
+}
+
+pub(crate) fn after_rename(path: &str) {
+    let Some(provider_id) = shared_provider_id(path) else {
+        return;
+    };
+    if let Some(after_rename) = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().after_rename)
+    {
+        after_rename(path);
+    }
 }
 
 /// Ask the owning native view to validate a child identity. Ordinary host paths

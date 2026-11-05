@@ -11,15 +11,15 @@ pub fn resource_entry(path: &str) -> Result<Entry, String> {
 }
 
 pub fn icon_for(path: &str) -> Option<String> {
-    if provider_id(path) != Some("core:applications") || applications::is_user(path) {
-        return None;
-    }
-    let entry = applications::system_entry(path).ok()?;
-    applications::cached_icon(entry.link_target.as_deref()?)
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().icon?)(path)
 }
 
 pub fn default_view(path: &str) -> Option<&'static str> {
-    (provider_id(path) == Some("core:applications")).then_some("icons")
+    let provider_id = shared_provider_id(path)?;
+    let provider = registry().get(provider_id)?;
+    (provider.extensions().default_view?)(path)
 }
 
 /// Check a persisted locator against its current provider and parent rules.

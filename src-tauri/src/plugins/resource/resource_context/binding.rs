@@ -30,10 +30,7 @@ pub fn bind_selected(
         }
         // An attacker-controlled resource binding is never promoted to a
         // local path merely because its scheme has no registered mount.
-        if !matches!(
-            crate::core::fs::provider_registry::identity(&binding.path),
-            Some(("fs", provider, _)) if provider == "core:local-fs"
-        ) {
+        if !crate::core::volumes::native_vfs::is_host_path(&binding.path) {
             return Err("ScopeDenied: unsupported resource owner".into());
         }
         let path = std::path::Path::new(&binding.path);
