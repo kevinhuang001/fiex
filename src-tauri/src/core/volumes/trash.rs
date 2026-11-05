@@ -11,17 +11,6 @@ use std::{
 mod journal;
 pub use journal::*;
 
-pub(crate) fn move_to_trash(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        super::windows_shell::move_to_trash(path)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        trash::delete(path).map_err(|error| error.to_string())
-    }
-}
-
 /// The user's Trash can be browsed like any other folder. Windows exposes the
 /// Recycle Bin through a shell namespace instead of a directory, so it keeps
 /// the system opener as a fallback.

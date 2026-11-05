@@ -82,7 +82,6 @@ globset = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "blocking", "json", "system-proxy"] }
 urlencoding = "2"
 notify = "8"
-trash = "5"
 open = { version = "5", features = ["shellexecute-on-windows"] }
 which = "8"
 base64 = "0.22"

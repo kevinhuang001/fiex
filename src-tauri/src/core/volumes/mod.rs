@@ -20,9 +20,9 @@ pub(crate) mod windows_shell;
 use serde::Serialize;
 
 pub use applications as apps;
+pub(crate) use fiex_platform::move_to_trash;
 pub use mounts::{clear_usb_fallback, mount_device, usb_fallback_eject_device};
 pub use recycle as recycle_bin;
-pub(crate) use trash::move_to_trash;
 pub use trash::{
     delete_permanently, empty_trash, record_trashed, restore_from_trash, restore_needs_folder,
     trash_names, trash_path,
