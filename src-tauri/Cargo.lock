@@ -1800,6 +1800,7 @@ dependencies = [
  "dunce",
  "ed25519-dalek",
  "fiex-applications",
+ "fiex-decorations",
  "fiex-fs",
  "fiex-info",
  "fiex-platform",
@@ -1869,6 +1870,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "fiex-decorations"
+version = "0.1.0"
+dependencies = [
+ "fiex-provider-contracts",
 ]
 
 [[package]]
