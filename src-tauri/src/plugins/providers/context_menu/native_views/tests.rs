@@ -6,7 +6,7 @@ fn only_view_specific_actions_have_native_view_providers() {
     let registry = registry();
     assert_eq!(
         registry.module_id("builtin:open").as_deref(),
-        Some("core:actions")
+        Some(fiex_actions::MODULE_ID)
     );
     assert_eq!(
         registry.module_id("builtin:remove-from-recent").as_deref(),

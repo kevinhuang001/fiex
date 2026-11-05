@@ -88,7 +88,9 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
             context.paths.len(),
         )
         .into_iter()
-        .filter(|candidate| registry.module_id(&candidate.id).as_deref() == Some("core:actions"))
+        .filter(|candidate| {
+            registry.module_id(&candidate.id).as_deref() == Some(fiex_actions::MODULE_ID)
+        })
         .collect()
 }
 
@@ -106,7 +108,9 @@ pub(super) fn preflight_availability(
             context.paths.len(),
         )
         .into_iter()
-        .filter(|candidate| registry.module_id(&candidate.id).as_deref() == Some("core:actions"))
+        .filter(|candidate| {
+            registry.module_id(&candidate.id).as_deref() == Some(fiex_actions::MODULE_ID)
+        })
         .map(|candidate| candidate.id)
         .collect::<std::collections::HashSet<_>>();
     let capabilities = context.capabilities();

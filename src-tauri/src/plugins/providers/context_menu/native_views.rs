@@ -95,7 +95,7 @@ fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
 fn is_view_provider(id: &str) -> bool {
     registry()
         .module_id(id)
-        .is_some_and(|module_id| module_id != "core:actions")
+        .is_some_and(|module_id| module_id != fiex_actions::MODULE_ID)
 }
 
 #[cfg(test)]

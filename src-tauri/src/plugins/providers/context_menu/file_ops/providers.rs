@@ -14,7 +14,7 @@ mod groups;
 /// availability is computed by that action against the trusted Core snapshot.
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     let mut module = values.module(ModuleDescriptor::new(
-        "core:actions",
+        fiex_actions::MODULE_ID,
         CoreOwnerKey::new("core"),
         env!("CARGO_PKG_VERSION"),
     ));
