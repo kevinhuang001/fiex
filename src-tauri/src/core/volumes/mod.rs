@@ -15,7 +15,7 @@ mod roots;
 mod trash;
 pub mod trash_vfs;
 #[cfg(target_os = "windows")]
-mod windows_shell;
+pub(crate) mod windows_shell;
 
 use serde::Serialize;
 
