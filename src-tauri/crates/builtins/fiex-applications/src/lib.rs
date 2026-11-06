@@ -36,9 +36,7 @@ pub fn owner_key() -> CoreOwnerKey {
 pub struct ApplicationsState {
     pub schema: u32,
     pub revision: u64,
-    #[serde(default)]
     pub folders: BTreeMap<String, VirtualFolder>,
-    #[serde(default)]
     pub apps: BTreeMap<String, ApplicationNode>,
 }
 
@@ -57,21 +55,14 @@ pub struct ApplicationNode {
     pub display_name: String,
     pub source: ApplicationSource,
     pub order: i64,
-    #[serde(default)]
     pub unavailable: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ApplicationSource {
-    System {
-        stable_locator: String,
-    },
-    Imported {
-        asset_id: String,
-        #[serde(default)]
-        extension: String,
-    },
+    System { stable_locator: String },
+    Imported { asset_id: String, extension: String },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

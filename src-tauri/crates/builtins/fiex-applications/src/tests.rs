@@ -50,6 +50,33 @@ fn store_validates_updates_and_advances_revision_once() {
 }
 
 #[test]
+fn persisted_state_requires_all_current_fields() {
+    let missing_apps: Result<ApplicationsState, _> = serde_json::from_value(serde_json::json!({
+        "schema": SCHEMA,
+        "revision": 0,
+        "folders": {}
+    }));
+    assert!(missing_apps.is_err());
+
+    let missing_unavailable: Result<ApplicationNode, _> =
+        serde_json::from_value(serde_json::json!({
+            "id": "app",
+            "parent": null,
+            "displayName": "Editor",
+            "source": { "kind": "system", "stableLocator": "editor" },
+            "order": 0
+        }));
+    assert!(missing_unavailable.is_err());
+
+    let missing_extension: Result<ApplicationSource, _> =
+        serde_json::from_value(serde_json::json!({
+            "kind": "imported",
+            "assetId": "asset"
+        }));
+    assert!(missing_extension.is_err());
+}
+
+#[test]
 fn virtual_identity_is_opaque_and_independent_of_display_name() {
     let id = "folder-0123456789abcdef";
     let before = folder_uri(id);
