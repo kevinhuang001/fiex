@@ -1808,6 +1808,7 @@ dependencies = [
  "fiex-resource",
  "fiex-runtime",
  "fiex-storage",
+ "fiex-trash",
  "file_icon_provider",
  "fontdb",
  "futures",
@@ -1945,6 +1946,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "fiex-trash"
+version = "0.1.0"
+dependencies = [
+ "fiex-provider-contracts",
+ "fiex-storage",
 ]
 
 [[package]]

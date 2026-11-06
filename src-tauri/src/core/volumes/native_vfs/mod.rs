@@ -35,13 +35,11 @@ pub use presentation::{default_view, icon_for, opaque, resource_entry};
 pub use shared::core_entry;
 use shared::target_invocation;
 use storage_provider::StorageProvider;
-use trash_provider::TrashView;
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 const NO_URI_SCHEMES: &[&str] = &[];
 const APPLICATIONS_URI_SCHEMES: &[&str] = &["applications"];
-const TRASH_URI_SCHEMES: &[&str] = &["trash", "recyclebin"];
 
 #[cfg(feature = "desktop")]
 type OpenHandler = fn(&str) -> Result<(), String>;
@@ -102,9 +100,9 @@ fn registration() -> &'static RegisteredNativeVfs {
             ),
             (
                 "core:trash",
-                CoreOwnerKey::new("core"),
-                Arc::new(TrashView) as Arc<dyn VfsProvider>,
-                TRASH_URI_SCHEMES,
+                fiex_trash::owner_key(),
+                fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
+                fiex_trash::uri_schemes(),
                 NativeVfsExtensions {
                     validate_child: Some(trash_vfs::validate_child),
                     ..NativeVfsExtensions::default()
@@ -153,6 +151,10 @@ fn registration() -> &'static RegisteredNativeVfs {
 
 pub(crate) fn recent_services() -> Arc<dyn fiex_recent::RecentModuleServices> {
     recent_provider::services()
+}
+
+pub(crate) fn trash_services() -> Arc<dyn fiex_trash::TrashModuleServices> {
+    trash_provider::services()
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
