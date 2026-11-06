@@ -3,78 +3,23 @@
 mod migration;
 mod removal;
 use crate::core::files::Entry;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{Mutex, OnceLock},
     time::Instant,
 };
 
-const FOLDER_SEGMENT: &str = "folder_";
-const APP_SEGMENT: &str = "app_";
+pub use fiex_applications::{
+    app_id, app_uri, folder_id, folder_uri, ApplicationNode, ApplicationSource, ApplicationsState,
+    PendingKind, PendingTarget, VirtualFolder,
+};
+use fiex_applications::{app_uri_in, child_uri, folder_uri_in, parent_uri_matches};
+pub(super) use fiex_applications::{
+    valid_extension, valid_id, validate_state, APP_SEGMENT, FOLDER_SEGMENT, SCHEMA,
+};
+
 const SCOPE: &str = "tree";
 const KEY: &str = "state";
-const SCHEMA: u32 = 1;
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ApplicationsState {
-    pub schema: u32,
-    pub revision: u64,
-    #[serde(default)]
-    pub migration_id: Option<String>,
-    #[serde(default)]
-    pub folders: BTreeMap<String, VirtualFolder>,
-    #[serde(default)]
-    pub apps: BTreeMap<String, ApplicationNode>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct VirtualFolder {
-    pub id: String,
-    pub parent: Option<String>,
-    pub name: String,
-    pub order: i64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ApplicationNode {
-    pub id: String,
-    pub parent: Option<String>,
-    pub display_name: String,
-    pub source: ApplicationSource,
-    pub order: i64,
-    #[serde(default)]
-    pub unavailable: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ApplicationSource {
-    System {
-        stable_locator: String,
-    },
-    Imported {
-        asset_id: String,
-        #[serde(default)]
-        extension: String,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PendingKind {
-    Folder,
-    Application,
-}
-
-#[derive(Clone, Debug)]
-pub struct PendingTarget {
-    pub uri: String,
-    pub parent_uri: String,
-    pub name: String,
-    pub asset_id: Option<String>,
-    pub extension: String,
-    pub kind: PendingKind,
-}
 
 #[derive(Clone, Debug)]
 struct PendingReservation {
@@ -132,147 +77,6 @@ where
         validate_state(&state)?;
         Ok(state)
     })
-}
-
-fn validate_state(state: &ApplicationsState) -> Result<(), String> {
-    for (id, folder) in &state.folders {
-        if id != &folder.id || !valid_id(id) || folder.name.is_empty() {
-            return Err("invalid Applications folder state".into());
-        }
-        if folder
-            .parent
-            .as_ref()
-            .is_some_and(|parent| !state.folders.contains_key(parent))
-        {
-            return Err("Applications folder parent is missing".into());
-        }
-        let mut visited = std::collections::HashSet::new();
-        let mut ancestor = folder.parent.as_deref();
-        while let Some(parent) = ancestor {
-            if !visited.insert(parent) || parent == id {
-                return Err("Applications folder cycle detected".into());
-            }
-            ancestor = state
-                .folders
-                .get(parent)
-                .and_then(|node| node.parent.as_deref());
-        }
-    }
-    for (id, app) in &state.apps {
-        if id != &app.id || !valid_id(id) || app.display_name.is_empty() {
-            return Err("invalid Applications entry state".into());
-        }
-        if app
-            .parent
-            .as_ref()
-            .is_some_and(|parent| !state.folders.contains_key(parent))
-        {
-            return Err("Applications entry parent is missing".into());
-        }
-        match &app.source {
-            ApplicationSource::System { stable_locator } if stable_locator.is_empty() => {
-                return Err("system application locator is empty".into());
-            }
-            ApplicationSource::Imported {
-                asset_id,
-                extension,
-            } if !valid_id(asset_id) || !valid_extension(extension) => {
-                return Err("invalid imported application asset id".into());
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-fn valid_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-}
-
-fn valid_extension(value: &str) -> bool {
-    value.len() <= 16 && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
-}
-
-pub fn folder_uri(id: &str) -> String {
-    format!("{}{FOLDER_SEGMENT}{id}", super::URI)
-}
-
-pub fn app_uri(id: &str) -> String {
-    format!("{}{APP_SEGMENT}{id}", super::URI)
-}
-
-pub fn folder_id(uri: &str) -> Option<String> {
-    node_id(uri, FOLDER_SEGMENT)
-}
-
-pub fn app_id(uri: &str) -> Option<String> {
-    node_id(uri, APP_SEGMENT)
-}
-
-fn node_id(uri: &str, leaf_prefix: &str) -> Option<String> {
-    let relative = uri.strip_prefix(super::URI)?;
-    let segments = relative.split('/');
-    let mut last = None;
-    for segment in segments {
-        if segment.is_empty() {
-            return None;
-        }
-        if let Some(previous) = last.replace(segment) {
-            let parent_id = previous.strip_prefix(FOLDER_SEGMENT)?;
-            if !valid_id(parent_id) {
-                return None;
-            }
-        }
-    }
-    let id = last?.strip_prefix(leaf_prefix)?;
-    valid_id(id).then(|| id.to_owned())
-}
-
-fn child_uri(parent_uri: &str, segment: &str) -> String {
-    if parent_uri == super::URI {
-        format!("{parent_uri}{segment}")
-    } else {
-        format!("{}/{segment}", parent_uri.trim_end_matches('/'))
-    }
-}
-
-fn folder_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
-    let mut segments = Vec::new();
-    let mut current = state.folders.get(id)?;
-    loop {
-        segments.push(format!("{FOLDER_SEGMENT}{}", current.id));
-        let Some(parent) = current.parent.as_deref() else {
-            break;
-        };
-        current = state.folders.get(parent)?;
-    }
-    segments.reverse();
-    Some(format!("{}{}", super::URI, segments.join("/")))
-}
-
-fn app_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
-    let app = state.apps.get(id)?;
-    let mut segments = Vec::new();
-    let mut parent = app.parent.as_deref();
-    while let Some(parent_id) = parent {
-        let folder = state.folders.get(parent_id)?;
-        segments.push(format!("{FOLDER_SEGMENT}{}", folder.id));
-        parent = folder.parent.as_deref();
-    }
-    segments.reverse();
-    segments.push(format!("{APP_SEGMENT}{id}"));
-    Some(format!("{}{}", super::URI, segments.join("/")))
-}
-
-fn parent_uri_matches(state: &ApplicationsState, uri: &str) -> bool {
-    if uri == super::URI {
-        return true;
-    }
-    folder_id(uri).is_some_and(|id| folder_uri_in(state, &id).as_deref() == Some(uri))
 }
 
 pub fn is_folder(uri: &str) -> bool {

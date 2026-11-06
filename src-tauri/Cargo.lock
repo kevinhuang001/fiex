@@ -1799,6 +1799,7 @@ dependencies = [
  "ds_store",
  "dunce",
  "ed25519-dalek",
+ "fiex-applications",
  "fiex-fs",
  "fiex-platform",
  "fiex-plugin-sdk",
@@ -1856,6 +1857,13 @@ dependencies = [
  "winreg 0.55.0",
  "xattr",
  "zip",
+]
+
+[[package]]
+name = "fiex-applications"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
