@@ -5,6 +5,27 @@ async function openDocuments(page: Page) {
   await expect(page.getByRole('tab')).toContainText('Documents')
 }
 
+async function seedFixturePluginPackage(page: Page) {
+  await page.evaluate(async () => {
+    const sharedPath = '/e2e/fixtures/handlers/shared.ts'
+    const dataPath = '/e2e/fixtures/data.ts'
+    const [{ state }, { item }] = await Promise.all([
+      import(/* @vite-ignore */ sharedPath),
+      import(/* @vite-ignore */ dataPath),
+    ])
+    const path = '/Users/kevin/Documents/Example.fiexplugin'
+    if (!state.entries.some((entry: { path: string }) => entry.path === path))
+      state.entries.push(item(path))
+  })
+}
+
+async function chooseFixturePluginPackage(page: Page) {
+  const picker = page.getByRole('dialog', { name: '打开文件' })
+  await picker.getByRole('option', { name: /^Documents/ }).dblclick()
+  await picker.getByRole('option', { name: 'Example.fiexplugin', exact: true }).click()
+  await picker.getByRole('button', { name: '打开', exact: true }).click()
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/?fixture&pluginFixture')
   // The product now starts in Recent. Most explorer fixtures use Documents,
@@ -47,6 +68,7 @@ test('folder navigation, tabs and fast search', async ({ page }) => {
   await expect(page.getByRole('tab')).toHaveCount(2)
   await page.getByRole('button', { name: '关闭标签页', exact: true }).last().click()
   await expect(page.getByRole('tab')).toHaveCount(1)
+  await openDocuments(page)
   await page.getByRole('textbox', { name: '搜索文件' }).fill('insb')
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
   await expect(page.getByText('Notes.md', { exact: true }).first()).toHaveCount(0)
@@ -273,7 +295,7 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
     contentHeight,
   )
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
-  await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
+  await expect(page.locator('.terminal-panel-tab')).toContainText('zsh')
   const resizer = await page.locator('.terminal-panel-resizer').boundingBox()
   if (!resizer) throw new Error('terminal resizer is missing')
   await page.mouse.move(resizer.x + 20, resizer.y + 3)
@@ -360,6 +382,11 @@ test('batch rename previews and applies a pattern', async ({ page }) => {
 test('appearance can set and remove a background image', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '选择图片…' }).click()
+  const picker = page.getByRole('dialog', { name: '打开文件' })
+  await picker.getByRole('option', { name: /^Documents/ }).dblclick()
+  await picker.getByRole('option', { name: /^Projects/ }).dblclick()
+  await picker.getByRole('option', { name: 'logo.png', exact: true }).click()
+  await picker.getByRole('button', { name: '打开', exact: true }).click()
   await expect(page.locator('.app-background')).toHaveCount(0)
   await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(page.locator('.app.has-background')).toHaveCount(1)
@@ -598,9 +625,11 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
 })
 test('local import shows identity and signature only', async ({ page }) => {
   await page.goto('/?fixture&pluginFixture')
+  await seedFixturePluginPackage(page)
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
+  await chooseFixturePluginPackage(page)
   const dialog = page.getByRole('dialog', { name: '导入插件' })
   await expect(dialog).toContainText('本地示例插件')
   await expect(dialog).toContainText('Example Author')
@@ -663,6 +692,7 @@ test('installed plugin rows expose permissions and settings', async ({ page }) =
 
 test('tab dragging preserves the active folder', async ({ page }) => {
   await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  await openDocuments(page)
   await page.getByText('Research', { exact: true }).dblclick()
   const tabs = page.getByRole('tab')
   const from = await tabs.nth(1).boundingBox()
@@ -893,6 +923,7 @@ test('using a plugin asks again after its read capability was revoked', async ({
   await details.getByRole('button', { name: '关闭', exact: true }).click()
   await manager.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(manager).toBeHidden()
+  await openDocuments(page)
 
   // Normal use: the checksum action reads the selected file, so Core asks
   // again even though the plugin itself is still running.
@@ -960,9 +991,11 @@ test('a copied package stays off without prompting and manual activation succeed
 })
 
 test('confirming a local import immediately opens activation consent', async ({ page }) => {
+  await seedFixturePluginPackage(page)
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
+  await chooseFixturePluginPackage(page)
   await page
     .getByRole('dialog', { name: '导入插件' })
     .getByRole('button', { name: '导入插件', exact: true })
