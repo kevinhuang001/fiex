@@ -28,7 +28,8 @@ pub fn create_folder(parent_uri: &str, name: &str) -> Result<Entry, String> {
 
 pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
     crate::core::files::validate_name(name)?;
-    let id = folder_id(uri).ok_or("Applications root cannot be renamed")?;
+    let initial = snapshot()?;
+    let id = folder_id(&initial, uri).ok_or("Applications root cannot be renamed")?;
     let state = update(|state| {
         if folder_uri_in(state, &id).as_deref() != Some(uri) {
             return Err("StaleRef: Applications folder moved".into());
@@ -47,7 +48,8 @@ pub fn rename_folder(uri: &str, name: &str) -> Result<Entry, String> {
 
 pub fn rename_imported(uri: &str, name: &str) -> Result<Entry, String> {
     crate::core::files::validate_name(name)?;
-    let id = app_id(uri).ok_or("not an Applications app node")?;
+    let initial = snapshot()?;
+    let id = app_id(&initial, uri).ok_or("not an Applications app node")?;
     let state = update(|state| {
         if app_uri_in(state, &id).as_deref() != Some(uri) {
             return Err("StaleRef: Applications entry moved".into());
@@ -69,8 +71,13 @@ pub fn rename_imported(uri: &str, name: &str) -> Result<Entry, String> {
 
 pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, String> {
     crate::core::files::validate_name(name)?;
-    let target_parent = folder_id_or_root(parent_uri)?;
-    if let Some(id) = folder_id(uri) {
+    let initial = snapshot()?;
+    let target_parent = if parent_uri == super::super::URI {
+        None
+    } else {
+        Some(folder_id(&initial, parent_uri).ok_or("invalid Applications folder URI")?)
+    };
+    if let Some(id) = folder_id(&initial, uri) {
         let state = update(|state| {
             if folder_uri_in(state, &id).as_deref() != Some(uri) {
                 return Err("StaleRef: Applications folder moved".into());
@@ -105,7 +112,7 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
         })?;
         return Ok(folder_entry(state.folders.get(&id).unwrap(), &state));
     }
-    let id = app_id(uri).ok_or("not an Applications node")?;
+    let id = app_id(&initial, uri).ok_or("not an Applications node")?;
     let state = update(|state| {
         if app_uri_in(state, &id).as_deref() != Some(uri) {
             return Err("StaleRef: Applications entry moved".into());
@@ -134,15 +141,16 @@ pub fn rename_node(uri: &str, parent_uri: &str, name: &str) -> Result<Entry, Str
 }
 
 pub fn remove_node(uri: &str) -> Result<(), String> {
-    if folder_id(uri).is_some() {
+    let state = snapshot()?;
+    if folder_id(&state, uri).is_some() {
         return remove_empty_folder(uri);
     }
     remove_imported(uri)
 }
 
 pub fn validate_remove(uri: &str) -> Result<(), String> {
-    if let Some(id) = folder_id(uri) {
-        let state = snapshot()?;
+    let state = snapshot()?;
+    if let Some(id) = folder_id(&state, uri) {
         if folder_uri_in(&state, &id).as_deref() != Some(uri) {
             return Err("StaleRef: Applications folder moved".into());
         }
@@ -168,7 +176,8 @@ pub fn validate_remove(uri: &str) -> Result<(), String> {
 }
 
 pub fn remove_empty_folder(uri: &str) -> Result<(), String> {
-    let id = folder_id(uri).ok_or("Applications root cannot be removed")?;
+    let initial = snapshot()?;
+    let id = folder_id(&initial, uri).ok_or("Applications root cannot be removed")?;
     update(|state| {
         if folder_uri_in(state, &id).as_deref() != Some(uri) {
             return Err("StaleRef: Applications folder moved".into());

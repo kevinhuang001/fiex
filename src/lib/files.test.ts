@@ -136,20 +136,20 @@ describe('virtual addresses', () => {
       ['trash:\\', 'trash://'],
     ])
       expect(normalizeAddress(input)).toBe(expected)
-    expect(normalizeAddress('applications:\\folder_folder-1')).toBe(
-      'applications://folder_folder-1',
+    expect(normalizeAddress('applications:\\Design Folder')).toBe(
+      'applications://Design%20Folder',
     )
   })
 
-  it('keeps stable application IDs as provider-owned URIs', () => {
-    const folder = normalizeAddress('applications:\\folder_folder-1')
-    expect(folder).toBe('applications://folder_folder-1')
-    expect(displayAddress(folder)).toBe(folder)
-    expect(basename(folder)).toBe('folder-1')
+  it('uses visible application names as encoded hierarchy segments', () => {
+    const folder = normalizeAddress('applications:\\Design Folder')
+    expect(folder).toBe('applications://Design%20Folder')
+    expect(displayAddress(folder)).toBe('applications://Design Folder')
+    expect(basename(folder)).toBe('Design Folder')
     expect(pathCrumbs(folder).map((crumb) => crumb.path)).toEqual(['applications://', folder])
-    const nestedApp = 'applications://folder_folder-1/app_app-1'
+    const nestedApp = 'applications://Design%20Folder/Editor%20app.exe'
     expect(parent(nestedApp)).toBe(folder)
-    expect(basename(nestedApp)).toBe('app-1')
+    expect(basename(nestedApp)).toBe('Editor app.exe')
     expect(pathCrumbs(nestedApp).map((crumb) => crumb.path)).toEqual([
       'applications://',
       folder,
@@ -161,11 +161,13 @@ describe('virtual addresses', () => {
     expect(pathCrumbs('applications://')[0].path).toBe('applications://')
     expect(pathCrumbs('trash://')[0].path).toBe('trash://')
     const trash = normalizeAddress('trash://Old draft.txt')
+    expect(trash).toBe('trash://Old%20draft.txt')
     expect(displayAddress(trash)).toBe('trash://Old draft.txt')
     expect(pathCrumbs(trash)[0].path).toBe('trash://')
+    expect(parent('trash://Old%20folder/Old%20draft.txt')).toBe('trash://Old%20folder')
+    expect(
+      pathCrumbs('trash://Old%20folder/Old%20draft.txt').map((crumb) => crumb.path),
+    ).toEqual(['trash://', 'trash://Old%20folder', 'trash://Old%20folder/Old%20draft.txt'])
   })
 
-  it('preserves application provider IDs without path aliases', () => {
-    expect(normalizeAddress('applications://app_app-1')).toBe('applications://app_app-1')
-  })
 })

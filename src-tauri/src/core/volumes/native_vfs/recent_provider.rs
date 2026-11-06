@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use fiex_provider_contracts::{FsRead, ProviderError, ProviderInvocation};
-use fiex_recent::{Existence, RecentModuleServices, RecentResource, RecentStore};
+use fiex_recent::{recent_uri, Existence, RecentModuleServices, RecentResource, RecentStore};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ pub(super) fn filter_cached_entries(
     let by_alias = RecentStore::new(storage.clone())
         .records()?
         .into_iter()
-        .map(|record| (format!("recent://{}", record.id), record))
+        .map(|record| (recent_uri(&record), record))
         .collect::<HashMap<_, _>>();
     entries.retain(|entry| {
         by_alias

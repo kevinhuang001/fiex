@@ -37,6 +37,41 @@ pub fn is_recycle_bin_uri(uri: &str) -> bool {
     recycle_bin::is_virtual(uri)
 }
 
+pub(crate) fn encode_uri_segment(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+pub fn parent_uri(uri: &str) -> Result<String, String> {
+    if uri == TRASH_URI || uri == RECYCLE_BIN_URI {
+        return Ok(uri.to_owned());
+    }
+    if uri.starts_with(TRASH_URI) {
+        return system_trash_directory().parent_uri(uri);
+    }
+    if uri.starts_with(RECYCLE_BIN_URI) {
+        #[cfg(windows)]
+        {
+            system_recycle_bin().stat(uri)?;
+            return Ok(RECYCLE_BIN_URI.to_owned());
+        }
+        #[cfg(not(windows))]
+        {
+            return Err("Unsupported: Recycle Bin item is unavailable".into());
+        }
+    }
+    Err("InvalidVfsUri: unknown Trash identity".into())
+}
+
 pub fn system_recycle_bin() -> &'static RecycleBin {
     static BACKEND: OnceLock<RecycleBin> = OnceLock::new();
     BACKEND.get_or_init(RecycleBin::system)

@@ -156,10 +156,10 @@ fn purge(uri: &str, services: &dyn TrashModuleServices) -> Result<(), ProviderEr
             .purge(uri)
             .map_err(|error| provider_error(error, services));
     }
-    if let Some(identity) = uri.strip_prefix(RECYCLE_BIN_URI) {
-        if !identity.is_empty() {
+    if uri.starts_with(RECYCLE_BIN_URI) {
+        if uri != RECYCLE_BIN_URI {
             return system_recycle_bin()
-                .purge(identity)
+                .purge(uri)
                 .map_err(|error| provider_error(error, services));
         }
     }

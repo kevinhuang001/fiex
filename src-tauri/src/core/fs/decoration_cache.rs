@@ -294,9 +294,9 @@ mod tests {
 
     #[test]
     fn incremental_listing_reuses_cached_icons_for_unchanged_entries() {
-        let directory = "applications://folder_decoration-cache-incremental";
+        let directory = "applications://Decoration%20Cache";
         let existing = crate::core::files::Entry {
-            path: "applications://app_decoration-cache-existing".into(),
+            path: "applications://Decoration%20Cache/Existing%20App".into(),
             name: "Existing app".into(),
             ..Default::default()
         };
@@ -322,7 +322,7 @@ mod tests {
         super::super::directory_cache::add_entry(
             directory,
             crate::core::files::Entry {
-                path: "applications://app_decoration-cache-new".into(),
+                path: "applications://Decoration%20Cache/New%20App".into(),
                 name: "New app".into(),
                 ..Default::default()
             },

@@ -133,7 +133,7 @@ fn virtual_roots_are_recognized_without_host_paths() {
     assert!(virtual_search_root("applications://"));
     assert!(virtual_search_root("recyclebin://"));
     assert!(virtual_search_root("trash://"));
-    assert!(virtual_search_root("applications://folder_search-root"));
+    assert!(virtual_search_root("applications://Search"));
     assert!(!virtual_search_root("/tmp"));
     assert!(!virtual_search_root("fiex-plugin-view://example"));
     if let Some(root) = fiex_trash::trash_path() {

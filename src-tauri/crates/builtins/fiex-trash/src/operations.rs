@@ -63,11 +63,11 @@ fn restore_items(
     let mut restored = 0;
     for uri in paths {
         check_cancelled(cancel)?;
-        if let Some(identity) = uri.strip_prefix(RECYCLE_BIN_URI) {
-            if identity.is_empty() {
+        if uri.starts_with(RECYCLE_BIN_URI) {
+            if uri == RECYCLE_BIN_URI {
                 return Err("ScopeDenied: Recycle Bin root cannot be restored".into());
             }
-            system_recycle_bin().restore(identity)?;
+            system_recycle_bin().restore(uri)?;
             restored += 1;
             continue;
         }

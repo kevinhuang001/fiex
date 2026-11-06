@@ -48,6 +48,10 @@ pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
     backend().validate_child(parent, child).map_err(map_error)
 }
 
+pub fn parent_path(path: &str) -> Result<String, String> {
+    fiex_trash::parent_uri(path).map_err(map_error)
+}
+
 pub fn is_tree(path: &str) -> bool {
     backend().is_tree(path)
 }

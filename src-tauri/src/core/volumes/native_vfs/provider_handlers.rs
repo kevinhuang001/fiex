@@ -317,6 +317,10 @@ impl NativeVfsBehavior for TrashOperations {
         Some(trash_resource_kind(path))
     }
 
+    fn parent_path(&self, path: &str) -> Option<Result<String, String>> {
+        Some(trash_vfs::parent_path(path))
+    }
+
     fn provider_identity(
         &self,
         path: &str,

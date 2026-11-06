@@ -1,6 +1,6 @@
 //! Recent's read-only VFS and alias search implementation.
 use super::{store, visible_records, RecentModuleServices, ROOT};
-use crate::{RecentRecord, RecentStore};
+use crate::{recent_uri, RecentRecord, RecentStore};
 use fiex_provider_contracts::{
     FsEntry, FsKind, FsListing, FsOperation, FsRead, FsRequest, ProviderError, ProviderInvocation,
     SearchCapabilities, VfsProvider,
@@ -10,7 +10,7 @@ use std::{path::Path, sync::Arc};
 
 fn entry(record: &RecentRecord) -> FsEntry {
     FsEntry {
-        node_id: format!("recent://{}", record.id),
+        node_id: recent_uri(record),
         name: record.name.clone(),
         kind: FsKind::File,
         size: record.size,

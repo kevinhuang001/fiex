@@ -55,7 +55,7 @@ fn native_virtual_search_is_advertised_only_for_listable_directories() {
     assert!(applications.list && applications.search && applications.create);
     assert!(!applications.remove);
 
-    let mut folder = entry("trash://Zm9sZGVy", &["list", "stat", "search", "remove"]);
+    let mut folder = entry("trash://folder", &["list", "stat", "search", "remove"]);
     folder.is_dir = true;
     let capabilities = from_entry(
         &[FsOperation::List, FsOperation::Stat, FsOperation::Search],
@@ -63,7 +63,7 @@ fn native_virtual_search_is_advertised_only_for_listable_directories() {
     );
     assert!(capabilities.list && capabilities.search && capabilities.stat);
     assert!(!capabilities.remove && !capabilities.write);
-    let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"]);
+    let file = entry("trash://file", &["stat", "search", "remove"]);
     let capabilities = from_entry(&[FsOperation::Stat, FsOperation::Search], &file);
     assert!(capabilities.stat && !capabilities.search && !capabilities.remove);
 }
@@ -107,12 +107,12 @@ fn trash_does_not_grant_generic_delete() {
     let capabilities = from_entry(&[FsOperation::Stat], &trashed);
     assert!(capabilities.stat);
     assert!(!capabilities.list && !capabilities.read && !capabilities.remove);
-    // Nonexistent opaque nodes fail closed, even though their provider is
+    // Unknown item names fail closed, even though their provider is
     // registered and supports stat on actual items.
     assert!(!for_path("trash://an-item").remove);
     assert!(!for_path("trash://an-item").stat);
     assert!(for_path("trash://").list);
-    let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"]);
+    let mut nested = entry("trash://folder", &["stat", "list", "remove"]);
     nested.is_dir = true;
     let capabilities = from_entry(&[FsOperation::Stat, FsOperation::List], &nested);
     assert!(capabilities.stat && capabilities.list);

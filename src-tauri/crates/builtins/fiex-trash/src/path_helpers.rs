@@ -1,8 +1,6 @@
 //! Platform filesystem identity helpers for the user Trash directory.
 use crate::TRASH_URI;
 #[cfg(not(windows))]
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-#[cfg(not(windows))]
 use fiex_provider_contracts::{FsEntry, FsKind, FsOperation};
 #[cfg(not(windows))]
 use std::path::{Component, Path, PathBuf};
@@ -18,17 +16,30 @@ pub(super) fn trash_path() -> Result<PathBuf, String> {
 
 #[cfg(not(windows))]
 pub(super) fn relative(uri: &str) -> Result<PathBuf, String> {
-    let encoded = uri
+    let relative = uri
         .strip_prefix(TRASH_URI)
         .ok_or("InvalidVfsUri: invalid Trash identity")?;
-    if encoded.is_empty() {
+    if relative.is_empty() {
         return Ok(PathBuf::new());
     }
-    let bytes = URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|_| "InvalidVfsUri: invalid Trash node")?;
-    let text = String::from_utf8(bytes).map_err(|_| "InvalidVfsUri: invalid Trash node")?;
-    let path = PathBuf::from(text);
+    let mut path = PathBuf::new();
+    for segment in relative.split('/') {
+        if segment.is_empty() {
+            return Err("InvalidVfsUri: invalid Trash node".into());
+        }
+        let text = urlencoding::decode(segment)
+            .map_err(|_| "InvalidVfsUri: invalid Trash node")?
+            .into_owned();
+        if text.is_empty()
+            || matches!(text.as_str(), "." | "..")
+            || text.contains('/')
+            || text.contains('\0')
+            || crate::encode_uri_segment(&text) != segment
+        {
+            return Err("InvalidVfsUri: invalid Trash node".into());
+        }
+        path.push(text);
+    }
     if path.as_os_str().is_empty()
         || !path
             .components()
@@ -37,6 +48,17 @@ pub(super) fn relative(uri: &str) -> Result<PathBuf, String> {
         return Err("ScopeDenied: Trash node escapes its root".into());
     }
     Ok(path)
+}
+
+#[cfg(not(windows))]
+pub(super) fn uri_for_relative(path: &Path) -> String {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Normal(part) => Some(crate::encode_uri_segment(&part.to_string_lossy())),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[cfg(not(windows))]

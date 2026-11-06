@@ -95,10 +95,15 @@ impl RecentStore {
 
     pub fn record_for_alias(&self, alias: &str) -> Result<RecentRecord, String> {
         let id = alias_id(alias)?;
-        self.records()?
+        let record = self
+            .records()?
             .into_iter()
             .find(|record| record.id == id)
-            .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
+            .ok_or_else(|| "StaleRef: item is no longer in Recent".to_owned())?;
+        if recent_uri(&record).as_str() != alias {
+            return Err("StaleRef: item is no longer in Recent".into());
+        }
+        Ok(record)
     }
 
     pub fn source_for(&self, alias: &str) -> Result<String, String> {
@@ -116,6 +121,16 @@ impl RecentStore {
         self.storage
             .update(RECORDS_KEY, |current: Option<Vec<RecentRecord>>| {
                 let mut records = current.unwrap_or_default();
+                for alias in aliases {
+                    let id = alias_id(alias)?;
+                    let record = records
+                        .iter()
+                        .find(|record| record.id == id)
+                        .ok_or_else(|| "StaleRef: item is no longer in Recent".to_owned())?;
+                    if recent_uri(record).as_str() != alias {
+                        return Err("StaleRef: item is no longer in Recent".into());
+                    }
+                }
                 records.retain(|record| !ids.contains(&record.id));
                 Ok(records)
             })?;
@@ -133,10 +148,45 @@ impl RecentStore {
 }
 
 fn alias_id(alias: &str) -> Result<&str, String> {
-    alias
+    let (path, query) = alias
         .strip_prefix("recent://")
-        .filter(|id| !id.is_empty() && !id.contains('/'))
-        .ok_or_else(|| "not a recent item".into())
+        .and_then(|value| value.split_once('?'))
+        .ok_or_else(|| "not a recent item".to_owned())?;
+    let id = query
+        .strip_prefix("id=")
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| "not a recent item".to_owned())?;
+    if path.is_empty()
+        || path.contains('/')
+        || id.contains('&')
+        || id.contains('/')
+        || id.contains('?')
+    {
+        return Err("not a recent item".into());
+    }
+    Ok(id)
+}
+
+fn encode_segment(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+pub fn recent_uri(record: &RecentRecord) -> String {
+    format!(
+        "recent://{}?id={}",
+        encode_segment(&record.name),
+        record.id
+    )
 }
 
 fn now() -> i64 {
@@ -199,10 +249,7 @@ mod tests {
         let first = record("/tmp/a.txt", "a.txt");
         let second = record("/tmp/b.txt", "b.txt");
         let third = record("/tmp/c.txt", "c.txt");
-        let selected = vec![
-            format!("recent://{}", first.id),
-            format!("recent://{}", second.id),
-        ];
+        let selected = vec![recent_uri(&first), recent_uri(&second)];
         for value in [first, second, third.clone()] {
             store.upsert(value).unwrap();
         }

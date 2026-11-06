@@ -6,8 +6,6 @@ use std::collections::{BTreeMap, HashSet};
 pub const URI: &str = "applications://";
 pub const PROVIDER_ID: &str = "core:applications";
 pub const SCHEMA: u32 = 1;
-pub const FOLDER_SEGMENT: &str = "folder_";
-pub const APP_SEGMENT: &str = "app_";
 pub const STORAGE_SCOPE: &str = "tree";
 pub const STATE_KEY: &str = "state";
 const STATE_VALUE_LIMIT: usize = 16 * 1024 * 1024 - 1024;
@@ -78,6 +76,7 @@ pub struct PendingTarget {
     pub uri: String,
     pub parent_uri: String,
     pub name: String,
+    pub id: String,
     pub asset_id: Option<String>,
     pub extension: String,
     pub kind: PendingKind,
@@ -136,9 +135,13 @@ impl ApplicationsStore {
 }
 
 pub fn validate_state(state: &ApplicationsState) -> Result<(), String> {
+    let mut sibling_names = HashSet::new();
     for (id, folder) in &state.folders {
-        if id != &folder.id || !valid_id(id) || folder.name.is_empty() {
+        if id != &folder.id || !valid_id(id) || !valid_name(&folder.name) {
             return Err("invalid Applications folder state".into());
+        }
+        if !sibling_names.insert((folder.parent.clone(), folder.name.to_lowercase())) {
+            return Err("duplicate Applications sibling name".into());
         }
         if folder
             .parent
@@ -160,8 +163,11 @@ pub fn validate_state(state: &ApplicationsState) -> Result<(), String> {
         }
     }
     for (id, app) in &state.apps {
-        if id != &app.id || !valid_id(id) || app.display_name.is_empty() {
+        if id != &app.id || !valid_id(id) || !valid_name(&app.display_name) {
             return Err("invalid Applications entry state".into());
+        }
+        if !sibling_names.insert((app.parent.clone(), app.display_name.to_lowercase())) {
+            return Err("duplicate Applications sibling name".into());
         }
         if app
             .parent
@@ -194,46 +200,20 @@ pub fn valid_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
+fn valid_name(value: &str) -> bool {
+    !value.is_empty()
+        && !matches!(value, "." | "..")
+        && !value.contains('/')
+        && !value.contains('\\')
+        && !value.chars().any(char::is_control)
+}
+
 pub fn valid_extension(value: &str) -> bool {
     value.len() <= 16 && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
-pub fn folder_uri(id: &str) -> String {
-    format!("{URI}{FOLDER_SEGMENT}{id}")
-}
-
-pub fn app_uri(id: &str) -> String {
-    format!("{URI}{APP_SEGMENT}{id}")
-}
-
-pub fn folder_id(uri: &str) -> Option<String> {
-    node_id(uri, FOLDER_SEGMENT)
-}
-
-pub fn app_id(uri: &str) -> Option<String> {
-    node_id(uri, APP_SEGMENT)
-}
-
-fn node_id(uri: &str, leaf_prefix: &str) -> Option<String> {
-    let relative = uri.strip_prefix(URI)?;
-    let segments = relative.split('/');
-    let mut last = None;
-    for segment in segments {
-        if segment.is_empty() {
-            return None;
-        }
-        if let Some(previous) = last.replace(segment) {
-            let parent_id = previous.strip_prefix(FOLDER_SEGMENT)?;
-            if !valid_id(parent_id) {
-                return None;
-            }
-        }
-    }
-    let id = last?.strip_prefix(leaf_prefix)?;
-    valid_id(id).then(|| id.to_owned())
-}
-
 pub fn child_uri(parent_uri: &str, segment: &str) -> String {
+    let segment = encode_segment(segment);
     if parent_uri == URI {
         format!("{parent_uri}{segment}")
     } else {
@@ -241,18 +221,103 @@ pub fn child_uri(parent_uri: &str, segment: &str) -> String {
     }
 }
 
+fn encode_segment(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+fn decoded_segments(uri: &str) -> Option<Vec<String>> {
+    let relative = uri.strip_prefix(URI)?;
+    if relative.is_empty() {
+        return Some(Vec::new());
+    }
+    relative
+        .split('/')
+        .map(|segment| {
+            if segment.is_empty() {
+                return None;
+            }
+            let name = urlencoding::decode(segment).ok()?.into_owned();
+            if name.is_empty()
+                || matches!(name.as_str(), "." | "..")
+                || name.contains('/')
+                || name.contains('\\')
+            {
+                return None;
+            }
+            Some(name)
+        })
+        .collect()
+}
+
+fn canonical_segments(segments: &[String]) -> String {
+    segments
+        .iter()
+        .map(|segment| encode_segment(segment))
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn resolve_folder_segments(state: &ApplicationsState, segments: &[String]) -> Option<String> {
+    let mut parent: Option<String> = None;
+    for name in segments {
+        let mut matches = state
+            .folders
+            .values()
+            .filter(|folder| folder.parent == parent && folder.name == *name);
+        let folder = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        parent = Some(folder.id.clone());
+    }
+    parent
+}
+
+/// Resolve a folder by the same visible path segments used by the browser.
+pub fn folder_id(state: &ApplicationsState, uri: &str) -> Option<String> {
+    let segments = decoded_segments(uri)?;
+    let id = resolve_folder_segments(state, &segments)?;
+    (folder_uri_in(state, &id).as_deref() == Some(uri)).then_some(id)
+}
+
+/// Resolve an application by its parent-folder path and visible display name.
+pub fn app_id(state: &ApplicationsState, uri: &str) -> Option<String> {
+    let segments = decoded_segments(uri)?;
+    let (name, parents) = segments.split_last()?;
+    let parent = resolve_folder_segments(state, parents);
+    let mut matches = state
+        .apps
+        .values()
+        .filter(|app| app.parent == parent && app.display_name == *name);
+    let app = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    (app_uri_in(state, &app.id).as_deref() == Some(uri)).then(|| app.id.clone())
+}
+
 pub fn folder_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
     let mut segments = Vec::new();
     let mut current = state.folders.get(id)?;
     loop {
-        segments.push(format!("{FOLDER_SEGMENT}{}", current.id));
+        segments.push(current.name.clone());
         let Some(parent) = current.parent.as_deref() else {
             break;
         };
         current = state.folders.get(parent)?;
     }
     segments.reverse();
-    Some(format!("{}{}", URI, segments.join("/")))
+    Some(format!("{}{}", URI, canonical_segments(&segments)))
 }
 
 pub fn app_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
@@ -261,19 +326,16 @@ pub fn app_uri_in(state: &ApplicationsState, id: &str) -> Option<String> {
     let mut parent = app.parent.as_deref();
     while let Some(parent_id) = parent {
         let folder = state.folders.get(parent_id)?;
-        segments.push(format!("{FOLDER_SEGMENT}{}", folder.id));
+        segments.push(folder.name.clone());
         parent = folder.parent.as_deref();
     }
     segments.reverse();
-    segments.push(format!("{APP_SEGMENT}{id}"));
-    Some(format!("{}{}", URI, segments.join("/")))
+    segments.push(app.display_name.clone());
+    Some(format!("{}{}", URI, canonical_segments(&segments)))
 }
 
 pub fn parent_uri_matches(state: &ApplicationsState, uri: &str) -> bool {
-    if uri == URI {
-        return true;
-    }
-    folder_id(uri).is_some_and(|id| folder_uri_in(state, &id).as_deref() == Some(uri))
+    uri == URI || folder_id(state, uri).is_some()
 }
 
 #[cfg(test)]
