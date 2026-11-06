@@ -16,11 +16,13 @@ pub(crate) fn validate_child_with_scope(
 ) -> Result<(), String> {
     let provider_id =
         shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
-    if let Some(validate) = registry()
-        .get(provider_id)
-        .and_then(|provider| provider.extensions().validate_scoped_child)
-    {
-        return validate(scope, parent, child);
+    if let Some(provider) = registry().get(provider_id) {
+        if let Some(result) = provider
+            .behavior()
+            .validate_scoped_child(scope, parent, child)
+        {
+            return result;
+        }
     }
     validate_child(parent, child)
 }
@@ -32,32 +34,35 @@ pub(crate) fn revalidate_cached_listing(
     let Some(provider_id) = shared_provider_id(path) else {
         return Ok(());
     };
-    let Some(revalidate) = registry()
-        .get(provider_id)
-        .and_then(|provider| provider.extensions().revalidate_cached_listing)
-    else {
+    let Some(provider) = registry().get(provider_id) else {
         return Ok(());
     };
-    revalidate(entries)
+    provider
+        .behavior()
+        .revalidate_cached_listing(entries)
+        .unwrap_or(Ok(()))
 }
 
 pub(crate) fn open_policy(path: &str, entry: &Entry) -> Option<bool> {
     let provider_id = shared_provider_id(path)?;
-    let provider = registry().get(provider_id)?;
-    (provider.extensions().open_policy?)(path, entry)
+    registry()
+        .get(provider_id)?
+        .behavior()
+        .open_policy(path, entry)
 }
 
 #[cfg(feature = "desktop")]
 pub(crate) fn navigation_source(path: &str) -> Option<String> {
     let provider_id = shared_provider_id(path)?;
-    let provider = registry().get(provider_id)?;
-    (provider.extensions().navigation_source?)(path)
+    registry()
+        .get(provider_id)?
+        .behavior()
+        .navigation_source(path)
 }
 
 pub fn backing_path(path: &str) -> Option<PathBuf> {
     let provider_id = shared_provider_id(path)?;
-    let provider = registry().get(provider_id)?;
-    (provider.extensions().backing_path?)(path)
+    registry().get(provider_id)?.behavior().backing_path(path)
 }
 
 /// Let a registered native provider handle resources whose platform open
@@ -70,9 +75,9 @@ pub(crate) fn open(path: &str) -> Result<bool, String> {
     };
     match registry()
         .get(provider)
-        .and_then(|view| view.extensions().open)
+        .and_then(|view| view.behavior().open(path))
     {
-        Some(open) => open(path).map(|()| true),
+        Some(open) => open.map(|()| true),
         None => Ok(false),
     }
 }
@@ -92,13 +97,13 @@ pub(crate) fn move_within_mount(
     }) {
         return Ok(None);
     }
-    let Some(move_within_mount) = registry()
-        .get(provider)
-        .and_then(|view| view.extensions().same_mount_move)
-    else {
+    let Some(view) = registry().get(provider) else {
         return Ok(None);
     };
-    move_within_mount(sources, destination).map(Some)
+    match view.behavior().same_mount_move(sources, destination) {
+        Some(result) => result.map(Some),
+        None => Ok(None),
+    }
 }
 
 /// USB references are scoped to a mount generation. Keep that liveness check
@@ -111,37 +116,30 @@ pub(crate) fn ensure_current_binding(
     let Some(provider_id) = shared_provider_id(path) else {
         return Ok(());
     };
-    let Some(validate) = registry()
-        .get(provider_id)
-        .and_then(|provider| provider.extensions().validate_binding)
-    else {
+    let Some(provider) = registry().get(provider_id) else {
         return Ok(());
     };
-    validate(path, reference)
+    provider
+        .behavior()
+        .validate_binding(path, reference)
+        .unwrap_or(Ok(()))
 }
 
 pub fn is_tree_path(path: &str) -> bool {
     let Some(provider_id) = shared_provider_id(path) else {
         return false;
     };
-    let Some(matches) = registry()
+    registry()
         .get(provider_id)
-        .and_then(|provider| provider.extensions().is_tree_path)
-    else {
-        return false;
-    };
-    matches(path)
+        .is_some_and(|provider| provider.behavior().is_tree_path(path))
 }
 
 pub(crate) fn after_rename(path: &str) {
     let Some(provider_id) = shared_provider_id(path) else {
         return;
     };
-    if let Some(after_rename) = registry()
-        .get(provider_id)
-        .and_then(|provider| provider.extensions().after_rename)
-    {
-        after_rename(path);
+    if let Some(provider) = registry().get(provider_id) {
+        provider.behavior().after_rename(path);
     }
 }
 
@@ -151,8 +149,8 @@ pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
     let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
     registry()
         .get(provider)
-        .and_then(|view| view.extensions().validate_child)
-        .ok_or("Unsupported: provider does not support child identities")?(parent, child)
+        .and_then(|view| view.behavior().validate_child(parent, child))
+        .ok_or("Unsupported: provider does not support child identities")?
 }
 
 pub(crate) fn child_path(
@@ -163,17 +161,17 @@ pub(crate) fn child_path(
     let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
     registry()
         .get(provider)
-        .and_then(|view| view.extensions().child_path)
-        .ok_or("Unsupported: provider does not support child creation")?(parent, name, kind)
+        .and_then(|view| view.behavior().child_path(parent, name, kind))
+        .ok_or("Unsupported: provider does not support child creation")?
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
     if let Some(provider) = shared_provider_id(path) {
         if let Some(parent_path) = registry()
             .get(provider)
-            .and_then(|view| view.extensions().parent_path)
+            .and_then(|view| view.behavior().parent_path(path))
         {
-            return parent_path(path);
+            return parent_path;
         }
     }
     if opaque(path) {
