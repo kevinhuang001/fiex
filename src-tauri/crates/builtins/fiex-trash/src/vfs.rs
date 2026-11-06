@@ -156,12 +156,10 @@ fn purge(uri: &str, services: &dyn TrashModuleServices) -> Result<(), ProviderEr
             .purge(uri)
             .map_err(|error| provider_error(error, services));
     }
-    if uri.starts_with(RECYCLE_BIN_URI) {
-        if uri != RECYCLE_BIN_URI {
-            return system_recycle_bin()
-                .purge(uri)
-                .map_err(|error| provider_error(error, services));
-        }
+    if uri.starts_with(RECYCLE_BIN_URI) && uri != RECYCLE_BIN_URI {
+        return system_recycle_bin()
+            .purge(uri)
+            .map_err(|error| provider_error(error, services));
     }
     Err(ProviderError::invalid_params(
         "ScopeDenied: Trash root cannot be permanently removed",

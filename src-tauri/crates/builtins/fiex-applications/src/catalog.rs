@@ -1,7 +1,5 @@
 //! Application discovery, stable identities, and platform boundary.
-use crate::{
-    app_uri_in, ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore,
-};
+use crate::{app_uri_in, ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
@@ -19,6 +17,7 @@ pub struct InstalledApplication {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CatalogApplication {
+    pub(crate) id: String,
     pub uri: String,
     pub display_name: String,
     pub icon_source: Option<String>,
@@ -155,6 +154,7 @@ impl ApplicationCatalog {
                     .map(|app| app.display_name.clone())
                     .ok_or("system application state was not persisted")?;
                 Ok(CatalogApplication {
+                    id,
                     uri,
                     display_name,
                     icon_source: application.icon_source,

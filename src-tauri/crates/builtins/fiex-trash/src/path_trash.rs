@@ -71,11 +71,13 @@ impl TrashDirectory {
         #[cfg(not(windows))]
         {
             let relative = relative(uri)?;
-            let parent = relative.parent().filter(|parent| !parent.as_os_str().is_empty());
-            return Ok(match parent {
+            let parent = relative
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty());
+            Ok(match parent {
                 Some(parent) => format!("{TRASH_URI}{}", uri_for_relative(parent)),
                 None => TRASH_URI.to_owned(),
-            });
+            })
         }
         #[cfg(windows)]
         {

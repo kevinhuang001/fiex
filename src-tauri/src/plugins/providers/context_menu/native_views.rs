@@ -2,7 +2,6 @@
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
 use crate::plugins::events::Resolver;
-#[cfg(test)]
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, ProviderMatchRule};

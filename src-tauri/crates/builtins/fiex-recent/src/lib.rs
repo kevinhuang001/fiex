@@ -182,11 +182,7 @@ fn encode_segment(value: &str) -> String {
 }
 
 pub fn recent_uri(record: &RecentRecord) -> String {
-    format!(
-        "recent://{}?id={}",
-        encode_segment(&record.name),
-        record.id
-    )
+    format!("recent://{}?id={}", encode_segment(&record.name), record.id)
 }
 
 fn now() -> i64 {

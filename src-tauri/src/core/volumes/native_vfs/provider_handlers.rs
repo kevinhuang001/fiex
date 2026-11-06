@@ -196,8 +196,17 @@ pub(super) fn applications_child_path(
     name: &str,
     kind: crate::core::fs::provider_registry::ChildKind,
 ) -> Result<String, String> {
-    let is_directory = matches!(kind, crate::core::fs::provider_registry::ChildKind::Folder);
-    applications::reserve_child(parent, name, is_directory)
+    match kind {
+        crate::core::fs::provider_registry::ChildKind::Folder => {
+            applications::reserve_child(parent, name, true)
+        }
+        crate::core::fs::provider_registry::ChildKind::Application => {
+            applications::reserve_child(parent, name, false)
+        }
+        crate::core::fs::provider_registry::ChildKind::File => {
+            Err("Applications does not support creating ordinary files".into())
+        }
+    }
 }
 
 pub(super) struct RecentOperations;

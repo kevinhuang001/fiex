@@ -146,7 +146,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn virtual_paths_follow_the_visible_folder_tree_without_type_directories() {
         let mut state = ApplicationsState {
             schema: SCHEMA,
@@ -203,8 +202,7 @@ mod tests {
             Some("applications://root-folder/child-folder/Nested%20app")
         );
         assert_eq!(
-            parent_uri("applications://root-folder/child-folder/Nested%20app")
-                .unwrap(),
+            parent_uri("applications://root-folder/child-folder/Nested%20app").unwrap(),
             "applications://root-folder/child-folder"
         );
         assert!(app_id(&state, "applications://Root%20app/Nested%20app").is_none());

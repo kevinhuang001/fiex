@@ -106,11 +106,9 @@ fn application_user_children_cannot_create_files() {
         "fiex-test-{}.txt",
         crate::plugins::mounts::new_id().unwrap()
     );
-    let child =
-        super::binding::child(&parent, &name, super::provider_registry::ChildKind::File).unwrap();
-    assert!(child.stat().is_err());
-    assert!(child.begin_write(true).is_err());
-    assert!(child.stat().is_err());
+    assert!(
+        super::binding::child(&parent, &name, super::provider_registry::ChildKind::File).is_err()
+    );
 }
 
 #[test]

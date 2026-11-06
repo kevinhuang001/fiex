@@ -57,7 +57,7 @@ pub(super) fn import(
         let mut target = binding::child(
             &parent,
             &name,
-            crate::core::fs::provider_registry::ChildKind::File,
+            crate::core::fs::provider_registry::ChildKind::Application,
         )?;
         if optional_stat(&target)?.is_some() {
             if !keep_both {

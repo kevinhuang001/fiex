@@ -181,10 +181,10 @@ fn move_nodes_in_state(
         .iter()
         .map(|(id, is_folder)| {
             if *is_folder {
-                return folder_uri_in(state, &id)
+                return folder_uri_in(state, id)
                     .ok_or_else(|| "NotFound: application folder".into());
             }
-            app_uri_in(state, &id).ok_or_else(|| "NotFound: application".into())
+            app_uri_in(state, id).ok_or_else(|| "NotFound: application".into())
         })
         .collect()
 }

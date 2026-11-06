@@ -221,10 +221,7 @@ mod tests {
         assert!(entry.node_id.starts_with("recyclebin://notes.txt?id="));
         assert!(!entry.node_id.contains(&item.id));
         let encoded = entry.node_id.split_once("?id=").unwrap().1;
-        assert_eq!(
-            decode(encoded).unwrap().id,
-            item.id
-        );
+        assert_eq!(decode(encoded).unwrap().id, item.id);
         assert_eq!(entry.link_target.as_deref(), Some(item.original.as_str()));
     }
 

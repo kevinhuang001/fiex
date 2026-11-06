@@ -34,9 +34,7 @@ impl ApplicationCatalog {
                         true,
                         cached
                             .iter()
-                            .find(|application| {
-                                app_id(&tree, &application.uri).as_deref() == Some(id.as_str())
-                            })
+                            .find(|application| application.id == id)
                             .and_then(|application| application.icon_source.clone()),
                     ),
                     ApplicationSource::Imported {
