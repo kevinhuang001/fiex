@@ -1,8 +1,9 @@
-use super::{row, InfoSection};
-use crate::plugins::contracts::ResourceMetadata;
-use std::path::Path;
-#[cfg(any(feature = "desktop", test))]
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::{row, InfoSection, Localization};
+use fiex_provider_contracts::ResourceMetadata;
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+};
 fn display_name(path: &str) -> String {
     path.trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])
@@ -20,7 +21,7 @@ fn display_parent(path: &str) -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn timestamp_text(seconds: i64) -> String {
+pub fn timestamp_text(seconds: i64) -> String {
     // UTC civil date without pulling a formatting crate into Core.
     let days = seconds.div_euclid(86_400);
     let remaining = seconds.rem_euclid(86_400);
@@ -60,20 +61,9 @@ fn size_text(bytes: u64) -> String {
     }
 }
 
-/// Sum file lengths below a local directory for the Info sheet. Symlinks are
-/// skipped so a link cycle cannot trap the walk. Read errors are returned.
-#[cfg(test)]
-pub(super) fn directory_size(path: &Path) -> Option<u64> {
-    directory_size_with_cancel(path, &AtomicBool::new(false)).ok()
-}
-
 /// Explicit Info action for local directories. It is cancellable and reports
 /// permission errors instead of silently returning a partial total.
-#[cfg(any(feature = "desktop", test))]
-pub(crate) fn directory_size_with_cancel(
-    path: &Path,
-    cancelled: &AtomicBool,
-) -> Result<u64, String> {
+pub fn directory_size_with_cancel(path: &Path, cancelled: &AtomicBool) -> Result<u64, String> {
     let root = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if root.file_type().is_symlink() || !root.is_dir() {
         return Err("folder size is available for local directories only".into());
@@ -106,11 +96,12 @@ pub(crate) fn directory_size_with_cancel(
     Ok(total)
 }
 
-pub(super) fn metadata_section(
+pub fn metadata_section(
     display: &str,
     local: &Path,
     metadata: Option<&std::fs::Metadata>,
     projected: Option<&ResourceMetadata>,
+    localization: &Localization,
 ) -> InfoSection {
     let is_dir = metadata.as_ref().is_some_and(|value| value.is_dir());
     let name = projected
@@ -127,20 +118,20 @@ pub(super) fn metadata_section(
         });
     let mut rows = vec![
         row(
-            crate::i18n::t("种类"),
+            localization.text("种类"),
             projected
                 .map(|value| match value.kind.as_str() {
-                    "directory" => crate::i18n::t("文件夹"),
-                    _ => crate::i18n::t("文件"),
+                    "directory" => localization.text("文件夹"),
+                    _ => localization.text("文件"),
                 })
                 .unwrap_or(if is_dir {
-                    crate::i18n::t("文件夹")
+                    localization.text("文件夹")
                 } else {
-                    crate::i18n::t("文件")
+                    localization.text("文件")
                 }),
         ),
         row(
-            crate::i18n::t("大小"),
+            localization.text("大小"),
             if is_dir {
                 "—".into()
             } else {
@@ -151,10 +142,10 @@ pub(super) fn metadata_section(
                     .unwrap_or_else(|| "—".into())
             },
         ),
-        row(crate::i18n::t("位置"), display_parent(display)),
+        row(localization.text("位置"), display_parent(display)),
     ];
     if !extension.is_empty() {
-        rows.push(row(crate::i18n::t("扩展名"), extension));
+        rows.push(row(localization.text("扩展名"), extension));
     }
     if let Some(mime) = projected.and_then(|value| value.mime.clone()) {
         rows.push(row("MIME", mime));
@@ -166,19 +157,19 @@ pub(super) fn metadata_section(
             .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|value| value.as_secs() as i64)
     }) {
-        rows.push(row(crate::i18n::t("修改时间"), timestamp_text(modified)));
+        rows.push(row(localization.text("修改时间"), timestamp_text(modified)));
     }
     if let Some(link) = metadata
         .as_ref()
         .filter(|value| value.file_type().is_symlink())
         .and_then(|_| std::fs::read_link(local).ok())
     {
-        rows.push(row(crate::i18n::t("符号链接"), link.to_string_lossy()));
+        rows.push(row(localization.text("符号链接"), link.to_string_lossy()));
     }
     InfoSection {
         id: "core.metadata".into(),
         source: "core".into(),
-        title: crate::i18n::t("文件").into(),
+        title: localization.text("文件"),
         plugin_id: None,
         provider: "Fiex".into(),
         rows,

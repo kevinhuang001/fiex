@@ -1,7 +1,6 @@
-use super::media::duration_text;
-use super::metadata::{directory_size, timestamp_text};
 use super::*;
-use std::time::Duration;
+use fiex_info::duration_text;
+use std::{sync::atomic::AtomicBool, time::Duration};
 
 #[test]
 fn built_in_metadata_is_a_stable_section() {
@@ -18,7 +17,7 @@ fn built_in_metadata_is_a_stable_section() {
     let sub = dir.path().join("nested");
     std::fs::create_dir(&sub).unwrap();
     std::fs::write(sub.join("part.bin"), b"12345").unwrap();
-    let size = directory_size(dir.path()).unwrap();
+    let size = fiex_info::directory_size_with_cancel(dir.path(), &AtomicBool::new(false)).unwrap();
     assert!(size >= 5, "{size}");
     assert_eq!(timestamp_text(0), "1970-01-01 00:00");
 }

@@ -1801,6 +1801,7 @@ dependencies = [
  "ed25519-dalek",
  "fiex-applications",
  "fiex-fs",
+ "fiex-info",
  "fiex-platform",
  "fiex-plugin-sdk",
  "fiex-provider-contracts",
@@ -1825,10 +1826,7 @@ dependencies = [
  "keyring",
  "libc",
  "lnk",
- "lofty",
- "matroska",
  "mime_guess",
- "mp4",
  "notify",
  "objc2",
  "open",
@@ -1878,6 +1876,17 @@ version = "0.1.0"
 dependencies = [
  "fiex-provider-contracts",
  "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "fiex-info"
+version = "0.1.0"
+dependencies = [
+ "fiex-provider-contracts",
+ "lofty",
+ "matroska",
+ "mp4",
  "tempfile",
 ]
 
