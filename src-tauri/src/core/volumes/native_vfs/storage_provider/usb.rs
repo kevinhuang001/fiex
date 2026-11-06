@@ -1,10 +1,7 @@
 //! Read-only authorization for volumes opened by the fallback provider.
 use super::provider_error;
-use crate::{
-    plugins::provider_registry::FsOperation,
-    usbfs::{self, Route},
-};
-use fiex_provider_contracts::ProviderError;
+use crate::usbfs::{self, Route};
+use fiex_provider_contracts::{FsOperation, ProviderError};
 
 pub(super) fn authorize(
     route: &Route,

@@ -4,11 +4,10 @@ mod usb;
 use super::{shared::*, storage};
 use crate::{
     core::{files::Entry, fs::ResourceBroker},
-    plugins::provider_registry::FsOperation,
     plugins::resource::fs_access,
     usbfs,
 };
-use fiex_provider_contracts::{FsRequest, ProviderError, ProviderInvocation};
+use fiex_provider_contracts::{FsOperation, FsRequest, ProviderError, ProviderInvocation};
 use std::path::Path;
 
 pub(super) struct StorageProvider {

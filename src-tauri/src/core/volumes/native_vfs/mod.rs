@@ -1,11 +1,8 @@
 //! Native storage providers implement the same shared VFS contracts as plugin providers.
 use super::{applications, recycle, trash_vfs};
-use crate::{
-    core::files::Entry,
-    plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
-};
+use crate::{core::files::Entry, plugins::provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{
-    FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
+    FsEntry, FsListing, FsOperation, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
     ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
 };
 use fiex_runtime::ModuleDescriptor;

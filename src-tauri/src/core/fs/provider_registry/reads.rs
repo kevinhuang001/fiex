@@ -4,7 +4,7 @@ use super::{
     FsError, ProviderReadHandle, ReadHandle, ResourceBroker,
 };
 use crate::core::volumes::native_vfs;
-use crate::plugins::provider_registry::FsOperation;
+use fiex_provider_contracts::FsOperation;
 use serde_json::{to_value, Value};
 
 pub(in crate::core::fs) fn stat(resource: &ResourceBroker) -> Result<Value, FsError> {

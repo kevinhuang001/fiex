@@ -3,7 +3,8 @@ use super::{
     routing::{resolve, Route},
     FsError, ResourceBroker,
 };
-use crate::{core::volumes::native_vfs, plugins::provider_registry::FsOperation};
+use crate::core::volumes::native_vfs;
+use fiex_provider_contracts::FsOperation;
 
 pub(in crate::core::fs) fn search(
     resource: &ResourceBroker,

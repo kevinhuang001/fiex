@@ -318,7 +318,7 @@ pub(super) fn walk_search(
         let directory = ResourceBroker::resolve(&resource.scope, &resource.owner, &reference)?;
         super::require(
             &directory,
-            crate::plugins::provider_registry::FsOperation::List,
+            fiex_provider_contracts::FsOperation::List,
             false,
         )?;
         let (entries, _) = list(&directory)?;

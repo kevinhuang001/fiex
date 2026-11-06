@@ -1,12 +1,13 @@
 /// A save dialog may select a file that does not exist yet. Canonicalize its
 /// existing parent so a symlinked parent cannot change the selected target.
 use super::*;
+use fiex_provider_contracts::FsOperation;
 
 #[derive(Clone)]
 struct MappedResourceBinding {
     snapshot: crate::plugins::resource::resource_context::ResourceSnapshot,
     path: String,
-    operation: crate::plugins::provider_registry::FsOperation,
+    operation: FsOperation,
     storage_scope: Scope,
 }
 
@@ -125,7 +126,7 @@ impl Scope {
     pub(crate) fn bind_mapped_resource(
         &self,
         snapshot: crate::plugins::resource::resource_context::ResourceSnapshot,
-        operation: crate::plugins::provider_registry::FsOperation,
+        operation: FsOperation,
     ) -> Result<(), String> {
         let reference = serde_json::to_value(&snapshot.reference).map_err(|e| e.to_string())?;
         let access = crate::core::fs::provider_registry::resource_access(&snapshot.display)
@@ -168,13 +169,7 @@ impl Scope {
         &self,
         reference: &Value,
         path: &str,
-    ) -> Result<
-        Option<(
-            Scope,
-            Option<crate::plugins::provider_registry::FsOperation>,
-        )>,
-        String,
-    > {
+    ) -> Result<Option<(Scope, Option<FsOperation>)>, String> {
         let key = Self::ref_key(reference)?;
         let mapped = self
             .mapped_resources
@@ -189,10 +184,7 @@ impl Scope {
         Ok(mapped.values().find_map(|binding| {
             let delegated_children = matches!(
                 binding.operation,
-                crate::plugins::provider_registry::FsOperation::List
-                    | crate::plugins::provider_registry::FsOperation::Search
-                    | crate::plugins::provider_registry::FsOperation::Write
-                    | crate::plugins::provider_registry::FsOperation::Mkdir
+                FsOperation::List | FsOperation::Search | FsOperation::Write | FsOperation::Mkdir
             );
             (delegated_children
                 && binding.snapshot.is_dir
@@ -211,10 +203,10 @@ impl Scope {
                     || (binding.snapshot.is_dir
                         && matches!(
                             binding.operation,
-                            crate::plugins::provider_registry::FsOperation::List
-                                | crate::plugins::provider_registry::FsOperation::Search
-                                | crate::plugins::provider_registry::FsOperation::Write
-                                | crate::plugins::provider_registry::FsOperation::Mkdir
+                            FsOperation::List
+                                | FsOperation::Search
+                                | FsOperation::Write
+                                | FsOperation::Mkdir
                         )
                         && Path::new(path).starts_with(&binding.path))
             }))

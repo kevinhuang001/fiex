@@ -4,8 +4,10 @@ use super::{
     FsError, ProviderWriteHandle, ResourceBroker, WriteHandle,
 };
 use crate::core::fs::handles::StagedWriteHandle;
-use crate::{core::volumes::native_vfs, plugins::provider_registry::FsOperation};
-use fiex_provider_contracts::{FsWrite, PreflightOperation, PreflightPhase, PreflightRequest};
+use crate::core::volumes::native_vfs;
+use fiex_provider_contracts::{
+    FsOperation, FsWrite, PreflightOperation, PreflightPhase, PreflightRequest,
+};
 use serde_json::{to_value, Value};
 
 pub(in crate::core::fs) fn write_stream(
