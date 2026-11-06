@@ -772,6 +772,29 @@ test('nested plugin menus meet their parent without gap or overlap', async ({ pa
   expect(flush(nested, plugin)).toBe(true)
 })
 
+test('Core Open With submenu loads lazily and opens the application picker', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  const trigger = page.getByRole('menuitem', { name: '打开方式', exact: true })
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+  await trigger.hover()
+  const submenu = page.getByRole('menu', { name: '打开方式' })
+  await expect(submenu.getByRole('menuitem', { name: 'Markdown Viewer' })).toBeVisible()
+  await expect(submenu.getByRole('menuitem', { name: 'Plain Text Editor' })).toBeVisible()
+  await submenu.getByRole('menuitem', { name: 'Markdown Viewer' }).click()
+  await expect(page.getByRole('menu', { name: '文件操作' })).toHaveCount(0)
+
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '打开方式', exact: true }).hover()
+  const reopened = page.getByRole('menu', { name: '打开方式' })
+  await reopened.getByRole('menuitem', { name: '选择其他应用…' }).click()
+
+  const picker = page.getByRole('dialog', { name: '选择应用打开文件' })
+  await expect(picker).toBeVisible()
+  await picker.getByRole('textbox', { name: '搜索应用' }).fill('Plain')
+  await picker.getByRole('option', { name: 'Plain Text Editor' }).click()
+  await expect(picker).toHaveCount(0)
+})
+
 test('activation reviews grouped permissions and grants nothing when cancelled', async ({
   page,
 }) => {

@@ -448,6 +448,22 @@ export function useListing(
     }
   }, [enabled, path, pane, reload, virtualVolume])
   useEffect(() => {
+    if (!enabled || !native || !path.startsWith('applications://')) return
+    let active = true
+    let cleanup: (() => void) | undefined
+    void listen('applications-changed', () => {
+      if (query.trim()) setSearchRefresh((value) => value + 1)
+      else setRevalidation((value) => value + 1)
+    }).then((unlisten) => {
+      if (active) cleanup = unlisten
+      else unlisten()
+    })
+    return () => {
+      active = false
+      cleanup?.()
+    }
+  }, [enabled, native, path, query])
+  useEffect(() => {
     if (!enabled || !path) return
     const generation = ++searchRequest.current
     const cancel = () => {

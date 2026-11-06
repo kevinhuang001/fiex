@@ -188,6 +188,8 @@ pub fn run() {
             reset_provider_preference,
             detect_terminals,
             detect_ides,
+            open_with_picker_candidates,
+            open_with_picker_execute,
             open_in_ide,
             open_terminal,
             open_external_url,
@@ -248,6 +250,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            system::set_desktop_handle(app.handle().clone());
             scheduler::spawn(app.handle().clone());
             {
                 use tauri::Emitter;

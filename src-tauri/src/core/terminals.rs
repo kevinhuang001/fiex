@@ -109,22 +109,7 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        let app = if id == "default" {
-            if which::which("wt.exe").is_ok() {
-                "wt.exe"
-            } else {
-                "powershell.exe"
-            }
-        } else {
-            id
-        };
-        let mut cmd = Command::new(app);
-        cmd.current_dir(&dir).creation_flags(0x00000010);
-        if app == "wt.exe" {
-            cmd.arg("-d").arg(&dir);
-        }
-        cmd.spawn().map_err(|e| e.to_string())?;
+        launch_windows_terminal(&dir, id)?;
     }
     #[cfg(target_os = "linux")]
     {
@@ -166,6 +151,39 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
         cmd.spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn launch_windows_terminal(directory: &std::path::Path, selected: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    let terminal = if selected == "default" {
+        ["wt.exe", "pwsh.exe", "powershell.exe", "cmd.exe"]
+            .into_iter()
+            .find(|candidate| which::which(candidate).is_ok())
+            .ok_or_else(|| crate::i18n::t("未发现可用终端").to_string())?
+    } else {
+        selected
+    };
+    let mut command = Command::new(terminal);
+    command.current_dir(directory);
+    match terminal.to_ascii_lowercase().as_str() {
+        "wt.exe" => {
+            command.args(["-d"]).arg(directory);
+        }
+        "tabby.exe" => {
+            command.args(["--cwd"]).arg(directory);
+        }
+        "pwsh.exe" | "powershell.exe" | "cmd.exe" => {
+            command.creation_flags(CREATE_NEW_CONSOLE);
+        }
+        _ => {}
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 pub fn open_path(path: &str) -> Result<(), String> {

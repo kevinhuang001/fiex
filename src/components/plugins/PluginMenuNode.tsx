@@ -9,13 +9,14 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { AppWindow, ChevronRight } from 'lucide-react'
 
 export interface PluginMenuItem {
   id: string
   title: string
   kind: 'action' | 'submenu' | 'separator'
   parentId?: string
+  icon?: string
 }
 
 export interface PluginMenu {
@@ -194,6 +195,7 @@ export function PluginMenuNode({
       onMouseEnter={() => group?.setOpenId(null)}
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
     >
+      {item.icon === 'application' && <AppWindow size={15} />}
       <span className="context-submenu-label">{item.title}</span>
     </button>
   )

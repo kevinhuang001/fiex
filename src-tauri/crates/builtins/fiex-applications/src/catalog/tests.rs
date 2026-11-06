@@ -2,6 +2,7 @@ use super::*;
 use crate::{app_id, ApplicationDecorationInfo};
 use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 struct TestBackend {
     calls: AtomicUsize,
@@ -72,6 +73,32 @@ fn catalog_caches_reads_and_preserves_stable_identity_across_refreshes() {
     let persisted = store.snapshot().unwrap();
     let id = app_id(&persisted, &refreshed[0].uri).unwrap();
     assert_eq!(persisted.apps[&id].display_name, "Editor Renamed");
+}
+
+#[test]
+fn cache_first_entries_revalidate_in_background_and_notify_only_on_change() {
+    let store = store("applications-catalog-background-test");
+    store
+        .register_system_apps(&[("/system/Editor.app".into(), "Editor".into())])
+        .unwrap();
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor Renamed")]),
+    });
+    let catalog = Arc::new(ApplicationCatalog::new(store.clone(), backend.clone()));
+    let (changed, completed) = std::sync::mpsc::channel();
+
+    let initial = catalog
+        .entries_cache_first_background(move || changed.send(()).unwrap())
+        .unwrap();
+    assert_eq!(initial[0].display_name, "Editor");
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
+    completed.recv_timeout(Duration::from_secs(3)).unwrap();
+
+    let refreshed = catalog.entries().unwrap();
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(refreshed[0].display_name, "Editor Renamed");
+    assert_ne!(refreshed[0].uri, initial[0].uri);
 }
 
 #[test]

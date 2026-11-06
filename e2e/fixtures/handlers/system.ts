@@ -129,6 +129,21 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       ]
     case 'native_icon':
       throw new Error('UI fixture')
+    case 'open_with_picker_candidates':
+      return {
+        sessionId: 'open-with-picker-fixture-session',
+        items: [
+          { id: 'openWith-fixture-markdown', name: 'Markdown Viewer' },
+          { id: 'openWith-fixture-text', name: 'Plain Text Editor' },
+        ],
+      }
+    case 'open_with_picker_execute':
+      if (
+        a.sessionId !== 'open-with-picker-fixture-session' ||
+        !['openWith-fixture-markdown', 'openWith-fixture-text'].includes(String(a.itemId))
+      )
+        throw new Error('Open With fixture session expired')
+      return null
     case 'trash_path':
       return 'trash://'
     case 'open_applications':
