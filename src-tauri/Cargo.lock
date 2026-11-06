@@ -1799,6 +1799,8 @@ dependencies = [
  "ds_store",
  "dunce",
  "ed25519-dalek",
+ "fiex-fs",
+ "fiex-platform",
  "fiex-plugin-sdk",
  "fiex-provider-contracts",
  "fiex-resource",
@@ -1853,6 +1855,22 @@ dependencies = [
  "winreg 0.55.0",
  "xattr",
  "zip",
+]
+
+[[package]]
+name = "fiex-fs"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "fiex-platform"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "winreg 0.55.0",
 ]
 
 [[package]]

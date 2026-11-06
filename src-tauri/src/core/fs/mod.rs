@@ -5,7 +5,6 @@ mod cache_identity;
 pub(crate) mod changes;
 pub(crate) mod decoration_cache;
 pub(crate) mod directory_cache;
-mod error;
 mod export;
 mod list_service;
 pub(crate) mod mapped_access;
@@ -17,10 +16,10 @@ pub(crate) use binding::trusted_snapshot;
 pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, rename_path};
-pub use error::{FsError, FsErrorKind};
 pub(crate) use export::export as export_for_external_drag;
 #[cfg(feature = "desktop")]
 pub(crate) use export::initialize as initialize_exports;
+pub use fiex_fs::{FsError, FsErrorKind, ReadHandle, WriteHandle, CHUNK};
 pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
@@ -29,9 +28,7 @@ use crate::plugins::{contracts::ResourceRef, resource::fs_access::Scope};
 use serde_json::Value;
 pub use streams::{cleanup, http_body, stream_call, stream_permission};
 
-pub const CHUNK: usize = 256 * 1024;
 mod handles;
-pub use handles::{ReadHandle, WriteHandle};
 
 /// This value can only be constructed from a ref captured by Core's Scope.
 pub struct ResourceBroker {
