@@ -75,7 +75,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn DecorationProvider> =
-            NativeProviderRegistry::new(ProviderKind::Decoration);
+            NativeProviderRegistry::shared(ProviderKind::Decoration);
         for (id, priority, kind) in [
             ("builtin:tags", -12, NativeKind::Tags),
             (
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn all_native_decorations_are_typed_and_priority_sorted() {
-        let descriptors = registry().descriptors().collect::<Vec<_>>();
+        let descriptors = registry().descriptors();
         assert_eq!(descriptors.len(), 3);
         for descriptor in descriptors {
             assert_eq!(descriptor.kind, ProviderKind::Decoration);

@@ -3,6 +3,8 @@ use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
     ContextMenuProvider, FsOperation, LocationMatch, ProviderMatchExclude, ProviderMatchRule,
 };
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
 
 use groups::{Action, AtomicMenuAction};
@@ -160,8 +162,13 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             Action::DeletePermanently,
         ),
     ];
+    let mut module = values.module(ModuleDescriptor::new(
+        "core:actions",
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
     for (id, priority, rule, action) in actions {
-        values
+        module
             .register(
                 id,
                 priority,

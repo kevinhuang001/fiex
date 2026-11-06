@@ -51,7 +51,7 @@ pub(super) fn native_registry() -> &'static NativeProviderRegistry<dyn ContextMe
     static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut providers: NativeProviderRegistry<dyn ContextMenuProvider> =
-            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+            NativeProviderRegistry::shared(ProviderKind::ContextMenu);
         file_ops::register(&mut providers);
         native_views::register(&mut providers);
         providers

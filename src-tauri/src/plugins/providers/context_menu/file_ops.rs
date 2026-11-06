@@ -289,6 +289,7 @@ mod registry_tests {
         let registered = registry();
         let generic = registered
             .descriptors()
+            .into_iter()
             .filter(|descriptor| descriptor.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
         assert_eq!(generic.len(), 23);
