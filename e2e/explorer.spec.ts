@@ -338,14 +338,22 @@ test('connection plugin opens a full-height view', async ({ page }) => {
 test('connection sessions can autostart and appear in the add menu', async ({ page }) => {
   await page.locator('.device-row').filter({ hasText: '生产服务器' }).click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '保存 Session' })).toBeVisible()
-  const context = await page.locator('.connection-session-menu.floating').boundingBox()
-  expect(context && context.y + context.height).toBeLessThanOrEqual(780)
+  await expect
+    .poll(async () => {
+      const context = await page.locator('.connection-session-menu.floating').boundingBox()
+      return Boolean(context && context.y + context.height <= 780)
+    })
+    .toBe(true)
   await page.getByRole('menuitem', { name: '设置为自启动' }).click()
   await expect(page.locator('.connection-autostart')).toHaveAttribute('title', '开机自启动')
   await page.getByRole('button', { name: '添加连接' }).click()
   await expect(page.getByRole('menuitem', { name: '生产服务器' })).toBeVisible()
-  const plus = await page.locator('.connection-session-menu.plus').boundingBox()
-  expect(plus && plus.y + plus.height).toBeLessThanOrEqual(780)
+  await expect
+    .poll(async () => {
+      const plus = await page.locator('.connection-session-menu.plus').boundingBox()
+      return Boolean(plus && plus.y + plus.height <= 780)
+    })
+    .toBe(true)
 })
 
 test('opens the Trash inside Fiex', async ({ page }) => {
