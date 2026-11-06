@@ -2,7 +2,7 @@ use crate::core::tags::{read_tags, Tag};
 use fiex_resource::StorageProjection;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path, time::UNIX_EPOCH};
+use std::{fs, path::Path};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,25 +37,6 @@ pub struct Entry {
     pub sync: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
-fn shortcut_target(path: &Path) -> Option<String> {
-    let link = lnk::ShellLink::open(path).ok()?;
-    if let Some(info) = link.link_info() {
-        let base = info
-            .local_base_path_unicode()
-            .as_ref()
-            .or_else(|| info.local_base_path().as_ref())?;
-        let suffix = info
-            .common_path_suffix_unicode()
-            .as_ref()
-            .map(String::as_str)
-            .filter(|suffix| !suffix.is_empty())
-            .unwrap_or_else(|| info.common_path_suffix().as_str());
-        return Some(format!("{base}{suffix}"));
-    }
-    link.relative_path().clone()
-}
-
 /// Operations supported by the local filesystem provider for a node shape.
 /// Host permissions are checked by the operation itself, so this list does not
 /// probe ACLs or file attributes while painting a directory.
@@ -76,63 +57,19 @@ fn local_operations(path: &str, is_dir: bool) -> Vec<String> {
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
     crate::plugins::mounts::reject_local(&path.to_string_lossy())?;
-    let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    // Most entries are not links. Reuse lstat instead of issuing a second
-    // metadata syscall for every item in a large directory.
-    let meta = if link.file_type().is_symlink() {
-        fs::metadata(path).unwrap_or(link.clone())
-    } else {
-        link.clone()
-    };
-    let extension = path
-        .extension()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
-    let link_target = if link.file_type().is_symlink() {
-        fs::read_link(path)
-            .ok()
-            .map(|target| target.to_string_lossy().into_owned())
-    } else {
-        #[cfg(target_os = "windows")]
-        {
-            if extension == "lnk" {
-                shortcut_target(path)
-            } else {
-                None
-            }
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            None
-        }
-    };
+    let metadata = fiex_local_fs::inspect(path)?;
     Ok(Entry {
         path: path.to_string_lossy().into_owned(),
-        name: path
-            .file_name()
-            .unwrap_or(path.as_os_str())
-            .to_string_lossy()
-            .into_owned(),
-        is_dir: meta.is_dir(),
-        is_symlink: link.file_type().is_symlink(),
-        size: meta.len(),
-        modified: meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map_or(0, |t| t.as_secs()),
-        created: meta
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map_or(0, |t| t.as_secs()),
-        extension,
-        mime: mime_guess::from_path(path)
-            .first_or_octet_stream()
-            .to_string(),
-        link_target,
-        allowed_ops: local_operations(&path.to_string_lossy(), meta.is_dir()),
+        name: metadata.name,
+        is_dir: metadata.is_dir,
+        is_symlink: metadata.is_symlink,
+        size: metadata.size,
+        modified: metadata.modified,
+        created: metadata.created,
+        extension: metadata.extension,
+        mime: metadata.mime,
+        link_target: metadata.link_target,
+        allowed_ops: local_operations(&path.to_string_lossy(), metadata.is_dir),
         tags: read_tags(path),
         has_cache: false,
         pinned: false,

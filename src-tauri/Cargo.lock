@@ -1804,6 +1804,7 @@ dependencies = [
  "fiex-decorations",
  "fiex-fs",
  "fiex-info",
+ "fiex-local-fs",
  "fiex-platform",
  "fiex-plugin-sdk",
  "fiex-preview",
@@ -1828,7 +1829,6 @@ dependencies = [
  "image",
  "keyring",
  "libc",
- "lnk",
  "mime_guess",
  "notify",
  "objc2",
@@ -1904,6 +1904,15 @@ dependencies = [
  "lofty",
  "matroska",
  "mp4",
+ "tempfile",
+]
+
+[[package]]
+name = "fiex-local-fs"
+version = "0.1.0"
+dependencies = [
+ "lnk",
+ "mime_guess",
  "tempfile",
 ]
 
