@@ -110,18 +110,18 @@ pub(crate) trait RegisteredNativeVfsProvider: VfsProvider {
     fn behavior(&self) -> &dyn NativeVfsBehavior;
 }
 
-struct NativeVfsAdapter {
+struct NativeVfsAdapter<B> {
     provider: Arc<dyn VfsProvider>,
-    behavior: Arc<dyn NativeVfsBehavior>,
+    behavior: B,
 }
 
-impl RegisteredNativeVfsProvider for NativeVfsAdapter {
+impl<B: NativeVfsBehavior> RegisteredNativeVfsProvider for NativeVfsAdapter<B> {
     fn behavior(&self) -> &dyn NativeVfsBehavior {
-        self.behavior.as_ref()
+        &self.behavior
     }
 }
 
-impl VfsProvider for NativeVfsAdapter {
+impl<B: NativeVfsBehavior> VfsProvider for NativeVfsAdapter<B> {
     fn preflight_handlers(&self) -> Result<PreflightHandlers, ProviderError> {
         self.provider.preflight_handlers()
     }
@@ -193,55 +193,66 @@ impl VfsProvider for NativeVfsAdapter {
 }
 
 pub(crate) fn register(registry: &mut NativeProviderRegistry<dyn RegisteredNativeVfsProvider>) {
-    for (id, owner, provider, uri_schemes, behavior) in [
-        (
-            fiex_recent::PROVIDER_ID,
-            CoreOwnerKey::new("recent"),
-            fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
-            fiex_recent::recent_uri_schemes(),
-            Arc::new(RecentOperations) as Arc<dyn NativeVfsBehavior>,
-        ),
-        (
-            fiex_applications::PROVIDER_ID,
-            fiex_applications::owner_key(),
-            Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
-            APPLICATIONS_URI_SCHEMES,
-            Arc::new(ApplicationsOperations) as Arc<dyn NativeVfsBehavior>,
-        ),
-        (
-            fiex_trash::PROVIDER_ID,
-            fiex_trash::owner_key(),
-            fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
-            fiex_trash::uri_schemes(),
-            Arc::new(TrashOperations) as Arc<dyn NativeVfsBehavior>,
-        ),
-        (
-            fiex_local_fs::PROVIDER_ID,
-            CoreOwnerKey::new("core"),
-            Arc::new(StorageProvider::new(fiex_local_fs::PROVIDER_ID)) as Arc<dyn VfsProvider>,
-            NO_URI_SCHEMES,
-            Arc::new(LocalStorageOperations) as Arc<dyn NativeVfsBehavior>,
-        ),
-        (
-            fiex_usb_fs::PROVIDER_ID,
-            CoreOwnerKey::new("core"),
-            Arc::new(StorageProvider::new(fiex_usb_fs::PROVIDER_ID)) as Arc<dyn VfsProvider>,
-            NO_URI_SCHEMES,
-            Arc::new(UsbStorageOperations) as Arc<dyn NativeVfsBehavior>,
-        ),
-    ] {
-        let provider: Arc<dyn RegisteredNativeVfsProvider> =
-            Arc::new(NativeVfsAdapter { provider, behavior });
-        let mut module =
-            registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
+    register_provider(
+        registry,
+        fiex_recent::PROVIDER_ID,
+        CoreOwnerKey::new("recent"),
+        fiex_recent::RecentModule::new(recent_provider::services()).vfs(),
+        fiex_recent::recent_uri_schemes(),
+        RecentOperations,
+    );
+    register_provider(
+        registry,
+        fiex_applications::PROVIDER_ID,
+        fiex_applications::owner_key(),
+        Arc::new(ApplicationView),
+        APPLICATIONS_URI_SCHEMES,
+        ApplicationsOperations,
+    );
+    register_provider(
+        registry,
+        fiex_trash::PROVIDER_ID,
+        fiex_trash::owner_key(),
+        fiex_trash::TrashModule::new(trash_provider::services()).vfs(),
+        fiex_trash::uri_schemes(),
+        TrashOperations,
+    );
+    register_provider(
+        registry,
+        fiex_local_fs::PROVIDER_ID,
+        CoreOwnerKey::new("core"),
+        Arc::new(StorageProvider::new(fiex_local_fs::PROVIDER_ID)),
+        NO_URI_SCHEMES,
+        LocalStorageOperations,
+    );
+    register_provider(
+        registry,
+        fiex_usb_fs::PROVIDER_ID,
+        CoreOwnerKey::new("core"),
+        Arc::new(StorageProvider::new(fiex_usb_fs::PROVIDER_ID)),
+        NO_URI_SCHEMES,
+        UsbStorageOperations,
+    );
+}
+
+fn register_provider<B: NativeVfsBehavior + 'static>(
+    registry: &mut NativeProviderRegistry<dyn RegisteredNativeVfsProvider>,
+    id: &'static str,
+    owner: CoreOwnerKey,
+    provider: Arc<dyn VfsProvider>,
+    uri_schemes: &'static [&'static str],
+    behavior: B,
+) {
+    let provider: Arc<dyn RegisteredNativeVfsProvider> =
+        Arc::new(NativeVfsAdapter { provider, behavior });
+    let mut module = registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
+    module
+        .register(id, 100, ProviderMatchRule::default(), provider)
+        .expect("invalid native VFS registration");
+    for scheme in uri_schemes {
         module
-            .register(id, 100, ProviderMatchRule::default(), provider)
-            .expect("invalid native VFS registration");
-        for scheme in uri_schemes {
-            module
-                .register_vfs_uri(id, scheme)
-                .expect("invalid native VFS URI route");
-        }
+            .register_vfs_uri(id, scheme)
+            .expect("invalid native VFS URI route");
     }
 }
 
