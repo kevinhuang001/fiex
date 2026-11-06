@@ -1851,7 +1851,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "tokio",
- "trash",
  "urlencoding",
  "which",
  "windows 0.62.2",
@@ -1885,10 +1884,12 @@ dependencies = [
 name = "fiex-platform"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "fiex-provider-contracts",
  "reqwest 0.12.28",
  "serde",
  "trash",
+ "windows 0.62.2",
  "winreg 0.55.0",
 ]
 
