@@ -1,7 +1,7 @@
 use super::OpenWithCandidate;
 use objc2::rc::{autoreleasepool, Retained};
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSArray, NSString, NSURL};
+use objc2_foundation::{NSString, NSURL};
 use std::{
     path::{Path, PathBuf},
     process::Command,
