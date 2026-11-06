@@ -48,6 +48,7 @@ tauri-build = { version = "2", optional = true , features = [] }
 [dependencies]
 futures = "0.3"
 fiex-storage = { path = "crates/foundation/fiex-storage" }
+fiex-resource = { path = "crates/foundation/fiex-resource" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }

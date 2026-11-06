@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::resource::resource_context::ResourceSnapshotProjection;
 
 #[tauri::command]
 pub(crate) async fn plugin_toolbar_invoke(
@@ -196,13 +197,12 @@ pub(crate) async fn plugin_describe_resources(
             .iter()
             .map(|path| {
                 Ok(
-                    crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?
-                        .project(
-                            &plugin_id,
-                            "",
-                            policy.allowed(crate::plugins::security::policy::Capability::Metadata),
-                            false,
-                        ),
+                    crate::plugins::resource::resource_context::resolve(path)?.project(
+                        &plugin_id,
+                        "",
+                        policy.allowed(crate::plugins::security::policy::Capability::Metadata),
+                        false,
+                    ),
                 )
             })
             .collect()

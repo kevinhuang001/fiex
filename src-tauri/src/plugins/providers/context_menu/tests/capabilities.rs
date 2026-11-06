@@ -20,7 +20,7 @@ fn each_common_action_has_its_own_provider_and_unavailable_actions_are_omitted()
     let ctx = mount_selection(
         path,
         false,
-        crate::plugins::resource::file_capabilities::FileCapabilities {
+        fiex_resource::FileCapabilities {
             read: true,
             stat: true,
             ..Default::default()
@@ -56,7 +56,7 @@ fn cut_keeps_the_existing_read_and_remove_requirements() {
             "/tmp",
             vec![path.into()],
             vec![mount_entry(path, false)],
-            crate::plugins::resource::file_capabilities::FileCapabilities {
+            fiex_resource::FileCapabilities {
                 read,
                 remove,
                 ..Default::default()
@@ -75,7 +75,7 @@ fn generic_open_does_not_require_read_and_preview_keeps_its_read_rule() {
         "applications://",
         vec![path.into()],
         vec![application],
-        crate::plugins::resource::file_capabilities::FileCapabilities {
+        fiex_resource::FileCapabilities {
             stat: true,
             ..Default::default()
         },
@@ -99,7 +99,7 @@ fn trash_and_remove_are_independent_capabilities_and_both_can_be_shown() {
             "/tmp",
             vec![path.into()],
             vec![mount_entry(path, false)],
-            crate::plugins::resource::file_capabilities::FileCapabilities {
+            fiex_resource::FileCapabilities {
                 trash,
                 remove,
                 ..Default::default()
@@ -118,7 +118,7 @@ fn trash_and_remove_are_independent_capabilities_and_both_can_be_shown() {
 
 #[test]
 fn blank_canvas_actions_use_independent_capabilities_and_view_excludes() {
-    let capabilities = crate::plugins::resource::file_capabilities::FileCapabilities {
+    let capabilities = fiex_resource::FileCapabilities {
         read: true,
         write: true,
         create: true,
@@ -135,7 +135,7 @@ fn blank_canvas_actions_use_independent_capabilities_and_view_excludes() {
         "applications://",
         vec![],
         vec![],
-        crate::plugins::resource::file_capabilities::FileCapabilities::ALL,
+        fiex_resource::FileCapabilities::ALL,
     );
     assert_eq!(
         action_items(&apps, "builtin:new-folder")[0]["id"],
@@ -148,7 +148,7 @@ fn blank_canvas_actions_use_independent_capabilities_and_view_excludes() {
             view,
             vec![],
             vec![],
-            crate::plugins::resource::file_capabilities::FileCapabilities::ALL,
+            fiex_resource::FileCapabilities::ALL,
         );
         assert!(action_items(&context, "builtin:new-folder").is_empty());
         assert!(action_items(&context, "builtin:new-file").is_empty());
@@ -162,7 +162,7 @@ fn trash_view_reuses_generic_remove_and_recent_never_inherits_source_delete() {
         "trash://",
         vec![trash_path.into()],
         vec![mount_entry(trash_path, false)],
-        crate::plugins::resource::file_capabilities::FileCapabilities {
+        fiex_resource::FileCapabilities {
             remove: true,
             ..Default::default()
         },
@@ -178,7 +178,7 @@ fn trash_view_reuses_generic_remove_and_recent_never_inherits_source_delete() {
         "recent://",
         vec![recent_path.into()],
         vec![mount_entry(recent_path, false)],
-        crate::plugins::resource::file_capabilities::FileCapabilities {
+        fiex_resource::FileCapabilities {
             read: true,
             remove: true,
             trash: true,

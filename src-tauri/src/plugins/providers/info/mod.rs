@@ -180,7 +180,9 @@ fn resolve_info_with_partial(
 
 /// Remote metadata is matched directly; content providers materialize lazily.
 pub fn file_info_resource(display: &str) -> Result<Vec<InfoSection>, String> {
-    Ok(resolve_info(ResourceSnapshot::resolve(display)?))
+    Ok(resolve_info(
+        crate::plugins::resource::resource_context::resolve(display)?,
+    ))
 }
 
 #[cfg(test)]

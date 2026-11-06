@@ -6,7 +6,7 @@ use super::{media::media_sections, metadata::metadata_section, InfoSection};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use crate::plugins::resource::resource_context::ResourceSnapshot;
+use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{
     InfoProvider, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
@@ -116,7 +116,7 @@ mod tests {
             assert_eq!(descriptor.kind, ProviderKind::Info);
             descriptor.validate().unwrap();
         }
-        let directory = ResourceSnapshot::from_metadata(
+        let directory = crate::plugins::resource::resource_context::from_metadata(
             "/no-such-directory",
             crate::plugins::contracts::ResourceMetadata {
                 kind: "directory".into(),

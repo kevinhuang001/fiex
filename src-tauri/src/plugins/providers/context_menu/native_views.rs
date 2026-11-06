@@ -1,10 +1,10 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
+#[cfg(test)]
+use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-#[cfg(test)]
-use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, ProviderMatchRule};
 #[cfg(test)]
 use fiex_provider_contracts::{
@@ -97,7 +97,7 @@ fn context(
     let targets = paths
         .iter()
         .map(|path| {
-            ResourceSnapshot::from_metadata(
+            crate::plugins::resource::resource_context::from_metadata(
                 path,
                 ResourceMetadata {
                     kind: "file".into(),
@@ -106,7 +106,7 @@ fn context(
             )
         })
         .collect::<Vec<_>>();
-    let directory_resource = ResourceSnapshot::from_metadata(
+    let directory_resource = crate::plugins::resource::resource_context::from_metadata(
         directory,
         ResourceMetadata {
             kind: "directory".into(),
@@ -121,7 +121,7 @@ fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
     let snapshots = paths
         .iter()
         .map(|path| {
-            ResourceSnapshot::from_metadata(
+            crate::plugins::resource::resource_context::from_metadata(
                 path,
                 ResourceMetadata {
                     kind: "file".into(),

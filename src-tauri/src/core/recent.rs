@@ -163,7 +163,7 @@ fn migrate_legacy_json(store: &RecentStorage) -> Result<(), String> {
         if seen.contains(&path) {
             continue;
         }
-        let Ok(snapshot) = ResourceSnapshot::resolve(&path) else {
+        let Ok(snapshot) = crate::plugins::resource::resource_context::resolve(&path) else {
             continue;
         };
         if let Ok(record) = snapshot_record(path.clone(), &snapshot) {
@@ -269,7 +269,7 @@ fn entry_for_record(record: &RecentRecord) -> Entry {
         modified: record.modified.unwrap_or_default().max(0) as u64,
         created: record.accessed_at.max(0) as u64,
         allowed_ops: vec!["stat".into(), "read".into()],
-        storage_projection: crate::core::files::StorageProjection::Projected(
+        storage_projection: fiex_resource::StorageProjection::Projected(
             crate::plugins::match_rules::projected_storage_for_source(&record.locator),
         ),
         ..Default::default()

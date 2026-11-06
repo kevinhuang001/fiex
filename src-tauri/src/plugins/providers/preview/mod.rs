@@ -80,7 +80,8 @@ fn resource_candidates(resource: &ResourceSnapshot) -> (Vec<Resolver>, bool) {
     (providers, fallback_allowed)
 }
 pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
-    let resource = ResourceSnapshot::resolve_from_directory_snapshot(display)?;
+    let resource =
+        crate::plugins::resource::resource_context::resolve_from_directory_snapshot(display)?;
     Ok(project_candidates(resource_candidates(&resource).0))
 }
 fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
@@ -113,7 +114,7 @@ pub fn open_resource(
     user_action: crate::core::fs::mapped_access::UserActionContext,
 ) -> Result<Value, String> {
     resolve_preview(
-        ResourceSnapshot::resolve_from_directory_snapshot(display)?,
+        crate::plugins::resource::resource_context::resolve_from_directory_snapshot(display)?,
         preferred,
         order,
         user_action,

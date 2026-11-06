@@ -109,7 +109,7 @@ pub(crate) async fn remote_open(
     path: String,
     on_progress: Channel<OperationProgress>,
 ) -> Result<(), String> {
-    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
+    let snapshot = crate::plugins::resource::resource_context::resolve(&path)?;
     let emit = byte_progress_emitter(on_progress);
     let step = std::path::Path::new(&path)
         .file_name()

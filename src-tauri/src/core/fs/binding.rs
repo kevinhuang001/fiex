@@ -4,7 +4,7 @@ use super::*;
 use std::path::Path;
 
 pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String> {
-    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?;
+    let snapshot = crate::plugins::resource::resource_context::resolve(path)?;
     trusted_snapshot(&snapshot, owner)
 }
 
@@ -86,7 +86,7 @@ fn local_rename(path: &str, name: &str, owner: &str) -> Result<String, String> {
         &[source_path.to_path_buf(), destination_path.clone()],
     )?;
     let snapshot =
-        crate::plugins::resource::resource_context::ResourceSnapshot::new(path, source_path);
+        crate::plugins::resource::resource_context::new_resource_snapshot(path, source_path);
     let target = serde_json::json!({
         "ref": snapshot.reference,
         "metadata": snapshot.metadata(),
@@ -94,15 +94,14 @@ fn local_rename(path: &str, name: &str, owner: &str) -> Result<String, String> {
     scope.bind_resource(&target, Some(source_path))?;
     let source = ResourceBroker::resolve(&scope, owner, &target["ref"])?;
     let destination_display = destination_path.to_string_lossy().into_owned();
-    let destination_snapshot =
-        crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-            &destination_display,
-            crate::plugins::contracts::ResourceMetadata {
-                name: name.into(),
-                kind: "file".into(),
-                ..Default::default()
-            },
-        );
+    let destination_snapshot = crate::plugins::resource::resource_context::from_metadata(
+        &destination_display,
+        crate::plugins::contracts::ResourceMetadata {
+            name: name.into(),
+            kind: "file".into(),
+            ..Default::default()
+        },
+    );
     let destination_target = serde_json::json!({
         "ref": destination_snapshot.reference,
         "metadata": destination_snapshot.metadata(),

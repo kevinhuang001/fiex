@@ -7,10 +7,7 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 
-use crate::plugins::{
-    events::{EventRouter, ProviderCandidate, Resolver},
-    resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 use fiex_provider_contracts::{
     ProviderError, ProviderInvocation, ProviderRequest, ToolbarProvider, ToolbarResult,
 };
@@ -43,7 +40,7 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
     };
     let resources = targets
         .iter()
-        .map(|path| ResourceSnapshot::resolve(path))
+        .map(|path| crate::plugins::resource::resource_context::resolve(path))
         .collect::<Result<Vec<_>, _>>()?;
     let targets = crate::plugins::events::matching::match_resources(&resources);
     let providers = crate::plugins::provider_registry::candidates(

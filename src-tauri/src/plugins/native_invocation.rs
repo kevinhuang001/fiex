@@ -2,7 +2,7 @@
 //! provider traits. The serializable request contains only trusted, projected
 //! resource metadata; native services remain behind this process-local handle.
 use crate::core::fs::mapped_access::UserActionContext;
-use crate::plugins::resource::resource_context::ResourceSnapshot;
+use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderRequestContext};
 use fiex_storage::{
     native::{NativeScopedStorage, OwnerBoundStorage},

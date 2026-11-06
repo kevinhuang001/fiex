@@ -170,7 +170,7 @@ fn core_entry(entry: SearchEntry) -> Entry {
 fn resources(
     request: &PluginSearchInput,
 ) -> Vec<crate::plugins::resource::resource_context::ResourceSnapshot> {
-    crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
+    crate::plugins::resource::resource_context::resolve(&request.root)
         .map(|resource| vec![resource])
         .unwrap_or_default()
 }

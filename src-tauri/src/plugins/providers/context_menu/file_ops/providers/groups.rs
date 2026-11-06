@@ -1,12 +1,11 @@
 use super::super::{Context, Selection};
 use super::item;
-use crate::plugins::{
-    native_invocation::NativeProviderInvocation, resource::file_capabilities::FileCapabilities,
-};
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
     ProviderInvocation,
 };
+use fiex_resource::FileCapabilities;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

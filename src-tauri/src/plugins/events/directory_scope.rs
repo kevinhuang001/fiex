@@ -28,7 +28,7 @@ pub(super) fn bind(
     let Some(path) = directory.or(inferred.as_deref()) else {
         return Ok(());
     };
-    let snapshot = ResourceSnapshot::resolve(path)?;
+    let snapshot = crate::plugins::resource::resource_context::resolve(path)?;
     if !snapshot.is_dir {
         return Err("action output must be a directory".into());
     }
@@ -55,7 +55,10 @@ mod tests {
         let mut scope = Scope::selected(dir.path(), &[]).unwrap();
         let declared = ["files.create".to_owned()].into_iter().collect();
         let policy = PermissionPolicy::new("org.example.archive", &declared);
-        let source = ResourceSnapshot::from_metadata("source.txt", Default::default());
+        let source = crate::plugins::resource::resource_context::from_metadata(
+            "source.txt",
+            Default::default(),
+        );
         let mut params = json!({"targets":[{"ref":source.reference}]});
         bind(
             &mut params,

@@ -66,7 +66,7 @@ impl DragSessions {
         let references = originals
             .iter()
             .map(|path| {
-                crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+                crate::plugins::resource::resource_context::resolve(path)
                     .map(|snapshot| snapshot.reference)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -105,7 +105,7 @@ impl DragSessions {
             .originals
             .iter()
             .map(|path| {
-                crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+                crate::plugins::resource::resource_context::resolve(path)
                     .map(|snapshot| snapshot.reference)
             })
             .collect::<Result<Vec<_>, _>>()

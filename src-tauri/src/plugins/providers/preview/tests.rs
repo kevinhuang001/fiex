@@ -46,7 +46,7 @@ fn builtins_are_ordered_and_fallback_is_last() {
 
 #[test]
 fn preview_size_ceiling_applies_to_remote_resource_metadata() {
-    let virtual_file = ResourceSnapshot::from_metadata(
+    let virtual_file = crate::plugins::resource::resource_context::from_metadata(
         "fiex://mount/remote/example.bin",
         crate::plugins::contracts::ResourceMetadata {
             kind: "file".into(),

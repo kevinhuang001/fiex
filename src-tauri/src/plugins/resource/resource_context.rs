@@ -1,186 +1,159 @@
-//! Core-owned resource snapshot shared by Info and Preview providers.
-//! Metadata is retrieved once, then projected separately for each provider.
-//! The snapshot never crosses the plugin process boundary.
-use crate::plugins::contracts::{EventContext, ResourceContext, ResourceMetadata, ResourceRef};
-use fiex_provider_contracts::ResourceCapabilities;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+//! Application adapters that resolve trusted resources through the live FS
+//! and VFS registries. Resource data and projections live in `fiex-resource`.
+use crate::{core::files::Entry, plugins::contracts::ResourceMetadata};
+use fiex_provider_contracts::{EventContext, FsOperation, ResourceContext};
+use std::path::{Path, PathBuf};
 
-#[derive(Clone)]
-pub struct ResourceSnapshot {
-    pub display: String,
-    pub local: PathBuf,
-    pub reference: ResourceRef,
-    pub stat: Option<fs::Metadata>,
-    pub is_dir: bool,
-    pub ext: String,
-    pub mime: String,
-    pub name: String,
-    metadata: Option<ResourceMetadata>,
-    pub operations: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
-    pub(crate) storage_projection: crate::core::files::StorageProjection,
+pub use fiex_resource::ResourceSnapshot;
+
+pub fn new_resource_snapshot(display: &str, local: &Path) -> ResourceSnapshot {
+    let mount_id = crate::core::fs::provider_registry::reference_mount_id(display)
+        .unwrap_or_else(|| "local".into());
+    let name = local
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| local.to_string_lossy().into_owned());
+    let extension = Path::new(&name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    ResourceSnapshot::new(
+        display,
+        local,
+        &mount_id,
+        &fiex_resource::mime_for(&extension),
+    )
 }
 
-impl ResourceSnapshot {
-    pub fn new(display: &str, local: &Path) -> Self {
-        let stat = fs::symlink_metadata(local).ok();
-        let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
-        let name = local
-            .file_name()
-            .map(|value| value.to_string_lossy().into_owned())
-            .unwrap_or_else(|| local.to_string_lossy().into_owned());
-        let ext = Path::new(&name)
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        let mime = crate::plugins::match_rules::mime_for(&ext);
-        let reference = Self::reference_for(display);
-        let metadata = stat.as_ref().map(|stat| ResourceMetadata {
-            name: name.clone(),
-            kind: if stat.file_type().is_symlink() {
-                "symlink"
-            } else if is_dir {
-                "directory"
-            } else {
-                "file"
-            }
-            .into(),
-            extension: (!ext.is_empty()).then(|| ext.clone()),
-            mime: (!ext.is_empty()).then(|| mime.clone()),
-            size: (!is_dir).then_some(stat.len()),
-            modified: stat
-                .modified()
-                .ok()
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|elapsed| elapsed.as_secs() as i64),
-        });
-        Self {
-            display: display.into(),
-            local: local.to_path_buf(),
-            reference,
-            stat,
-            is_dir,
-            ext,
-            mime,
-            name,
-            metadata,
-            operations: None,
-            storage_projection: crate::core::files::StorageProjection::Owned,
+pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> ResourceSnapshot {
+    let mount_id = crate::core::fs::provider_registry::reference_mount_id(display)
+        .unwrap_or_else(|| "local".into());
+    let local = crate::core::volumes::native_vfs::backing_path(display)
+        .unwrap_or_else(|| PathBuf::from(display));
+    ResourceSnapshot::from_metadata(display, local, &mount_id, metadata)
+}
+
+pub fn from_entry(display: &str, entry: &Entry) -> ResourceSnapshot {
+    let mut resource = from_metadata(display, entry_metadata(entry));
+    resource.storage_projection = entry.storage_projection.clone();
+    resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
+        display, entry,
+    ));
+    resource
+}
+
+pub fn entry_metadata(entry: &Entry) -> ResourceMetadata {
+    ResourceMetadata {
+        name: entry.name.clone(),
+        kind: if entry.is_symlink {
+            "symlink"
+        } else if entry.is_dir {
+            "directory"
+        } else {
+            "file"
+        }
+        .into(),
+        extension: Some(entry.extension.clone()),
+        mime: Some(entry.mime.clone()),
+        size: (!entry.is_dir).then_some(entry.size),
+        modified: Some(entry.modified as i64),
+    }
+}
+
+pub fn resolve(display: &str) -> Result<ResourceSnapshot, String> {
+    match crate::core::fs::provider_registry::resource_access(display).map_err(String::from)? {
+        crate::core::fs::provider_registry::ResourceAccess::HostPath => {
+            Ok(new_resource_snapshot(display, Path::new(display)))
+        }
+        crate::core::fs::provider_registry::ResourceAccess::Provider => {
+            let entry = crate::core::fs::provider_registry::resource_entry(display)?;
+            Ok(from_entry(display, &entry))
         }
     }
+}
 
-    /// Stable for this Core process; the keyed digest cannot reveal a host path.
-    /// Identity is never an authorization token: each request still needs Scope.
-    fn reference_for(display: &str) -> ResourceRef {
-        use sha2::{Digest, Sha256};
-        use std::sync::OnceLock;
-        static KEY: OnceLock<[u8; 32]> = OnceLock::new();
-        let key = KEY.get_or_init(|| {
-            let mut key = [0; 32];
-            getrandom::getrandom(&mut key).expect("Core resource identity entropy unavailable");
-            key
-        });
-        let mount_id = crate::core::fs::provider_registry::reference_mount_id(display)
-            .unwrap_or_else(|| "local".into());
-        let mut digest = Sha256::new();
-        digest.update(key);
-        digest.update(mount_id.as_bytes());
-        digest.update([0]);
-        digest.update(display.as_bytes());
-        ResourceRef {
-            mount_id,
-            node_id: format!("node:{}", hex::encode(digest.finalize())),
-        }
-    }
-
-    pub fn metadata(&self) -> Option<&ResourceMetadata> {
-        self.metadata.as_ref()
-    }
-
-    pub fn resolve(display: &str) -> Result<Self, String> {
-        match crate::core::fs::provider_registry::resource_access(display).map_err(String::from)? {
-            crate::core::fs::provider_registry::ResourceAccess::HostPath => {
-                Ok(Self::new(display, Path::new(display)))
-            }
-            crate::core::fs::provider_registry::ResourceAccess::Provider => {
-                let entry = crate::core::fs::provider_registry::resource_entry(display)?;
-                Ok(Self::from_entry(display, &entry))
-            }
-        }
-    }
-
-    /// Metadata reads may reuse the Core-authorized listing snapshot for VFS
-    /// resources. Content reads still go through the broker and reauthorize.
-    pub fn resolve_from_directory_snapshot(display: &str) -> Result<Self, String> {
-        if crate::core::fs::provider_registry::resource_access(display).map_err(String::from)?
-            == crate::core::fs::provider_registry::ResourceAccess::Provider
-        {
-            if let Ok(parent) = crate::core::fs::provider_registry::parent_path(display) {
-                if let Ok(Some(snapshot)) =
-                    crate::core::fs::directory_cache::read_snapshot(&parent, true, &[])
+/// Reuse a trusted directory snapshot for metadata, then fall back to the live
+/// resource route. Content operations still reauthorize through the broker.
+pub fn resolve_from_directory_snapshot(display: &str) -> Result<ResourceSnapshot, String> {
+    if crate::core::fs::provider_registry::resource_access(display).map_err(String::from)?
+        == crate::core::fs::provider_registry::ResourceAccess::Provider
+    {
+        if let Ok(parent) = crate::core::fs::provider_registry::parent_path(display) {
+            if let Ok(Some(snapshot)) =
+                crate::core::fs::directory_cache::read_snapshot(&parent, true, &[])
+            {
+                if let Some(entry) = snapshot
+                    .listing
+                    .entries
+                    .into_iter()
+                    .find(|entry| entry.path == display)
                 {
-                    if let Some(entry) = snapshot
-                        .listing
-                        .entries
-                        .into_iter()
-                        .find(|entry| entry.path == display)
-                    {
-                        return Ok(Self::from_entry(display, &entry));
-                    }
+                    return Ok(from_entry(display, &entry));
                 }
             }
         }
-        Self::resolve(display)
     }
-    pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
-        let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
-        resource.storage_projection = entry.storage_projection.clone();
-        resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
-            display, entry,
-        ));
-        resource
-    }
-    pub fn entry_metadata(entry: &crate::core::files::Entry) -> ResourceMetadata {
-        ResourceMetadata {
-            name: entry.name.clone(),
-            kind: if entry.is_symlink {
-                "symlink"
-            } else if entry.is_dir {
-                "directory"
-            } else {
-                "file"
+    resolve(display)
+}
+
+/// Keep the app-specific authorization/presentation projection outside the
+/// portable resource model.
+pub trait ResourceSnapshotProjection {
+    fn project(
+        &self,
+        owner: &str,
+        session: &str,
+        metadata_allowed: bool,
+        read_allowed: bool,
+    ) -> ResourceContext;
+
+    fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext;
+
+    fn export_path(
+        &self,
+        user_action: crate::core::fs::mapped_access::UserActionContext,
+    ) -> Result<PathBuf, String>;
+}
+
+impl ResourceSnapshotProjection for ResourceSnapshot {
+    fn project(
+        &self,
+        _owner: &str,
+        _session: &str,
+        metadata_allowed: bool,
+        _read_allowed: bool,
+    ) -> ResourceContext {
+        let (view, own_storage) = crate::plugins::match_rules::typed_locations_for_snapshot(self);
+        let storage = match &self.storage_projection {
+            fiex_resource::StorageProjection::Owned => own_storage,
+            fiex_resource::StorageProjection::Projected(source) => source.clone(),
+        };
+        let capabilities = if metadata_allowed {
+            let effective = self.operations.unwrap_or_else(|| {
+                crate::plugins::resource::file_capabilities::for_path(&self.display)
+            });
+            fiex_provider_contracts::ResourceCapabilities {
+                operations: FsOperation::ALL
+                    .into_iter()
+                    .filter(|operation| effective.allows(*operation))
+                    .collect(),
             }
-            .into(),
-            extension: Some(entry.extension.clone()),
-            mime: Some(entry.mime.clone()),
-            size: (!entry.is_dir).then_some(entry.size),
-            modified: Some(entry.modified as i64),
-        }
+        } else {
+            fiex_provider_contracts::ResourceCapabilities::default()
+        };
+        self.project_data(metadata_allowed, view, storage, capabilities)
     }
-    pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> Self {
-        let reference = Self::reference_for(display);
-        let local = crate::core::volumes::native_vfs::backing_path(display)
-            .unwrap_or_else(|| PathBuf::from(display));
-        Self {
-            display: display.into(),
-            local,
-            reference,
-            stat: None,
-            is_dir: metadata.kind == "directory",
-            ext: metadata.extension.clone().unwrap_or_default(),
-            mime: metadata.mime.clone().unwrap_or_default(),
-            name: metadata.name.clone(),
-            metadata: Some(metadata),
-            operations: None,
-            storage_projection: crate::core::files::StorageProjection::Owned,
-        }
+
+    fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
+        let session_id = crate::plugins::mounts::new_id().unwrap_or_default();
+        self.event_context(
+            session_id.clone(),
+            self.project(owner, &session_id, metadata_allowed, read_allowed),
+        )
     }
-    /// A native renderer needs a local path. Export through the same bounded,
-    /// leased broker as external open/drag; never expose provider caches.
-    pub(crate) fn export_path(
+
+    fn export_path(
         &self,
         user_action: crate::core::fs::mapped_access::UserActionContext,
     ) -> Result<PathBuf, String> {
@@ -193,42 +166,6 @@ impl ResourceSnapshot {
             .next()
             .map(PathBuf::from)
             .ok_or("missing export".into())
-    }
-    pub fn project(
-        &self,
-        _owner: &str,
-        _session: &str,
-        metadata_allowed: bool,
-        _read_allowed: bool,
-    ) -> ResourceContext {
-        let (view, storage) = crate::plugins::match_rules::typed_locations_for_snapshot(self);
-        let capabilities = if metadata_allowed {
-            let effective = self.operations.unwrap_or_else(|| {
-                crate::plugins::resource::file_capabilities::for_path(&self.display)
-            });
-            ResourceCapabilities {
-                operations: crate::plugins::provider_registry::FsOperation::ALL
-                    .into_iter()
-                    .filter(|operation| effective.allows(*operation))
-                    .collect(),
-            }
-        } else {
-            ResourceCapabilities::default()
-        };
-        ResourceContext {
-            reference: self.reference.clone(),
-            metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
-            view,
-            storage,
-            capabilities,
-        }
-    }
-    pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
-        let session_id = crate::plugins::mounts::new_id().unwrap_or_default();
-        EventContext {
-            targets: vec![self.project(owner, &session_id, metadata_allowed, read_allowed)],
-            session_id,
-        }
     }
 }
 

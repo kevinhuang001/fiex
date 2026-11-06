@@ -86,7 +86,7 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 }
 
 pub fn before_open(path: &str) -> Result<Value, String> {
-    let resource = ResourceSnapshot::resolve(path)?;
+    let resource = crate::plugins::resource::resource_context::resolve(path)?;
     let providers = candidates(&resource, "beforeOpen");
     let call = ProviderRequest {
         method: "hooks.invoke".into(),

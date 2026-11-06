@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 fn binding(dir: &std::path::Path, path: &std::path::Path) -> (Scope, Value) {
     let mut scope = Scope::selected(dir, &[path.to_path_buf()]).unwrap();
-    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::new(
+    let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
         path.to_str().unwrap(),
         path,
     );
@@ -78,21 +78,23 @@ fn readonly_view_rejects_stream_mutation_and_unrelated_destinations() {
 }
 #[test]
 fn resource_identity_is_stable_across_fresh_snapshots() {
-    use crate::plugins::resource::resource_context::ResourceSnapshot;
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a");
     let b = dir.path().join("b");
     std::fs::write(&a, b"a").unwrap();
     std::fs::write(&b, b"b").unwrap();
     assert_eq!(
-        ResourceSnapshot::new(a.to_str().unwrap(), &a).reference,
-        ResourceSnapshot::resolve(a.to_str().unwrap())
+        crate::plugins::resource::resource_context::new_resource_snapshot(a.to_str().unwrap(), &a)
+            .reference,
+        crate::plugins::resource::resource_context::resolve(a.to_str().unwrap())
             .unwrap()
             .reference
     );
     assert_ne!(
-        ResourceSnapshot::new(a.to_str().unwrap(), &a).reference,
-        ResourceSnapshot::new(b.to_str().unwrap(), &b).reference
+        crate::plugins::resource::resource_context::new_resource_snapshot(a.to_str().unwrap(), &a)
+            .reference,
+        crate::plugins::resource::resource_context::new_resource_snapshot(b.to_str().unwrap(), &b)
+            .reference
     );
 }
 

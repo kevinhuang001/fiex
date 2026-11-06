@@ -37,12 +37,12 @@ fn provider_symlink_projection_is_not_lost() {
 
 #[test]
 fn usb_replacement_revokes_existing_broker_before_driver_access() {
-    use crate::plugins::resource::resource_context::ResourceSnapshot;
     let dir = tempfile::tempdir().unwrap();
     let image = dir.path().join("device.img");
     std::fs::write(&image, b"first device").unwrap();
     let root = crate::usbfs::virtual_root(&image.to_string_lossy(), crate::usbfs::FsKind::Btrfs);
-    let snapshot = ResourceSnapshot::from_metadata(&root, Default::default());
+    let snapshot =
+        crate::plugins::resource::resource_context::from_metadata(&root, Default::default());
     let target = json!({"ref":snapshot.reference});
     let mut scope = Scope::selected(dir.path(), &[]).unwrap();
     scope.bind_remote(&target, &snapshot).unwrap();
@@ -54,7 +54,8 @@ fn usb_replacement_revokes_existing_broker_before_driver_access() {
     assert!(error.to_string().starts_with("StaleRef:"), "{error}");
     assert_ne!(
         snapshot.reference,
-        ResourceSnapshot::from_metadata(&root, Default::default()).reference
+        crate::plugins::resource::resource_context::from_metadata(&root, Default::default())
+            .reference
     );
 }
 
@@ -116,10 +117,8 @@ fn cancelling_after_the_last_commit_does_not_delete_the_source() {
 
 #[test]
 fn feature_discovery_receives_independent_operation_capabilities() {
-    use crate::plugins::resource::{
-        file_capabilities::FileCapabilities, resource_context::ResourceSnapshot,
-    };
-    let mut resource = ResourceSnapshot::from_metadata(
+    use fiex_resource::FileCapabilities;
+    let mut resource = crate::plugins::resource::resource_context::from_metadata(
         "example",
         crate::plugins::contracts::ResourceMetadata {
             name: "example.txt".into(),
@@ -147,13 +146,13 @@ fn feature_discovery_receives_independent_operation_capabilities() {
 #[cfg(unix)]
 #[test]
 fn symlink_kind_survives_event_metadata_projection() {
-    use crate::plugins::resource::resource_context::ResourceSnapshot;
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("file");
     let link = dir.path().join("link");
     std::fs::write(&file, b"bytes").unwrap();
     std::os::unix::fs::symlink(&file, &link).unwrap();
-    let resource = ResourceSnapshot::resolve(&link.to_string_lossy()).unwrap();
+    let resource =
+        crate::plugins::resource::resource_context::resolve(&link.to_string_lossy()).unwrap();
     assert_eq!(
         crate::plugins::events::resource_metadata(&[resource])[0]["kind"],
         "symlink"
@@ -232,14 +231,16 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
 
 #[test]
 fn selected_local_path_cannot_be_relabelled_with_a_forged_reference() {
-    use crate::plugins::resource::resource_context::{
-        bind_selected, ResourceBinding, ResourceSnapshot,
-    };
+    use crate::plugins::resource::resource_context::{bind_selected, ResourceBinding};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("selected.txt");
     std::fs::write(&path, b"selected").unwrap();
     let mut scope = Scope::selected(dir.path(), std::slice::from_ref(&path)).unwrap();
-    let mut reference = ResourceSnapshot::new(&path.to_string_lossy(), &path).reference;
+    let mut reference = crate::plugins::resource::resource_context::new_resource_snapshot(
+        &path.to_string_lossy(),
+        &path,
+    )
+    .reference;
     reference.mount_id = "forged-mount".into();
     assert!(bind_selected(
         &mut scope,

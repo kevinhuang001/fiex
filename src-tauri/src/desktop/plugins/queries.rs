@@ -30,10 +30,12 @@ pub(crate) async fn file_info_details(
         // A cache lookup must still validate the current resource identity.
         // An InfoProvider can work without vfs.stat, so missing stat only
         // disables caching rather than disabling the Info feature.
-        let resource = crate::plugins::resource::resource_context::ResourceSnapshot::resolve_from_directory_snapshot(&path)?;
+        let resource =
+            crate::plugins::resource::resource_context::resolve_from_directory_snapshot(&path)?;
         let _broker = crate::core::fs::trusted_snapshot(&resource, "core:info")?;
         let metadata = resource.metadata();
-        let parent = crate::core::fs::provider_registry::parent_path(&path).unwrap_or_else(|_| path.clone());
+        let parent =
+            crate::core::fs::provider_registry::parent_path(&path).unwrap_or_else(|_| path.clone());
         let mount_revision = crate::core::fs::directory_cache::key(&parent);
         let content_revision = crate::core::fs::changes::revision(&parent);
         let provider_state = crate::plugins::host::catalog()
@@ -73,7 +75,9 @@ pub(crate) async fn file_info_details(
                 let _ = on_partial.send(sections);
             },
         );
-        if let Some(key) = key.filter(|_| !result.iter().any(|section| section.id.ends_with(".error"))) {
+        if let Some(key) =
+            key.filter(|_| !result.iter().any(|section| section.id.ends_with(".error")))
+        {
             cache.insert(key, result.clone());
         }
         Ok(result)
