@@ -10,5 +10,10 @@ fiex-provider-contracts = { path = "../../../../sdk/rust/contracts" }
 fiex-platform = { path = "../../platform/fiex-platform" }
 fiex-storage = { path = "../../foundation/fiex-storage" }
 base64 = "0.22"
+dirs = { workspace = true }
+mime_guess = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
