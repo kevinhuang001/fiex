@@ -12,6 +12,7 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
         Some("core:applications")
     );
     assert_eq!(provider_id(trash_vfs::URI), Some("core:trash"));
+    assert_eq!(provider_id("recyclebin://item"), Some("core:trash"));
     assert!(provider_id("unknown://item").is_none());
     assert!(provider_id("fiex://mount/not-a-native-view").is_none());
     assert!(!opaque("unknown://item"));

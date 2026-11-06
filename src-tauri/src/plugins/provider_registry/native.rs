@@ -54,6 +54,10 @@ impl<T: ?Sized + Send + Sync + 'static> NativeProviderRegistry<T> {
         self.entries.get_arc(id)
     }
 
+    pub fn route_uri(&self, path: &str) -> Option<&'static str> {
+        self.entries.route_uri(path)
+    }
+
     pub fn owner(&self, id: &str) -> Option<CoreOwnerKey> {
         self.entries.owner(id)
     }
