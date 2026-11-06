@@ -42,7 +42,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
   const autoPinned = useRef(false)
   useEffect(() => {
     if (!import.meta.env.DEV || autoPinned.current) return
-    if (new URLSearchParams(location.search).has('pluginFixture')) return
+    if (import.meta.env.VITE_FIEX_E2E === '1') return
     const defaults = availableTools
       .filter(({ plugin, tool }) => plugin.id.startsWith('org.fiex.') && tool.panel)
       .map(({ plugin }) => pluginKey(plugin.id))

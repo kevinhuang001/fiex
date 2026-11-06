@@ -1,9 +1,10 @@
 import { defineConfig } from '@playwright/test'
+process.env.VITE_FIEX_E2E = '1'
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
-  // The demo mutates shared fixtures; parallel workers make timeout-based
-  // assertions flaky on CI. Keep the suite deterministic in CI.
+  // The mock backend mutates shared fixtures; parallel workers make
+  // stateful assertions flaky on CI. Keep the suite deterministic there.
   workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: 'http://127.0.0.1:1420',

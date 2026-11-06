@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('a saved SSH connection can be edited from its context menu without duplication', async ({
   page,
 }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   const connection = page.locator('.connection-nav').filter({ hasText: '生产服务器' })
   await connection.click({ button: 'right' })
   await page.getByRole('menuitem', { name: '编辑连接…', exact: true }).click()

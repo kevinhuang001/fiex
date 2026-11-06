@@ -1,0 +1,122 @@
+import type { FixturePlugin } from './types'
+
+const fixturePlugin: FixturePlugin = {
+  id: 'org.test.fixture',
+  name: '测试插件',
+  version: '1.0.0',
+  description: '用于验证右键子菜单、隔离 iframe 与上下文桥。',
+  enabled: true,
+  approved: true,
+  backendAvailable: true,
+
+  declaredPermissions: [],
+  grantedPermissions: [],
+  requestedNetworkDomains: [],
+  allowedNetworkDomains: [],
+  author: { name: 'Fiex Fixtures' },
+  extensions: {
+    toolbar: {
+      title: '测试工具',
+      icon: 'puzzle-piece',
+      panel: { entry: 'ui/index.html', title: '测试工具' },
+    },
+    search: {
+      icon: 'magnifying-glass',
+      scope: 'global',
+    },
+    contextMenus: true,
+  },
+}
+
+export const fixturePlugins: FixturePlugin[] = [
+  fixturePlugin,
+  {
+    id: 'org.example.terminal',
+    name: 'SSH',
+    version: '1.0.0',
+    description: 'Fixture connection provider for editing saved SSH sessions.',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+    declaredPermissions: ['network'],
+    grantedPermissions: ['network'],
+    requestedNetworkDomains: [],
+    allowedNetworkDomains: [],
+    author: { name: 'Fiex Fixtures' },
+    extensions: {
+      connections: {
+        title: 'SSH',
+        fields: [
+          { id: 'host', label: '主机', type: 'text', required: true },
+          { id: 'port', label: '端口', type: 'number', defaultValue: 22 },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'terminalType', label: '终端类型', type: 'text', defaultValue: 'xterm-256color' },
+        ],
+      },
+    },
+  },
+  {
+    id: 'org.example.git',
+    name: 'Git',
+    version: '0.1.0',
+    description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+
+    declaredPermissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+      'commands',
+    ],
+    grantedPermissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+      'commands',
+    ],
+    requestedNetworkDomains: ['github.com'],
+    allowedNetworkDomains: ['github.com'],
+    requestedCommands: ['git'],
+    allowedCommands: ['git'],
+    author: { name: 'Fiex Contributors' },
+    extensions: {
+      vfs: { title: 'Git 历史' },
+      toolbar: {
+        title: '源代码管理',
+        icon: 'git-branch',
+        command: 'git.status',
+      },
+      settings: [
+        { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
+      ],
+    },
+  },
+  {
+    id: 'org.example.checksum',
+    name: '校验和',
+    version: '0.1.0',
+    description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+
+    declaredPermissions: ['folders.read', 'files.read'],
+    grantedPermissions: ['folders.read', 'files.read'],
+    requestedNetworkDomains: [],
+    allowedNetworkDomains: [],
+    author: { name: 'Fiex Contributors' },
+    extensions: {
+      contextMenus: true,
+    },
+  },
+]

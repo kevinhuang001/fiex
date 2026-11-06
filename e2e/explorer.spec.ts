@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
 })
 test('four views, grouping, and keyboard preview', async ({ page }) => {
   await page.getByRole('grid', { name: '文件' }).click({ position: { x: 400, y: 400 } })
@@ -248,7 +248,7 @@ test('Applications entry and search control', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
 test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
-  await page.goto('/?demo')
+  await page.goto('/?fixture')
   await page.evaluate(() => {
     const key = 'fiex:preferences'
     const prefs = JSON.parse(localStorage.getItem(key) || '{}')
@@ -433,7 +433,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 })
 
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
-  await page.goto('/?demo')
+  await page.goto('/?fixture')
   await page.getByRole('button', { name: '添加连接' }).click()
   await page.getByRole('menuitem', { name: '新建连接…' }).click()
   const dialog = page.getByRole('dialog')
@@ -489,7 +489,7 @@ test('settings sections keep preferences and release shortcut recording on exit'
 test('ten thousand icons stay virtualized and support end selection and rename', async ({
   page,
 }) => {
-  await page.goto('/?demo&count=10000')
+  await page.goto('/?fixture&count=10000')
   await expect(page.locator('.statusbar')).toContainText('10,015')
   await page.getByRole('button', { name: '图标视图', exact: true }).click()
   await expect(page.locator('.virtual-file-grid')).toBeVisible()
@@ -559,7 +559,7 @@ test('copy conflicts offer compare and keep both, ordinary pastes need no confir
 })
 
 test('optional archive and checksum features are not preinstalled', async ({ page }) => {
-  await page.goto('/?demo')
+  await page.goto('/?fixture')
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
@@ -583,7 +583,7 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
   await expect(page.getByRole('dialog', { name: '权限请求' })).toBeVisible()
 })
 test('local import shows identity and signature only', async ({ page }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
@@ -600,7 +600,7 @@ test('local import shows identity and signature only', async ({ page }) => {
 })
 
 test('plugin rows expose a delete action with confirmation', async ({ page }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const checksum = page.locator('.plugin-row').filter({ hasText: '校验和' })
@@ -614,7 +614,7 @@ test('plugin rows expose a delete action with confirmation', async ({ page }) =>
 })
 
 test('installed plugin rows expose permissions and settings', async ({ page }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const git = page.locator('.plugin-row').filter({ hasText: 'Git' })
@@ -700,7 +700,7 @@ test('settings creates, edits and deletes tags through the confirmation', async 
 test('caption buttons stay clear of tabs and the sidebar starts below the tab strip', async ({
   page,
 }) => {
-  await page.goto('/?demo&platform=windows')
+  await page.goto('/?fixture&platform=windows')
   await expect(page.getByText('Fiex — 产品设计.pdf', { exact: true })).toBeVisible()
   for (let i = 0; i < 12; i += 1)
     await page.getByRole('button', { name: '新建标签页', exact: true }).click()
@@ -741,7 +741,7 @@ test('settings and tag dialogs keep their compact widths', async ({ page }) => {
 test('installed plugin contributes submenu and isolated iframe modal with context bridge', async ({
   page,
 }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   // Plugin actions are grouped under one top-level submenu, not flattened.
@@ -838,7 +838,7 @@ test('activation can deselect a permission and target before activating', async 
 })
 
 test('using a plugin asks again after its read capability was revoked', async ({ page }) => {
-  await page.goto('/?demo&pluginFixture')
+  await page.goto('/?fixture&pluginFixture')
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const manager = page.getByRole('dialog', { name: '插件', exact: true })
@@ -887,11 +887,11 @@ test('closing and reopening the same plugin context retains its iframe', async (
 test('a copied package stays off without prompting and manual activation succeeds', async ({
   page,
 }) => {
-  await page.goto('/?demo')
+  await page.goto('/?fixture')
   await page.evaluate(async () => {
-    const path = '/src/lib/demo/plugins/index.ts'
-    const { demoPlugins } = await import(/* @vite-ignore */ path)
-    demoPlugins.push({
+    const path = '/e2e/fixtures/plugins/index.ts'
+    const { fixturePlugins } = await import(/* @vite-ignore */ path)
+    fixturePlugins.push({
       id: 'org.test.copied',
       name: 'Copied Package',
       version: '1.0.0',
