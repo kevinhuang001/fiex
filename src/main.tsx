@@ -13,4 +13,12 @@ const render = () =>
   )
 
 if (native) void call('locale_set', { locale: getLocale() }).then(render, render)
+else if (import.meta.env.DEV && import.meta.env.VITE_FIEX_E2E === '1')
+  void import('@tauri-apps/api/mocks').then(({ mockIPC }) => {
+    // The fixture routes app commands through its own mock, but the frontend
+    // still constructs Tauri Channels for progress arguments. Provide their
+    // callback transport so fixture interactions exercise the real UI paths.
+    mockIPC(() => undefined)
+    render()
+  })
 else render()
