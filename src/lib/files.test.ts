@@ -136,9 +136,7 @@ describe('virtual addresses', () => {
       ['trash:\\', 'trash://'],
     ])
       expect(normalizeAddress(input)).toBe(expected)
-    expect(normalizeAddress('applications:\\Design Folder')).toBe(
-      'applications://Design%20Folder',
-    )
+    expect(normalizeAddress('applications:\\Design Folder')).toBe('applications://Design%20Folder')
   })
 
   it('uses visible application names as encoded hierarchy segments', () => {
@@ -165,9 +163,10 @@ describe('virtual addresses', () => {
     expect(displayAddress(trash)).toBe('trash://Old draft.txt')
     expect(pathCrumbs(trash)[0].path).toBe('trash://')
     expect(parent('trash://Old%20folder/Old%20draft.txt')).toBe('trash://Old%20folder')
-    expect(
-      pathCrumbs('trash://Old%20folder/Old%20draft.txt').map((crumb) => crumb.path),
-    ).toEqual(['trash://', 'trash://Old%20folder', 'trash://Old%20folder/Old%20draft.txt'])
+    expect(pathCrumbs('trash://Old%20folder/Old%20draft.txt').map((crumb) => crumb.path)).toEqual([
+      'trash://',
+      'trash://Old%20folder',
+      'trash://Old%20folder/Old%20draft.txt',
+    ])
   })
-
 })

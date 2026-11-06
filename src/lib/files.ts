@@ -64,12 +64,7 @@ export function normalizeAddress(input: string): string {
   if (root === 'applications://' || root === 'trash://')
     return virtualHref(
       root,
-      payload
-        .replace(/\\/g, '/')
-        .split('/')
-        .filter(Boolean)
-        .map(encodeVirtualSegment)
-        .join('/'),
+      payload.replace(/\\/g, '/').split('/').filter(Boolean).map(encodeVirtualSegment).join('/'),
     )
   if ((root === 'recent://' || root === 'recyclebin://') && payload) {
     const queryIndex = payload.indexOf('?')
@@ -86,12 +81,7 @@ export function displayAddress(path: string): string {
   if (!virtual.payload) return virtual.root
   if (virtual.root === 'trash://' || virtual.root === 'applications://') {
     return (
-      virtual.root +
-      virtual.payload
-        .split('/')
-        .filter(Boolean)
-        .map(decodeVirtualSegment)
-        .join('/')
+      virtual.root + virtual.payload.split('/').filter(Boolean).map(decodeVirtualSegment).join('/')
     )
   }
   if (virtual.root === 'recent://' || virtual.root === 'recyclebin://') {
