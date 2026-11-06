@@ -88,11 +88,7 @@ fn registration() -> &'static RegisteredNativeVfs {
             ),
             (
                 "core:applications",
-                CoreOwnerKey::new("applications").with_value_limit(
-                    "tree",
-                    "state",
-                    16 * 1024 * 1024 - 1024,
-                ),
+                fiex_applications::owner_key(),
                 Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
                 APPLICATIONS_URI_SCHEMES,
                 NativeVfsExtensions {

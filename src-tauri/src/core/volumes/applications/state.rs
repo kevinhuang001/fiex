@@ -14,12 +14,11 @@ pub use fiex_applications::{
     PendingKind, PendingTarget, VirtualFolder,
 };
 use fiex_applications::{app_uri_in, child_uri, folder_uri_in, parent_uri_matches};
+const SCOPE: &str = fiex_applications::STORAGE_SCOPE;
+const KEY: &str = fiex_applications::STATE_KEY;
 pub(super) use fiex_applications::{
     valid_extension, valid_id, validate_state, APP_SEGMENT, FOLDER_SEGMENT, SCHEMA,
 };
-
-const SCOPE: &str = "tree";
-const KEY: &str = "state";
 
 #[derive(Clone, Debug)]
 struct PendingReservation {
@@ -40,43 +39,15 @@ fn storage() -> fiex_storage::native::NativeScopedStorage {
 pub fn snapshot() -> Result<ApplicationsState, String> {
     migration::ensure_migrated()?;
     removal::recover_pending()?;
-    let Some(value) = storage().get(KEY)? else {
-        return Ok(ApplicationsState {
-            schema: SCHEMA,
-            ..Default::default()
-        });
-    };
-    let state: ApplicationsState = serde_json::from_value(value)
-        .map_err(|error| format!("Applications state is corrupted: {error}"))?;
-    if state.schema != SCHEMA {
-        return Err("unsupported Applications state schema".into());
-    }
-    validate_state(&state)?;
-    Ok(state)
+    fiex_applications::ApplicationsStore::new(storage()).snapshot()
 }
 
-fn update<F>(mut mutate: F) -> Result<ApplicationsState, String>
+fn update<F>(mutate: F) -> Result<ApplicationsState, String>
 where
     F: FnMut(&mut ApplicationsState) -> Result<(), String>,
 {
     migration::ensure_migrated()?;
-    storage().update(KEY, |current: Option<ApplicationsState>| {
-        let mut state = current.unwrap_or_else(|| ApplicationsState {
-            schema: SCHEMA,
-            ..Default::default()
-        });
-        if state.schema != SCHEMA {
-            return Err("unsupported Applications state schema".into());
-        }
-        let previous = state.clone();
-        mutate(&mut state)?;
-        if state == previous {
-            return Ok(state);
-        }
-        state.revision = state.revision.wrapping_add(1);
-        validate_state(&state)?;
-        Ok(state)
-    })
+    fiex_applications::ApplicationsStore::new(storage()).update(mutate)
 }
 
 pub fn is_folder(uri: &str) -> bool {
