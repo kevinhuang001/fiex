@@ -11,6 +11,26 @@ pub const STORAGE_SCOPE: &str = "tree";
 pub const STATE_KEY: &str = "state";
 const STATE_VALUE_LIMIT: usize = 16 * 1024 * 1024 - 1024;
 
+mod icon_cache;
+pub use icon_cache::cached_icon_with;
+
+/// Whether a launch target is an executable application format supported by
+/// the Applications view. URL handlers and ordinary documents are excluded.
+pub fn is_executable_target(value: &str) -> bool {
+    if value.contains("://") {
+        return false;
+    }
+    let extension = std::path::Path::new(value)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "exe" | "com" | "bat" | "cmd" | "msc" | "cpl" | "scr" | "ps1" | "appref-ms" | "jar"
+    )
+}
+
 /// Stable storage identity shared by every provider registered by this module.
 /// Keep its name, scope, key, and size quota aligned with the on-disk format.
 pub fn owner_key() -> CoreOwnerKey {
@@ -415,5 +435,29 @@ mod tests {
             .folders
             .insert("folder-a".into(), folder("folder-a", Some("missing")));
         assert!(validate_state(&state).unwrap_err().contains("parent"));
+    }
+
+    #[test]
+    fn launchable_application_suffixes_are_accepted() {
+        for path in [
+            r"C:\Program Files\App\app.exe",
+            r"C:\Program Files\App\tool.cmd",
+            r"C:\Windows\System32\app.msc",
+            r"C:\Users\me\AppData\Roaming\Microsoft\Installer\{ABC}\app.appref-ms",
+        ] {
+            assert!(is_executable_target(path), "{path} should be accepted");
+        }
+    }
+
+    #[test]
+    fn documents_and_websites_are_not_application_targets() {
+        for path in [
+            r"C:\Program Files\App\readme.pdf",
+            r"C:\Program Files\App\manual.docx",
+            "https://example.com/download",
+            "",
+        ] {
+            assert!(!is_executable_target(path), "{path} should be rejected");
+        }
     }
 }

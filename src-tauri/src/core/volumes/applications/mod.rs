@@ -1,13 +1,47 @@
 //! The "Applications" virtual folder. Core enumerates installed applications
 //! itself so opening the entry never has to launch Finder or Explorer.
 
-mod icons;
 mod launch;
 mod platform;
 mod state;
 use crate::core::files::Entry;
-pub use icons::cached_icon;
-#[cfg(any(target_os = "windows", test))]
+#[cfg(feature = "desktop")]
+pub fn cached_icon(source: &str) -> Option<String> {
+    fiex_applications::cached_icon_with(
+        source,
+        |source, target| {
+            image::open(source)
+                .map_err(|error| error.to_string())?
+                .thumbnail(128, 128)
+                .save(target)
+                .map_err(|error| error.to_string())
+        },
+        |source, target| {
+            #[cfg(target_os = "windows")]
+            {
+                crate::core::volumes::windows_shell::extract_icon(source, target)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (source, target);
+                Err("native Shell icons are unavailable on this platform".into())
+            }
+        },
+        |source, target| {
+            let icon = file_icon_provider::get_file_icon(source, 128)
+                .map_err(|error| error.to_string())?;
+            image::RgbaImage::from_raw(icon.width, icon.height, icon.pixels)
+                .ok_or_else(|| "icon pixel buffer is invalid".to_owned())?
+                .save(target)
+                .map_err(|error| error.to_string())
+        },
+    )
+}
+#[cfg(not(feature = "desktop"))]
+pub fn cached_icon(_source: &str) -> Option<String> {
+    None
+}
+#[cfg(target_os = "windows")]
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};

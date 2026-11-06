@@ -37,6 +37,7 @@ desktop = [
     "dep:tauri-plugin-drag",
     "dep:tauri-plugin-single-instance",
     "dep:rfd",
+    "fiex-applications/desktop",
 ]
 ci-driver = ["desktop", "usbfs"]
 usbfs = ["dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]

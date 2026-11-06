@@ -1864,9 +1864,12 @@ dependencies = [
 name = "fiex-applications"
 version = "0.1.0"
 dependencies = [
+ "dirs 6.0.0",
  "fiex-storage",
+ "hex",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
