@@ -14,6 +14,14 @@ mod native;
 mod proxy;
 mod session;
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn PreviewProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }

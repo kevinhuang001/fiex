@@ -5,30 +5,29 @@ use crate::plugins::{events::Resolver, provider_registry::native::NativeProvider
 use fiex_provider_contracts::{HookProvider, ProviderKind, ProviderMatchRule};
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
-fn registry() -> &'static NativeProviderRegistry<dyn HookProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn HookProvider>> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut registry: NativeProviderRegistry<dyn HookProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Hook);
-        registry
-            .module(ModuleDescriptor::new(
-                "core:recent",
-                CoreOwnerKey::new("recent"),
-                env!("CARGO_PKG_VERSION"),
-            ))
-            .register_for_event(
-                "core:recent.hook",
-                Some("afterOpen"),
-                100,
-                ProviderMatchRule::default(),
-                fiex_recent::RecentModule::new(crate::core::volumes::native_vfs::recent_services())
-                    .hook(),
-            )
-            .expect("invalid Recent Hook registration");
-        registry
-    })
+pub(super) fn register(registry: &mut NativeProviderRegistry<dyn HookProvider>) {
+    registry
+        .module(ModuleDescriptor::new(
+            "core:recent",
+            CoreOwnerKey::new("recent"),
+            env!("CARGO_PKG_VERSION"),
+        ))
+        .register_for_event(
+            "core:recent.hook",
+            Some("afterOpen"),
+            100,
+            ProviderMatchRule::default(),
+            fiex_recent::RecentModule::new(crate::core::volumes::native_vfs::recent_services())
+                .hook(),
+        )
+        .expect("invalid Recent Hook registration");
+}
+
+fn registry() -> NativeProviderRegistry<dyn HookProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Hook)
 }
 
 pub(super) fn candidates(

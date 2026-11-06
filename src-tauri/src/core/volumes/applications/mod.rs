@@ -1,5 +1,4 @@
-//! The "Applications" virtual folder. Core enumerates installed applications
-//! itself so opening the entry never has to launch Finder or Explorer.
+//! Core adapter between the Applications module and OS-specific app handling.
 
 mod launch;
 mod platform;
@@ -45,9 +44,19 @@ pub fn cached_icon(_source: &str) -> Option<String> {
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::sync::{Condvar, Mutex, OnceLock};
+use std::{collections::HashMap, sync::OnceLock};
 
 pub const URI: &str = fiex_applications::URI;
+
+fn catalog() -> &'static fiex_applications::ApplicationCatalog {
+    static CATALOG: OnceLock<fiex_applications::ApplicationCatalog> = OnceLock::new();
+    CATALOG.get_or_init(|| {
+        fiex_applications::ApplicationCatalog::new(
+            fiex_applications::ApplicationsStore::new(state::storage()),
+            platform::backend(),
+        )
+    })
+}
 
 fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
     Entry {
@@ -72,14 +81,14 @@ fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
 }
 
 pub fn list() -> Result<Vec<Entry>, String> {
-    refresh_system_entries()?;
+    state::ensure_ready()?;
+    catalog().refresh()?;
     list_at(URI)
 }
 
 pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
-    system_entries()?;
+    let cached = system_entries()?;
     let mut entries = state::folder_children(uri)?;
-    let cached = cached_system_entries().unwrap_or_default();
     for entry in &mut entries {
         if let Some(system) = cached.iter().find(|system| system.path == entry.path) {
             *entry = system.clone();
@@ -88,98 +97,29 @@ pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
     Ok(entries)
 }
 
-/// System applications live in the platform's installed-app namespace, not in
-/// a real directory. Keep their last enumeration so a folder listing does not
-/// re-run the platform query after a move.
-fn system_cache() -> &'static Mutex<Option<Vec<Entry>>> {
-    static CACHE: OnceLock<Mutex<Option<Vec<Entry>>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(None))
-}
-
-fn cached_system_entries() -> Option<Vec<Entry>> {
-    system_cache()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .clone()
-}
-
-fn store_system_entries(entries: &[Entry]) {
-    *system_cache()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner()) = Some(entries.to_vec());
-}
-
-#[derive(Default)]
-struct EnumerationState {
-    running: bool,
-    last_result: Option<Result<Vec<Entry>, String>>,
-}
-
-fn enumeration_state() -> &'static (Mutex<EnumerationState>, Condvar) {
-    static STATE: OnceLock<(Mutex<EnumerationState>, Condvar)> = OnceLock::new();
-    STATE.get_or_init(|| (Mutex::new(EnumerationState::default()), Condvar::new()))
-}
-
-fn refresh_system_entries() -> Result<Vec<Entry>, String> {
-    let (state, completed) = enumeration_state();
-    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
-    if current.running {
-        while current.running {
-            current = completed
-                .wait(current)
-                .unwrap_or_else(|error| error.into_inner());
-        }
-        return current
-            .last_result
-            .clone()
-            .unwrap_or_else(|| Err("application enumeration did not produce a result".into()));
-    }
-    current.running = true;
-    drop(current);
-
-    let result = enumerate_system_entries();
-    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
-    current.last_result = Some(result.clone());
-    current.running = false;
-    completed.notify_all();
-    result
-}
-
-fn enumerate_system_entries() -> Result<Vec<Entry>, String> {
-    let mut entries = platform::platform_list()?;
-    let records = entries
-        .iter()
-        .map(|entry| {
-            let encoded = entry
-                .path
-                .strip_prefix(URI)
-                .ok_or("platform application has an invalid identity")?;
-            let locator = decode(encoded)?;
-            Ok((locator, entry.name.clone()))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    let identities = state::register_system_apps(&records)?;
-    for entry in &mut entries {
-        let encoded = entry
-            .path
-            .strip_prefix(URI)
-            .ok_or("platform application has an invalid identity")?;
-        let locator = decode(encoded)?;
-        entry.path = identities
-            .get(&locator)
-            .cloned()
-            .ok_or("platform application identity was not persisted")?;
-    }
-    store_system_entries(&entries);
-    Ok(entries)
-}
-
 /// All installed applications, including those currently mapped into folders.
 pub fn system_entries() -> Result<Vec<Entry>, String> {
-    if let Some(entries) = cached_system_entries() {
-        return Ok(entries);
-    }
-    refresh_system_entries()
+    state::ensure_ready()?;
+    catalog()
+        .entries()
+        .map(|entries| entries.into_iter().map(catalog_entry).collect())
+}
+
+pub fn decoration_info(
+    paths: &[String],
+) -> HashMap<String, fiex_applications::ApplicationDecorationInfo> {
+    catalog().decoration_info(paths)
+}
+
+fn catalog_entry(application: fiex_applications::CatalogApplication) -> Entry {
+    let mut item = entry(
+        application.display_name,
+        application.uri,
+        &application.extension,
+        application.modified,
+    );
+    item.link_target = application.icon_source;
+    item
 }
 
 pub fn is_system_app(path: &str) -> bool {
@@ -196,39 +136,11 @@ pub fn is_user_application(path: &str) -> bool {
 
 /// Classify a trusted host resource for Applications transfer policy.
 pub(crate) fn classify_host_application(path: &str, target: Option<&str>) -> bool {
-    platform::classify_host_application(std::path::Path::new(path), target)
+    platform::backend().classify_host_application(std::path::Path::new(path), target)
 }
 
 pub fn validate_import_asset(path: &std::path::Path, display_name: &str) -> Result<(), String> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err("Only regular application assets can be imported".into());
-    }
-    let extension = std::path::Path::new(display_name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let supported = match std::env::consts::OS {
-        "windows" => {
-            matches!(extension.as_str(), "exe" | "lnk")
-                && (extension == "lnk"
-                    || crate::core::volumes::application_policy::executable_file(
-                        &path.to_string_lossy(),
-                    ))
-        }
-        "linux" => {
-            matches!(extension.as_str(), "desktop" | "appimage")
-                && classify_host_application(&path.to_string_lossy(), None)
-        }
-        "macos" => false,
-        _ => false,
-    };
-    if supported {
-        Ok(())
-    } else {
-        Err("The file is not a supported application asset".into())
-    }
+    platform::backend().validate_import_asset(path, display_name)
 }
 
 pub fn system_entry(path: &str) -> Result<Entry, String> {

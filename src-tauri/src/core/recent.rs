@@ -5,8 +5,11 @@ use fiex_recent::{Existence, RecentRecord, RecentStore};
 const SCOPE: &str = "history";
 
 fn storage() -> fiex_storage::native::NativeScopedStorage {
-    crate::core::volumes::native_vfs::management_storage_for_provider("core:recent", SCOPE)
-        .expect("Recent provider registration binds its storage owner")
+    crate::core::volumes::native_vfs::management_storage_for_provider(
+        fiex_recent::PROVIDER_ID,
+        SCOPE,
+    )
+    .expect("Recent provider registration binds its storage owner")
 }
 
 pub(crate) type RecentStorage = fiex_storage::native::NativeScopedStorage;
@@ -21,17 +24,16 @@ pub(crate) fn probe_existence(locator: &str) -> Existence {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Existence::Missing,
             Err(_) => Existence::Unknown,
         },
-        Ok(ResourceOwner::NativeVfs("core:usb-fs")) => {
-            let Some(route) = crate::usbfs::route(locator) else {
-                return Existence::Unknown;
-            };
-            match crate::usbfs::entry(&route) {
+        Ok(ResourceOwner::NativeVfs)
+            if crate::core::volumes::native_vfs::is_filesystem_path(locator) =>
+        {
+            match crate::core::fs::provider_registry::resource_entry(locator) {
                 Ok(_) => Existence::Present,
                 Err(error) if error.contains("NotFound") => Existence::Missing,
                 Err(_) => Existence::Unknown,
             }
         }
-        Ok(ResourceOwner::PluginMount { .. }) | Ok(ResourceOwner::NativeVfs(_)) | Err(_) => {
+        Ok(ResourceOwner::PluginMount { .. }) | Ok(ResourceOwner::NativeVfs) | Err(_) => {
             Existence::Unknown
         }
     }
@@ -53,10 +55,13 @@ pub(crate) fn locator_for(locator: &str, recent: &RecentStore) -> Result<String,
     let owner = crate::core::fs::provider_registry::owner(locator).map_err(String::from)?;
     if !matches!(
         owner,
-        ResourceOwner::LocalFs
-            | ResourceOwner::PluginMount { .. }
-            | ResourceOwner::NativeVfs("core:usb-fs")
+        ResourceOwner::LocalFs | ResourceOwner::PluginMount { .. }
     ) {
+        return Err("resource cannot be saved in Recent".into());
+    }
+    if matches!(owner, ResourceOwner::NativeVfs)
+        && !crate::core::volumes::native_vfs::is_filesystem_path(locator)
+    {
         return Err("resource cannot be saved in Recent".into());
     }
     if matches!(owner, ResourceOwner::LocalFs) {

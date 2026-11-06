@@ -13,7 +13,7 @@ use fiex_provider_contracts::{
 #[cfg(test)]
 use fiex_provider_contracts::{MatchResource, ResourceCapabilities, ResourceMetadata};
 
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 struct Walker;
 
@@ -79,29 +79,28 @@ impl SearchProvider for Walker {
     }
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn SearchProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn SearchProvider>> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut providers: NativeProviderRegistry<dyn SearchProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Search);
-        providers
-            .register(
-                BUILTIN_SEARCH,
-                10,
-                ProviderMatchRule {
-                    storage: Some(LocationMatch {
-                        types: Some(vec!["fs".into()]),
-                        ..Default::default()
-                    }),
-                    kinds: vec!["directory".into()],
-                    required_ops: vec![crate::plugins::provider_registry::FsOperation::List],
+pub(super) fn register(providers: &mut NativeProviderRegistry<dyn SearchProvider>) {
+    providers
+        .register(
+            BUILTIN_SEARCH,
+            10,
+            ProviderMatchRule {
+                storage: Some(LocationMatch {
+                    types: Some(vec!["fs".into()]),
                     ..Default::default()
-                },
-                Arc::new(Walker),
-            )
-            .expect("invalid builtin SearchProvider");
-        providers
-    })
+                }),
+                kinds: vec!["directory".into()],
+                required_ops: vec![crate::plugins::provider_registry::FsOperation::List],
+                ..Default::default()
+            },
+            Arc::new(Walker),
+        )
+        .expect("invalid builtin SearchProvider");
+}
+
+fn registry() -> NativeProviderRegistry<dyn SearchProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Search)
 }
 
 pub(super) fn candidates(targets: &[fiex_provider_contracts::MatchResource]) -> Vec<Resolver> {

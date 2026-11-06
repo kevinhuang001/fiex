@@ -45,6 +45,14 @@ mod native;
 mod proxy;
 pub use media::media_sections;
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn InfoProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }

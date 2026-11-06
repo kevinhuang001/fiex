@@ -18,17 +18,8 @@ fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool 
             let Some(entry) = selection.entries.get(index) else {
                 return false;
             };
-            match crate::core::volumes::native_vfs::provider_id(path) {
-                Some("core:trash") => {
-                    entry.is_dir
-                        && !entry.is_symlink
-                        && entry
-                            .allowed_ops
-                            .iter()
-                            .any(|operation| operation == "list")
-                }
-                _ => entry.is_dir || capabilities.read || entry.link_target.is_some(),
-            }
+            crate::core::volumes::native_vfs::open_policy(path, entry)
+                .unwrap_or_else(|| entry.is_dir || capabilities.read || entry.link_target.is_some())
         })
 }
 
@@ -88,12 +79,9 @@ impl AtomicMenuAction {
                 )]
             }
             Action::DeletePermanently if nonzero && caps.remove && selection.preflight.remove => {
-                let in_trash = selection.paths.iter().all(|path| {
-                    crate::core::volumes::native_vfs::provider_id(path) == Some("core:trash")
-                });
                 vec![item(
                     "delete",
-                    if in_trash && selection.many() {
+                    if selection.many() {
                         "彻底删除选中项"
                     } else {
                         "彻底删除"

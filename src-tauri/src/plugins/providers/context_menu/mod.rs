@@ -45,17 +45,17 @@ use std::{
 };
 use validation::validated_submenu;
 
-/// All Core-owned context-menu providers share one typed registry. Their
-/// implementations stay grouped by feature in `file_ops` and `native_views`.
-pub(super) fn native_registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut providers: NativeProviderRegistry<dyn ContextMenuProvider> =
-            NativeProviderRegistry::shared(ProviderKind::ContextMenu);
-        file_ops::register(&mut providers);
-        native_views::register(&mut providers);
-        providers
-    })
+/// Add all Core-owned menu modules to the common Runtime registry.
+pub(crate) fn register_native(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
+    file_ops::register(values);
+    native_views::register(values);
+}
+
+/// Each caller gets a lightweight typed view over the already initialized
+/// Runtime registry; provider instances live in the shared registry.
+pub(super) fn native_registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::ContextMenu)
 }
 
 type ResolvedProvider = (

@@ -46,15 +46,12 @@ pub(super) fn target_invocation(
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
-    let kind = if path == RECENT_URI
-        || path == APPLICATIONS_URI
-        || path == recycle::URI
-        || (path.ends_with('/') && (applications::is_user(path) || trash_vfs::is_tree(path)))
-    {
-        "directory"
-    } else {
-        "file"
-    };
+    let provider_id = shared_provider_id(path).expect("invocation path has a registered provider");
+    let kind = registry()
+        .get(provider_id)
+        .and_then(|provider| provider.extensions().resource_kind)
+        .map(|resolve| resolve(path))
+        .unwrap_or("file");
     let mut target = crate::plugins::resource::resource_context::from_metadata(
         path,
         ResourceMetadata {
@@ -67,7 +64,7 @@ pub(super) fn target_invocation(
     target.operations = Some(Default::default());
     registry()
         .invocation(
-            shared_provider_id(path).expect("invocation path has a registered provider"),
+            provider_id,
             method,
             params,
             std::slice::from_ref(&target),

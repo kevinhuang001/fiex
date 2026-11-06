@@ -20,6 +20,14 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn SearchProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 pub const BUILTIN_SEARCH: &str = "core.search";
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

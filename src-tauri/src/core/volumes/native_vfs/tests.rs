@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 #[test]
 fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() {
     assert_eq!(registry().len(), 5);
@@ -19,6 +20,60 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
     assert!(resource_entry(RECENT_URI).is_ok());
     assert!(list(RECENT_URI, "core:test").is_ok());
     assert!(list("recent://bad", "core:test").is_err());
+}
+
+#[test]
+fn native_vfs_optional_behaviors_come_from_the_registered_provider_instance() {
+    assert!(is_tree_path(RECENT_URI));
+    assert!(is_tree_path(APPLICATIONS_URI));
+    assert!(is_tree_path(trash_vfs::URI));
+    assert!(!is_tree_path("unknown://item"));
+
+    assert_eq!(default_view(APPLICATIONS_URI), Some("icons"));
+    assert_eq!(default_view("/tmp"), None);
+    assert_eq!(
+        backing_path("/tmp/example"),
+        Some(PathBuf::from("/tmp/example"))
+    );
+    assert_eq!(backing_path(APPLICATIONS_URI), None);
+}
+
+#[test]
+fn native_resource_identity_is_declared_by_each_registered_provider() {
+    let local = identity("/tmp/fiex-native-identity").unwrap();
+    assert_eq!(local.provider_id, fiex_local_fs::PROVIDER_ID);
+    assert_eq!(local.storage_type, Some(ResourceType::Fs));
+    assert_eq!(local.mount_id, "local");
+    assert!(local.host_path);
+    assert!(is_filesystem_path("/tmp/fiex-native-identity"));
+
+    let recent = identity(RECENT_URI).unwrap();
+    assert_eq!(recent.provider_id, fiex_recent::PROVIDER_ID);
+    assert_eq!(recent.storage_type, None);
+    assert_eq!(reference_mount_id(RECENT_URI), Some(recent.mount_id));
+    assert!(!is_filesystem_path(RECENT_URI));
+
+    let applications = identity(APPLICATIONS_URI).unwrap();
+    assert_eq!(applications.provider_id, fiex_applications::PROVIDER_ID);
+    assert_eq!(applications.storage_type, Some(ResourceType::Vfs));
+    assert!(!applications.host_path);
+}
+
+#[test]
+fn invocation_metadata_kind_comes_from_the_registered_provider() {
+    for (path, expected) in [
+        (RECENT_URI, "directory"),
+        ("recent://opaque-alias", "file"),
+        (APPLICATIONS_URI, "directory"),
+        ("applications://folder_opaque-id", "directory"),
+        ("applications://app_opaque-id", "file"),
+        (trash_vfs::URI, "directory"),
+        ("trash://opaque-item/", "directory"),
+    ] {
+        let invocation = target_invocation(path, "core:test", "vfs.discover", json!({}));
+        let resource = &NativeProviderInvocation::resources(&invocation).unwrap()[0];
+        assert_eq!(resource.metadata().unwrap().kind, expected, "{path}");
+    }
 }
 
 #[test]

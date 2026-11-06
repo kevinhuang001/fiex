@@ -12,7 +12,7 @@ use fiex_provider_contracts::{
 };
 #[cfg(test)]
 use serde_json::json;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 struct BuiltinPreview(Builtin);
 impl PreviewProvider for BuiltinPreview {
@@ -42,64 +42,63 @@ fn application_view_exclude() -> ProviderMatchExclude {
     }
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn PreviewProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn PreviewProvider>> = OnceLock::new();
-    REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn PreviewProvider> =
-            NativeProviderRegistry::shared(ProviderKind::Preview);
-        for kind in [
-            Builtin::Text,
-            Builtin::Image,
-            Builtin::Media,
-            Builtin::Pdf,
-            Builtin::Fallback,
-        ] {
-            let rule = match kind {
-                Builtin::Text => ProviderMatchRule {
-                    mime_types: vec![
-                        "text/*".into(),
-                        "application/json".into(),
-                        "application/xml".into(),
-                        "application/javascript".into(),
-                    ],
-                    kinds: vec!["file".into()],
-                    exclude: Some(application_view_exclude()),
-                    ..Default::default()
-                },
-                Builtin::Image => ProviderMatchRule {
-                    mime_types: vec!["image/*".into()],
-                    kinds: vec!["file".into()],
-                    exclude: Some(application_view_exclude()),
-                    ..Default::default()
-                },
-                Builtin::Media => ProviderMatchRule {
-                    mime_types: vec!["audio/*".into(), "video/*".into()],
-                    kinds: vec!["file".into()],
-                    exclude: Some(application_view_exclude()),
-                    ..Default::default()
-                },
-                Builtin::Pdf => ProviderMatchRule {
-                    mime_types: vec!["application/pdf".into()],
-                    kinds: vec!["file".into()],
-                    exclude: Some(application_view_exclude()),
-                    ..Default::default()
-                },
-                Builtin::Fallback => ProviderMatchRule {
-                    exclude: Some(application_view_exclude()),
-                    ..Default::default()
-                },
-            };
-            values
-                .register(
-                    kind.id(),
-                    kind.priority(),
-                    rule,
-                    Arc::new(BuiltinPreview(kind)),
-                )
-                .expect("invalid native PreviewProvider");
-        }
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn PreviewProvider>) {
+    for kind in [
+        Builtin::Text,
+        Builtin::Image,
+        Builtin::Media,
+        Builtin::Pdf,
+        Builtin::Fallback,
+    ] {
+        let rule = match kind {
+            Builtin::Text => ProviderMatchRule {
+                mime_types: vec![
+                    "text/*".into(),
+                    "application/json".into(),
+                    "application/xml".into(),
+                    "application/javascript".into(),
+                ],
+                kinds: vec!["file".into()],
+                exclude: Some(application_view_exclude()),
+                ..Default::default()
+            },
+            Builtin::Image => ProviderMatchRule {
+                mime_types: vec!["image/*".into()],
+                kinds: vec!["file".into()],
+                exclude: Some(application_view_exclude()),
+                ..Default::default()
+            },
+            Builtin::Media => ProviderMatchRule {
+                mime_types: vec!["audio/*".into(), "video/*".into()],
+                kinds: vec!["file".into()],
+                exclude: Some(application_view_exclude()),
+                ..Default::default()
+            },
+            Builtin::Pdf => ProviderMatchRule {
+                mime_types: vec!["application/pdf".into()],
+                kinds: vec!["file".into()],
+                exclude: Some(application_view_exclude()),
+                ..Default::default()
+            },
+            Builtin::Fallback => ProviderMatchRule {
+                exclude: Some(application_view_exclude()),
+                ..Default::default()
+            },
+        };
         values
-    })
+            .register(
+                kind.id(),
+                kind.priority(),
+                rule,
+                Arc::new(BuiltinPreview(kind)),
+            )
+            .expect("invalid native PreviewProvider");
+    }
+}
+
+fn registry() -> NativeProviderRegistry<dyn PreviewProvider> {
+    crate::plugins::providers::initialize_native_providers();
+    NativeProviderRegistry::shared(ProviderKind::Preview)
 }
 
 pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {

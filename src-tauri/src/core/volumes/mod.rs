@@ -1,10 +1,9 @@
-//! Volume discovery: the sidebar root list, the mount table and the platform
-//! Trash.
+//! Volume discovery: the sidebar root list and the mount table.
 //!
 //! The implementation is split by concern:
 //! - `roots`: recent, home favorites and the applications entry,
-//! - `mounts`: mounted disks, unmounted removable media and mounting,
-//! - `trash`: browsing, restoring and emptying the Trash.
+//! - `mounts`: mounted disks, unmounted removable media and mounting.
+//! - `trash_vfs`: Core presentation glue for the independent `fiex-trash` module.
 
 pub mod application_policy;
 pub mod applications;
@@ -12,7 +11,6 @@ mod mounts;
 pub mod native_vfs;
 pub mod recycle;
 mod roots;
-mod trash;
 pub mod trash_vfs;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_shell;
@@ -20,13 +18,8 @@ pub(crate) mod windows_shell;
 use serde::Serialize;
 
 pub use applications as apps;
-pub(crate) use fiex_platform::move_to_trash;
 pub use mounts::{clear_usb_fallback, mount_device, usb_fallback_eject_device};
 pub use recycle as recycle_bin;
-pub use trash::{
-    delete_permanently, empty_trash, record_trashed, restore_from_trash, restore_needs_folder,
-    trash_names, trash_path,
-};
 
 #[derive(Serialize)]
 pub struct Location {

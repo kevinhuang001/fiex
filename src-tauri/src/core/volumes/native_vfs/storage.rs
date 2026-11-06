@@ -1,5 +1,4 @@
 //! Platform storage implementations projected through the shared VFS DTOs.
-use super::{applications, recycle, trash_vfs, APPLICATIONS_URI};
 use crate::core::files::Entry;
 use fiex_provider_contracts::FsOperation;
 
@@ -37,51 +36,5 @@ pub(super) fn root_entry(id: &str, path: &str, operations: &[FsOperation]) -> En
             .map(|operation| operation.as_str().to_owned())
             .collect(),
         ..Default::default()
-    }
-}
-
-pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
-    if path == APPLICATIONS_URI {
-        return Ok(root_entry("core:applications", path, operations));
-    }
-    if applications::is_system_app(path) {
-        return applications::system_entry(path);
-    }
-    if applications::is_folder(path) || applications::is_user(path) {
-        return applications::entry_for_uri(path);
-    }
-    Err("Unsupported: unknown builtin node".into())
-}
-
-pub(super) fn applications_list(path: &str) -> Result<Vec<Entry>, String> {
-    if path == APPLICATIONS_URI {
-        applications::list()
-    } else if applications::is_folder(path) {
-        applications::list_at(path)
-    } else {
-        Err("Unsupported: builtin node has no children".into())
-    }
-}
-
-pub(super) fn trash_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
-    if trash_vfs::handles(path) {
-        return trash_vfs::entry(path);
-    }
-    if path == recycle::URI {
-        return Ok(root_entry("core:trash", path, operations));
-    }
-    if recycle::is_virtual(path) {
-        return recycle::stat(path);
-    }
-    Err("Unsupported: unknown builtin node".into())
-}
-
-pub(super) fn trash_list(path: &str) -> Result<Vec<Entry>, String> {
-    if trash_vfs::handles(path) {
-        trash_vfs::list(path)
-    } else if path == recycle::URI {
-        recycle::list()
-    } else {
-        Err("Unsupported: builtin node has no children".into())
     }
 }

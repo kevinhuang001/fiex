@@ -1795,7 +1795,6 @@ dependencies = [
  "base64 0.22.1",
  "cap-std",
  "dirs 6.0.0",
- "ds_store",
  "dunce",
  "ed25519-dalek",
  "fiex-actions",
@@ -2010,6 +2009,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
+ "ds_store",
  "fiex-platform",
  "fiex-provider-contracts",
  "fiex-storage",
@@ -2017,6 +2017,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "urlencoding",
 ]
 
 [[package]]

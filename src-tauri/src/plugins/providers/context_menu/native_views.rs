@@ -21,14 +21,6 @@ use std::sync::Arc;
 mod implementations;
 use implementations::Reveal;
 
-#[cfg(test)]
-const PROVIDER_IDS: [&str; 4] = [
-    "builtin:reveal",
-    "builtin:remove-from-recent",
-    "builtin:restore",
-    "builtin:empty-trash",
-];
-
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     let trash_module =
         fiex_trash::TrashModule::new(crate::core::volumes::native_vfs::trash_services());
@@ -95,8 +87,15 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
 }
 
 #[cfg(test)]
-fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
+}
+
+#[cfg(test)]
+fn is_view_provider(id: &str) -> bool {
+    registry()
+        .module_id(id)
+        .is_some_and(|module_id| module_id != fiex_actions::MODULE_ID)
 }
 
 #[cfg(test)]
@@ -147,7 +146,7 @@ fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
     registry()
         .matched_candidates(&targets, directory_context.as_ref(), paths.len())
         .into_iter()
-        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .filter(|candidate| is_view_provider(&candidate.id))
         .collect()
 }
 
@@ -158,7 +157,7 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
 
 #[cfg(test)]
 pub(super) fn owns(id: &str) -> bool {
-    PROVIDER_IDS.contains(&id)
+    is_view_provider(id)
 }
 
 #[cfg(test)]

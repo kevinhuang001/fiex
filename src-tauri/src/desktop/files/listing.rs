@@ -40,10 +40,8 @@ pub(crate) async fn recent_navigation_target(
     alias: String,
 ) -> Result<RecentNavigationTarget, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if crate::core::volumes::native_vfs::provider_id(&alias) != Some("core:recent") {
-            return Err("InvalidVfsUri: expected a Recent alias".into());
-        }
-        let source = crate::core::recent::source_for(&alias)?;
+        let source = crate::core::volumes::native_vfs::navigation_source(&alias)
+            .ok_or_else(|| "InvalidVfsUri: expected a navigable Recent alias".to_owned())?;
         let user_action = crate::core::fs::mapped_access::UserActionContext::from_desktop_command();
         let target = crate::core::fs::trusted_with_user_action(
             &source,

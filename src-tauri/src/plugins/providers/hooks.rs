@@ -13,6 +13,14 @@ use std::sync::Arc;
 mod native;
 mod proxy;
 
+pub(crate) fn register_native(
+    registry: &mut crate::plugins::provider_registry::native::NativeProviderRegistry<
+        dyn HookProvider,
+    >,
+) {
+    native::register(registry);
+}
+
 struct FailedHookProvider(String);
 impl HookProvider for FailedHookProvider {
     fn invoke(&self, _ctx: &dyn ProviderInvocation) -> Result<HookResult, ProviderError> {

@@ -7,6 +7,8 @@ use fiex_provider_contracts::{
     FsOperation, LocationMatch, ProviderMatchExclude, ProviderMatchRule,
 };
 
+pub const MODULE_ID: &str = "core:actions";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Open,
