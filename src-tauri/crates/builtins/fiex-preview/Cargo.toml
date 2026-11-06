@@ -6,6 +6,7 @@ rust-version = "1.90"
 publish = false
 
 [dependencies]
+fiex-provider-contracts = { path = "../../../../sdk/rust/contracts" }
 serde_json = "1"
 
 [dev-dependencies]

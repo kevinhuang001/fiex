@@ -28,7 +28,7 @@ pub(crate) fn register_native(
     native::register(registry);
 }
 
-pub const BUILTIN_SEARCH: &str = "core.search";
+pub const BUILTIN_SEARCH: &str = fiex_search::PROVIDER_ID;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginSearchInput {

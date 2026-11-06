@@ -8,6 +8,12 @@ use fiex_provider_contracts::SearchMode;
 use ignore::WalkBuilder;
 use std::{path::Path, sync::Arc};
 
+mod providers;
+
+pub use providers::{
+    SearchModule, SearchModuleServices, SearchProviderRegistration, MODULE_ID, PROVIDER_ID,
+};
+
 pub const CONTENT_FILE_LIMIT: u64 = 2 * 1024 * 1024;
 pub const BINARY_PROBE: usize = 8192;
 const CONTENT_BYTE_BUDGET: u64 = 64 * 1024 * 1024;

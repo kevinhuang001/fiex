@@ -7,6 +7,19 @@
 
 use fiex_provider_contracts::NativeDecorationBadge;
 
+pub const MODULE_ID: &str = "core:decorations";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeKind {
+    Tags,
+    ConnectionStatus,
+    ApplicationIcon,
+}
+
+mod providers;
+
+pub use providers::{DecorationModule, DecorationModuleServices, DecorationProviderRegistration};
+
 pub fn tag_badges<'a>(
     tags: impl IntoIterator<Item = (&'a str, u8, Option<&'a str>)>,
 ) -> Vec<NativeDecorationBadge> {

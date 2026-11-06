@@ -3,7 +3,15 @@
 //! committed one without leaving a visible node whose asset has disappeared.
 use super::*;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+};
+
+fn removal_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 #[derive(Serialize, Deserialize)]
 struct RemovalJournal {
@@ -58,6 +66,9 @@ pub(super) fn remove(uri: &str) -> Result<(), String> {
         return Err("System applications cannot be deleted in Fiex".into());
     };
     let asset = imported_asset_path(&asset_id, &extension)?;
+    let _guard = removal_lock()
+        .lock()
+        .map_err(|_| "Applications removal lock poisoned")?;
     let staging = staging_root()?;
     std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
     let transaction_id = random_id()?;
@@ -107,6 +118,9 @@ pub(super) fn remove(uri: &str) -> Result<(), String> {
 }
 
 pub(super) fn recover_pending() -> Result<(), String> {
+    let _guard = removal_lock()
+        .lock()
+        .map_err(|_| "Applications removal lock poisoned")?;
     let staging = staging_root()?;
     let entries = match std::fs::read_dir(&staging) {
         Ok(entries) => entries,

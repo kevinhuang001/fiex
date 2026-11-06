@@ -6,11 +6,15 @@
 
 pub use fiex_provider_contracts::{InfoRow, InfoSection, ResourceMetadata};
 
+pub const MODULE_ID: &str = "core:info";
+
 mod media;
 mod metadata;
+mod providers;
 
 pub use media::{duration_text, media_sections};
 pub use metadata::{directory_size_with_cancel, metadata_section, timestamp_text};
+pub use providers::{InfoMetadataInput, InfoModule, InfoModuleServices, InfoProviderRegistration};
 
 #[derive(Clone, Copy)]
 pub struct Localization {

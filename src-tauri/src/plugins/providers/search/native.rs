@@ -1,59 +1,32 @@
 //! The builtin walker implements the same shared SearchProvider trait as
 //! plugin proxies. Core invokes it directly and keeps cancellation and result
 //! streaming inside the process.
-use super::{SearchMode, BUILTIN_SEARCH};
+use super::SearchMode;
+#[cfg(test)]
+use super::BUILTIN_SEARCH;
 use crate::plugins::{
     events::Resolver, native_invocation::NativeProviderInvocation,
     provider_registry::native::NativeProviderRegistry,
 };
-use fiex_provider_contracts::{
-    LocationMatch, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, SearchProvider, SearchResults,
-};
 #[cfg(test)]
 use fiex_provider_contracts::{MatchResource, ResourceCapabilities, ResourceMetadata};
-
+use fiex_provider_contracts::{
+    ProviderError, ProviderInvocation, ProviderKind, SearchProvider, SearchResults,
+};
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
 
-struct Walker;
+struct NativeSearchServices;
 
-impl SearchProvider for Walker {
-    fn supports(&self, mode: SearchMode) -> bool {
-        matches!(mode, SearchMode::Name | SearchMode::Content)
-    }
-
-    fn query(&self, ctx: &dyn ProviderInvocation) -> Result<SearchResults, ProviderError> {
-        let mut entries = Vec::new();
-        let page = self.query_stream(ctx, &|| false, &mut |entry| {
-            entries.push(entry);
-            Ok(())
-        })?;
-        Ok(SearchResults { entries, ..page })
-    }
-
-    fn query_stream(
+impl fiex_search::SearchModuleServices for NativeSearchServices {
+    fn query(
         &self,
         ctx: &dyn ProviderInvocation,
+        request: &fiex_provider_contracts::SearchQueryRequest,
         cancelled: &dyn Fn() -> bool,
         emit: &mut dyn FnMut(fiex_provider_contracts::SearchEntry) -> Result<(), ProviderError>,
     ) -> Result<SearchResults, ProviderError> {
-        if ctx.method() != "search.query" {
-            return Err(ProviderError::invalid_params(
-                "SearchProvider method mismatch",
-            ));
-        }
-        let request = match ctx.input()? {
-            ProviderInput::Search(request) => request,
-            _ => return Err(ProviderError::invalid_params("missing search request")),
-        };
-        let query = request.query.trim();
-        let mode = request.mode;
-        if !self.supports(mode) {
-            return Err(ProviderError::invalid_params("unsupported search mode"));
-        }
-        let hidden = request.hidden;
-        let ignores = &request.ignores;
-        let limit = request.bounded_limit();
         let root = NativeProviderInvocation::resource(ctx, 0)?;
         if !root.is_dir {
             return Err(ProviderError::invalid_params(
@@ -62,11 +35,11 @@ impl SearchProvider for Walker {
         }
         let truncated = crate::core::search::run_native_search_stream(
             &root.local,
-            query,
-            mode,
-            hidden,
-            ignores,
-            limit,
+            request.query.trim(),
+            request.mode,
+            request.hidden,
+            &request.ignores,
+            request.bounded_limit(),
             cancelled,
             &mut |entry| emit(super::search_entry(entry)).map_err(|error| error.to_string()),
         )
@@ -80,22 +53,23 @@ impl SearchProvider for Walker {
 }
 
 pub(super) fn register(providers: &mut NativeProviderRegistry<dyn SearchProvider>) {
-    providers
-        .register(
-            BUILTIN_SEARCH,
-            10,
-            ProviderMatchRule {
-                storage: Some(LocationMatch {
-                    types: Some(vec!["fs".into()]),
-                    ..Default::default()
-                }),
-                kinds: vec!["directory".into()],
-                required_ops: vec![crate::plugins::provider_registry::FsOperation::List],
-                ..Default::default()
-            },
-            Arc::new(Walker),
-        )
-        .expect("invalid builtin SearchProvider");
+    let registrations =
+        fiex_search::SearchModule::new(Arc::new(NativeSearchServices)).registrations();
+    let mut module = providers.module(ModuleDescriptor::new(
+        fiex_search::MODULE_ID,
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
+    for registration in registrations {
+        module
+            .register(
+                registration.id,
+                registration.priority,
+                registration.rule,
+                registration.provider,
+            )
+            .expect("invalid builtin SearchProvider");
+    }
 }
 
 fn registry() -> NativeProviderRegistry<dyn SearchProvider> {
