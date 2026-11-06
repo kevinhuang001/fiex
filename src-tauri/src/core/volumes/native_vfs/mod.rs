@@ -2,14 +2,13 @@
 use super::{applications, recycle, trash_vfs};
 use crate::{core::files::Entry, plugins::provider_registry::native::NativeProviderRegistry};
 use fiex_provider_contracts::{
-    FsEntry, FsListing, FsOperation, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
+    FsEntry, FsListing, FsOperation, FsRead, FsRequest, FsWrite, PreflightHandlers, ProviderError,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
 };
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 use serde_json::json;
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -53,7 +52,7 @@ type SameMountMoveHandler = fn(
 ) -> Result<Vec<String>, String>;
 
 #[derive(Clone, Copy, Default)]
-struct NativeVfsExtensions {
+pub(crate) struct NativeVfsExtensions {
     #[cfg(feature = "desktop")]
     open: Option<OpenHandler>,
     validate_child: Option<ValidateChildHandler>,
@@ -62,17 +61,101 @@ struct NativeVfsExtensions {
     same_mount_move: Option<SameMountMoveHandler>,
 }
 
+pub(crate) trait RegisteredNativeVfsProvider: VfsProvider {
+    fn extensions(&self) -> &NativeVfsExtensions;
+}
+
+struct NativeVfsAdapter {
+    provider: Arc<dyn VfsProvider>,
+    extensions: NativeVfsExtensions,
+}
+
+impl RegisteredNativeVfsProvider for NativeVfsAdapter {
+    fn extensions(&self) -> &NativeVfsExtensions {
+        &self.extensions
+    }
+}
+
+impl VfsProvider for NativeVfsAdapter {
+    fn preflight_handlers(&self) -> Result<PreflightHandlers, ProviderError> {
+        self.provider.preflight_handlers()
+    }
+
+    fn operations(&self) -> &'static [FsOperation] {
+        self.provider.operations()
+    }
+
+    fn search_capabilities(&self, ctx: &dyn ProviderInvocation) -> SearchCapabilities {
+        self.provider.search_capabilities(ctx)
+    }
+
+    fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
+        self.provider.discover(ctx)
+    }
+
+    fn authorize(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        operation: FsOperation,
+        create: bool,
+    ) -> Result<(), ProviderError> {
+        self.provider.authorize(ctx, operation, create)
+    }
+
+    fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
+        self.provider.list(request)
+    }
+
+    fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
+        self.provider.stat(request)
+    }
+
+    fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, ProviderError> {
+        self.provider.read(request)
+    }
+
+    fn write(&self, request: &FsRequest<'_>) -> Result<FsWrite, ProviderError> {
+        self.provider.write(request)
+    }
+
+    fn mkdir(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
+        self.provider.mkdir(request)
+    }
+
+    fn rename(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
+        self.provider.rename(request)
+    }
+
+    fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
+        self.provider.remove(request)
+    }
+
+    fn trash(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
+        self.provider.trash(request)
+    }
+
+    fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
+        self.provider.search(request)
+    }
+
+    fn search_cancellable(
+        &self,
+        request: &FsRequest<'_>,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<FsListing, ProviderError> {
+        self.provider.search_cancellable(request, cancelled)
+    }
+}
+
 struct RegisteredNativeVfs {
-    providers: NativeProviderRegistry<dyn VfsProvider>,
-    extensions: HashMap<&'static str, NativeVfsExtensions>,
+    providers: NativeProviderRegistry<dyn RegisteredNativeVfsProvider>,
 }
 
 fn registration() -> &'static RegisteredNativeVfs {
     static REGISTERED: OnceLock<RegisteredNativeVfs> = OnceLock::new();
     REGISTERED.get_or_init(|| {
-        let mut registry: NativeProviderRegistry<dyn VfsProvider> =
+        let mut registry: NativeProviderRegistry<dyn RegisteredNativeVfsProvider> =
             NativeProviderRegistry::shared(ProviderKind::Vfs);
-        let mut extensions = HashMap::new();
         for (id, owner, provider, uri_schemes, provider_extensions) in [
             (
                 "core:recent",
@@ -130,6 +213,10 @@ fn registration() -> &'static RegisteredNativeVfs {
                 },
             ),
         ] {
+            let provider: Arc<dyn RegisteredNativeVfsProvider> = Arc::new(NativeVfsAdapter {
+                provider,
+                extensions: provider_extensions,
+            });
             let mut module =
                 registry.module(ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION")));
             module
@@ -140,11 +227,9 @@ fn registration() -> &'static RegisteredNativeVfs {
                     .register_vfs_uri(id, scheme)
                     .expect("invalid native VFS URI route");
             }
-            extensions.insert(id, provider_extensions);
         }
         RegisteredNativeVfs {
             providers: registry,
-            extensions,
         }
     })
 }
@@ -157,7 +242,7 @@ pub(crate) fn trash_services() -> Arc<dyn fiex_trash::TrashModuleServices> {
     trash_provider::services()
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
+fn registry() -> &'static NativeProviderRegistry<dyn RegisteredNativeVfsProvider> {
     &registration().providers
 }
 
@@ -206,10 +291,9 @@ pub(crate) fn open(path: &str) -> Result<bool, String> {
     let Some(provider) = shared_provider_id(path) else {
         return Ok(false);
     };
-    match registration()
-        .extensions
+    match registry()
         .get(provider)
-        .and_then(|extensions| extensions.open)
+        .and_then(|view| view.extensions().open)
     {
         Some(open) => open(path).map(|()| true),
         None => Ok(false),
@@ -231,10 +315,9 @@ pub(crate) fn move_within_mount(
     }) {
         return Ok(None);
     }
-    let Some(move_within_mount) = registration()
-        .extensions
+    let Some(move_within_mount) = registry()
         .get(provider)
-        .and_then(|extensions| extensions.same_mount_move)
+        .and_then(|view| view.extensions().same_mount_move)
     else {
         return Ok(None);
     };
@@ -287,10 +370,9 @@ pub fn is_tree_path(path: &str) -> bool {
 /// are validated by the enclosing operation scope in Core's VFS router.
 pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
     let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
-    registration()
-        .extensions
+    registry()
         .get(provider)
-        .and_then(|extensions| extensions.validate_child)
+        .and_then(|view| view.extensions().validate_child)
         .ok_or("Unsupported: provider does not support child identities")?(parent, child)
 }
 
@@ -300,19 +382,17 @@ pub(crate) fn child_path(
     kind: crate::core::fs::provider_registry::ChildKind,
 ) -> Result<String, String> {
     let provider = shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
-    registration()
-        .extensions
+    registry()
         .get(provider)
-        .and_then(|extensions| extensions.child_path)
+        .and_then(|view| view.extensions().child_path)
         .ok_or("Unsupported: provider does not support child creation")?(parent, name, kind)
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
     if let Some(provider) = shared_provider_id(path) {
-        if let Some(parent_path) = registration()
-            .extensions
+        if let Some(parent_path) = registry()
             .get(provider)
-            .and_then(|extensions| extensions.parent_path)
+            .and_then(|view| view.extensions().parent_path)
         {
             return parent_path(path);
         }
@@ -370,11 +450,11 @@ pub fn tree_path_key(path: &str) -> Option<String> {
     is_tree_path(path).then(|| path.to_owned())
 }
 
-pub fn view_for(path: &str) -> Option<Arc<dyn VfsProvider>> {
+pub(crate) fn view_for(path: &str) -> Option<Arc<dyn RegisteredNativeVfsProvider>> {
     registry().get(provider_id(path)?)
 }
 
-fn shared_view_for(path: &str) -> Option<Arc<dyn VfsProvider>> {
+fn shared_view_for(path: &str) -> Option<Arc<dyn RegisteredNativeVfsProvider>> {
     registry().get(shared_provider_id(path)?)
 }
 
