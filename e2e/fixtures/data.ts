@@ -69,6 +69,7 @@ export let fixtureEntries = [
   ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies'].map((x) =>
     item(join(root, x), true),
   ),
+  item(root + '/Downloads/Example.fiexplugin', false, 'application/x-fiex-plugin'),
   item(root + '/Documents/Design', true),
   item(root + '/Documents/Projects', true),
   item(root + '/Documents/Research', true),

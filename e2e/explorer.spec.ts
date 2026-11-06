@@ -2,27 +2,13 @@ import { test, expect, type Page } from '@playwright/test'
 
 async function openDocuments(page: Page) {
   await page.getByRole('button', { name: '文稿', exact: true }).click()
-  await expect(page.getByRole('tab')).toContainText('Documents')
-}
-
-async function seedFixturePluginPackage(page: Page) {
-  await page.evaluate(async () => {
-    const sharedPath = '/e2e/fixtures/handlers/shared.ts'
-    const dataPath = '/e2e/fixtures/data.ts'
-    const [{ state }, { item }] = await Promise.all([
-      import(/* @vite-ignore */ sharedPath),
-      import(/* @vite-ignore */ dataPath),
-    ])
-    const path = '/Users/kevin/Documents/Example.fiexplugin'
-    if (!state.entries.some((entry: { path: string }) => entry.path === path))
-      state.entries.push(item(path))
-  })
+  await expect(page.getByRole('tab').last()).toContainText('Documents')
 }
 
 async function chooseFixturePluginPackage(page: Page) {
   const picker = page.getByRole('dialog', { name: '打开文件' })
-  await picker.getByRole('option', { name: /^Documents/ }).dblclick()
-  await picker.getByRole('option', { name: 'Example.fiexplugin', exact: true }).click()
+  await picker.getByRole('option', { name: /^Downloads/ }).dblclick()
+  await picker.getByRole('option', { name: /^Example\.fiexplugin/ }).click()
   await picker.getByRole('button', { name: '打开', exact: true }).click()
 }
 
@@ -385,7 +371,7 @@ test('appearance can set and remove a background image', async ({ page }) => {
   const picker = page.getByRole('dialog', { name: '打开文件' })
   await picker.getByRole('option', { name: /^Documents/ }).dblclick()
   await picker.getByRole('option', { name: /^Projects/ }).dblclick()
-  await picker.getByRole('option', { name: 'logo.png', exact: true }).click()
+  await picker.getByRole('option', { name: /^logo\.png/ }).click()
   await picker.getByRole('button', { name: '打开', exact: true }).click()
   await expect(page.locator('.app-background')).toHaveCount(0)
   await page.getByRole('button', { name: '确认', exact: true }).click()
@@ -625,7 +611,6 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
 })
 test('local import shows identity and signature only', async ({ page }) => {
   await page.goto('/?fixture&pluginFixture')
-  await seedFixturePluginPackage(page)
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
@@ -991,7 +976,6 @@ test('a copied package stays off without prompting and manual activation succeed
 })
 
 test('confirming a local import immediately opens activation consent', async ({ page }) => {
-  await seedFixturePluginPackage(page)
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()

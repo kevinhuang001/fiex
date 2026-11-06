@@ -59,7 +59,13 @@ export function PluginPermissionHost() {
         current.some((entry) => entry.id === request.id) ? current : [...current, request],
       )
     }
-    if (!native) return
+    if (!native) {
+      if (!(import.meta.env.DEV && import.meta.env.VITE_FIEX_E2E === '1')) return
+      const requested = (event: Event) =>
+        receive((event as CustomEvent<RuntimePermissionRequest>).detail)
+      window.addEventListener('fiex:demo-permission-request', requested)
+      return () => window.removeEventListener('fiex:demo-permission-request', requested)
+    }
     const requested = listen<RuntimePermissionRequest>('plugin-permission-request', ({ payload }) =>
       receive(payload),
     )
