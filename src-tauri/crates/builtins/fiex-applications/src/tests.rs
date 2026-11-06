@@ -58,6 +58,15 @@ fn persisted_state_requires_all_current_fields() {
     }));
     assert!(missing_apps.is_err());
 
+    let obsolete_field: Result<ApplicationsState, _> = serde_json::from_value(serde_json::json!({
+        "schema": SCHEMA,
+        "revision": 0,
+        "folders": {},
+        "apps": {},
+        "migrationId": "old-layout"
+    }));
+    assert!(obsolete_field.is_err());
+
     let missing_unavailable: Result<ApplicationNode, _> =
         serde_json::from_value(serde_json::json!({
             "id": "app",

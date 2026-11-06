@@ -33,6 +33,7 @@ pub fn owner_key() -> CoreOwnerKey {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApplicationsState {
     pub schema: u32,
     pub revision: u64,
@@ -49,6 +50,7 @@ pub struct VirtualFolder {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApplicationNode {
     pub id: String,
     pub parent: Option<String>,
@@ -59,7 +61,7 @@ pub struct ApplicationNode {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ApplicationSource {
     System { stable_locator: String },
     Imported { asset_id: String, extension: String },
