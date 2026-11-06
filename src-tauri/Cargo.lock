@@ -1804,6 +1804,7 @@ dependencies = [
  "fiex-info",
  "fiex-platform",
  "fiex-plugin-sdk",
+ "fiex-preview",
  "fiex-provider-contracts",
  "fiex-recent",
  "fiex-resource",
@@ -1912,6 +1913,14 @@ dependencies = [
  "serde",
  "serde_json",
  "shared_memory",
+]
+
+[[package]]
+name = "fiex-preview"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

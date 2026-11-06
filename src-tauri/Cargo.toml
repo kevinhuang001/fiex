@@ -58,6 +58,7 @@ fiex-recent = { path = "crates/builtins/fiex-recent" }
 fiex-applications = { path = "crates/builtins/fiex-applications" }
 fiex-trash = { path = "crates/builtins/fiex-trash" }
 fiex-info = { path = "crates/builtins/fiex-info" }
+fiex-preview = { path = "crates/builtins/fiex-preview" }
 fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
