@@ -2,133 +2,298 @@
 //! console window and never asks Explorer to show a folder.
 #[cfg(target_os = "windows")]
 pub fn run(script: &str) -> Result<String, String> {
+    run_with_env(script, &[])
+}
+
+#[cfg(target_os = "windows")]
+pub fn run_with_env(script: &str, environment: &[(&str, &str)]) -> Result<String, String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     // PowerShell 5 otherwise emits the active OEM code page for native stdout.
     let script =
         format!("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); {script}");
-    let mut last_error = String::new();
+    let mut not_found = None;
     for executable in ["powershell.exe", "pwsh.exe"] {
         match std::process::Command::new(executable)
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .envs(environment.iter().copied())
             .creation_flags(CREATE_NO_WINDOW)
             .output()
         {
             Ok(output) if output.status.success() => {
                 return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
             }
-            Ok(output) => last_error = String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            Err(error) => last_error = error.to_string(),
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                return Err(if stderr.is_empty() {
+                    format!("PowerShell exited with status {}", output.status)
+                } else {
+                    stderr
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                not_found = Some(error.to_string());
+            }
+            Err(error) => return Err(error.to_string()),
         }
     }
-    Err(if last_error.is_empty() {
+    Err(if not_found.is_none() {
         crate::i18n::t("无法访问系统应用列表").into()
     } else {
-        last_error
+        not_found.unwrap_or_else(|| crate::i18n::t("无法访问系统应用列表").into())
     })
 }
 
-/// Ask the Shell image factory for the registered item's icon. Unlike file
-/// extraction this accepts AppsFolder identities and packaged applications.
+/// Move one host path to the Windows Recycle Bin without displaying Shell
+/// confirmation or progress dialogs. FOFX_RECYCLEONDELETE keeps this a
+/// reversible operation; FOF_WANTNUKEWARNING is intentionally omitted because
+/// Windows documents that it partially overrides FOF_NOCONFIRMATION.
 #[cfg(target_os = "windows")]
-pub fn extract_icon(source: &str, target: &std::path::Path) -> Result<(), String> {
-    let quote = |value: &str| format!("'{}'", value.replace('\'', "''"));
-    let code = r#"
-Add-Type -AssemblyName System.Drawing
-Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
-using System;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
-[StructLayout(LayoutKind.Sequential)] public struct FiexSize { public int cx, cy; }
-[StructLayout(LayoutKind.Sequential)] public struct FiexBitmap {
-    public int bmType; public int bmWidth; public int bmHeight; public int bmWidthBytes;
-    public short bmPlanes; public short bmBitsPixel; public IntPtr bmBits;
+pub(crate) fn move_to_trash(path: &std::path::Path) -> Result<(), String> {
+    let target = canonicalize_trash_target(path)?;
+    std::thread::Builder::new()
+        .name("fiex-windows-trash".into())
+        .spawn(move || move_to_trash_sta(target))
+        .map_err(|error| error.to_string())?
+        .join()
+        .map_err(|_| "Windows Shell Trash worker panicked".to_owned())?
 }
-[StructLayout(LayoutKind.Sequential)] public struct FiexBitmapInfoHeader {
-    public int biSize; public int biWidth; public int biHeight;
-    public short biPlanes; public short biBitCount;
-    public int biCompression; public int biSizeImage;
-    public int biXPelsPerMeter; public int biYPelsPerMeter;
-    public int biClrUsed; public int biClrImportant;
-}
-[ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface FiexImageFactory {
-    [PreserveSig] int GetImage(FiexSize size, uint flags, out IntPtr bitmap);
-}
-public static class FiexShellIcon {
-    [DllImport("shell32.dll", CharSet=CharSet.Unicode, PreserveSig=false)]
-    static extern void SHCreateItemFromParsingName(string path, IntPtr bind, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out FiexImageFactory item);
-    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr handle);
-    [DllImport("gdi32.dll")] static extern int GetObject(IntPtr handle, int size, ref FiexBitmap info);
-    [DllImport("gdi32.dll")] static extern int GetDIBits(IntPtr dc, IntPtr bitmap, uint start, uint lines, byte[] bits, ref FiexBitmapInfoHeader info, uint usage);
-    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr window);
-    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr window, IntPtr dc);
 
-    // Bitmap.FromHbitmap drops the alpha channel, which painted every
-    // transparent app icon on a black square. Rebuild the ARGB pixels from
-    // GetDIBits instead so the PNG keeps its transparency.
-    public static void Save(string source, string target) {
-        Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
-        FiexImageFactory item = null;
-        IntPtr handle = IntPtr.Zero;
-        try {
-            SHCreateItemFromParsingName(source, IntPtr.Zero, ref iid, out item);
-            int hr = item.GetImage(new FiexSize { cx = 128, cy = 128 }, 0x104, out handle);
-            Marshal.ThrowExceptionForHR(hr);
-            FiexBitmap info = new FiexBitmap();
-            if (GetObject(handle, Marshal.SizeOf(typeof(FiexBitmap)), ref info) == 0) throw new Exception("icon bitmap unavailable");
-            int width = info.bmWidth;
-            int height = info.bmHeight;
-            byte[] pixels = new byte[width * height * 4];
-            FiexBitmapInfoHeader header = new FiexBitmapInfoHeader();
-            header.biSize = Marshal.SizeOf(typeof(FiexBitmapInfoHeader));
-            header.biWidth = width;
-            header.biHeight = -height;
-            header.biPlanes = 1;
-            header.biBitCount = 32;
-            header.biCompression = 0;
-            IntPtr dc = GetDC(IntPtr.Zero);
-            int lines = GetDIBits(dc, handle, 0, (uint)height, pixels, ref header, 0);
-            ReleaseDC(IntPtr.Zero, dc);
-            if (lines == 0) throw new Exception("icon pixels unavailable");
-            bool hasAlpha = false;
-            for (int i = 3; i < pixels.Length; i += 4) {
-                if (pixels[i] != 0) { hasAlpha = true; break; }
-            }
-            using (Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb)) {
-                BitmapData data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-                for (int y = 0; y < height; y++)
-                    Marshal.Copy(pixels, y * width * 4, new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride), width * 4);
-                bitmap.UnlockBits(data);
-                if (!hasAlpha) {
-                    // No alpha channel at all: keep the icon visible instead of fully transparent.
-                    for (int y = 0; y < height; y++)
-                        for (int x = 0; x < width; x++) {
-                            Color color = bitmap.GetPixel(x, y);
-                            bitmap.SetPixel(x, y, Color.FromArgb(255, color));
-                        }
-                }
-                bitmap.Save(target, ImageFormat.Png);
-            }
-        } finally {
-            if (handle != IntPtr.Zero) DeleteObject(handle);
-            if (item != null) Marshal.ReleaseComObject(item);
+#[cfg(target_os = "windows")]
+fn canonicalize_trash_target(path: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let target = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(path)
+    };
+    let parent = target
+        .parent()
+        .ok_or_else(|| format!("{}: cannot move a filesystem root to Trash", path.display()))?;
+    let name = target
+        .file_name()
+        .ok_or_else(|| format!("{}: missing file name", path.display()))?;
+    let parent = dunce::canonicalize(parent).map_err(|error| error.to_string())?;
+    Ok(parent.join(name))
+}
+
+#[cfg(target_os = "windows")]
+fn move_to_trash_sta(path: std::path::PathBuf) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::{
+        System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+            COINIT_DISABLE_OLE1DDE,
+        },
+        UI::Shell::{
+            FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName,
+            FOFX_RECYCLEONDELETE, FOF_ALLOWUNDO, FOF_NO_UI,
+        },
+    };
+
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) }
+        .ok()
+        .map_err(|error| error.to_string())?;
+    let result = (|| unsafe {
+        let path = path.to_string_lossy();
+        let shell_path = if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{unc}")
+        } else if let Some(ordinary) = path.strip_prefix(r"\\?\") {
+            ordinary.to_owned()
+        } else {
+            path.into_owned()
+        };
+        let parsing_name = std::ffi::OsStr::new(&shell_path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let operation: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL)
+            .map_err(|error| error.to_string())?;
+        operation
+            .SetOperationFlags(FOF_NO_UI | FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE)
+            .map_err(|error| error.to_string())?;
+        let item: IShellItem = SHCreateItemFromParsingName(PCWSTR(parsing_name.as_ptr()), None)
+            .map_err(|error| error.to_string())?;
+        operation
+            .DeleteItem(&item, None)
+            .map_err(|error| error.to_string())?;
+        operation
+            .PerformOperations()
+            .map_err(|error| error.to_string())?;
+        if operation
+            .GetAnyOperationsAborted()
+            .map_err(|error| error.to_string())?
+            .as_bool()
+        {
+            return Err("Windows did not move the item to the Recycle Bin".into());
         }
+        Ok(())
+    })();
+    unsafe { CoUninitialize() };
+    result
+}
+
+/// Shell icon work is serialized through a bounded STA queue. Shell COM
+/// interfaces never cross worker threads, and application icons are disk
+/// cached by the caller so each source is normally extracted only once.
+#[cfg(all(target_os = "windows", feature = "desktop"))]
+struct ShellIconRequest {
+    source: String,
+    target: std::path::PathBuf,
+    done: std::sync::mpsc::Sender<Result<(), String>>,
+}
+
+#[cfg(all(target_os = "windows", feature = "desktop"))]
+pub fn extract_icon(source: &str, target: &std::path::Path) -> Result<(), String> {
+    use std::sync::{mpsc, OnceLock};
+    static WORKER: OnceLock<mpsc::SyncSender<ShellIconRequest>> = OnceLock::new();
+    let worker = WORKER.get_or_init(|| {
+        let (sender, receiver) = mpsc::sync_channel::<ShellIconRequest>(32);
+        std::thread::Builder::new()
+            .name("fiex-shell-icons-sta".into())
+            .spawn(move || icon_worker(receiver))
+            .expect("Windows Shell icon worker could not start");
+        sender
+    });
+    let (done, result) = mpsc::channel();
+    worker
+        .send(ShellIconRequest {
+            source: source.to_owned(),
+            target: target.to_path_buf(),
+            done,
+        })
+        .map_err(|_| "Windows Shell icon worker stopped".to_owned())?;
+    result
+        .recv()
+        .map_err(|_| "Windows Shell icon worker stopped".to_owned())?
+}
+
+#[cfg(all(target_os = "windows", feature = "desktop"))]
+fn icon_worker(receiver: std::sync::mpsc::Receiver<ShellIconRequest>) {
+    use windows::Win32::System::Com::{
+        CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+
+    let initialized =
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) }
+            .ok()
+            .is_ok();
+    while let Ok(request) = receiver.recv() {
+        let result = if initialized {
+            extract_icon_sta(&request.source, &request.target)
+        } else {
+            Err("Could not initialize the Windows Shell STA worker".into())
+        };
+        let _ = request.done.send(result);
+    }
+    if initialized {
+        unsafe { CoUninitialize() };
     }
 }
-'@
-"#;
-    run(&format!(
-        "$ErrorActionPreference='Stop'; {code} [FiexShellIcon]::Save({}, {})",
-        quote(source),
-        quote(&target.to_string_lossy())
-    ))?;
-    if target.is_file() {
-        Ok(())
-    } else {
-        Err("Shell icon unavailable".into())
-    }
+
+#[cfg(all(target_os = "windows", feature = "desktop"))]
+fn extract_icon_sta(source: &str, target: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{
+        core::PCWSTR,
+        Win32::{
+            Foundation::SIZE,
+            Graphics::Gdi::{
+                DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
+                BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+            },
+            UI::Shell::{
+                IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
+                SIIGBF_ICONONLY,
+            },
+        },
+    };
+
+    let source = std::ffi::OsStr::new(source)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let factory: IShellItemImageFactory = unsafe {
+        SHCreateItemFromParsingName(PCWSTR(source.as_ptr()), None)
+            .map_err(|error| error.to_string())?
+    };
+    let bitmap = unsafe {
+        factory
+            .GetImage(
+                SIZE { cx: 128, cy: 128 },
+                SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+            )
+            .map_err(|error| error.to_string())?
+    };
+    let result = (|| {
+        let mut dimensions = BITMAP::default();
+        let object_size = std::mem::size_of::<BITMAP>() as i32;
+        if unsafe {
+            GetObjectW(
+                bitmap.into(),
+                object_size,
+                Some((&mut dimensions as *mut BITMAP).cast()),
+            )
+        } == 0
+        {
+            return Err("Windows Shell icon bitmap is unavailable".into());
+        }
+        if dimensions.bmWidth <= 0 || dimensions.bmHeight <= 0 {
+            return Err("Windows Shell returned an empty icon".into());
+        }
+        let width = dimensions.bmWidth as u32;
+        let height = dimensions.bmHeight as u32;
+        let byte_len = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or("Windows Shell icon is too large")?;
+        let mut pixels = vec![0_u8; byte_len];
+        let mut info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: dimensions.bmWidth,
+                biHeight: -dimensions.bmHeight,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let dc = unsafe { GetDC(None) };
+        if dc.is_invalid() {
+            return Err("Windows could not create a device context for the icon".into());
+        }
+        let copied = unsafe {
+            GetDIBits(
+                dc,
+                bitmap,
+                0,
+                height,
+                Some(pixels.as_mut_ptr().cast()),
+                &mut info,
+                DIB_RGB_COLORS,
+            )
+        };
+        unsafe { ReleaseDC(None, dc) };
+        if copied != height as i32 {
+            return Err("Windows Shell icon pixels are unavailable".into());
+        }
+        let has_alpha = pixels.as_chunks::<4>().0.iter().any(|pixel| pixel[3] != 0);
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+            if !has_alpha {
+                pixel[3] = 255;
+            }
+        }
+        let image = image::RgbaImage::from_raw(width, height, pixels)
+            .ok_or("Windows Shell returned an invalid icon bitmap")?;
+        image.save(target).map_err(|error| error.to_string())
+    })();
+    let _ = unsafe { DeleteObject(bitmap.into()) };
+    result
 }
 
 /// Resolve an AppsFolder target such as

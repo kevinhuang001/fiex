@@ -52,6 +52,50 @@ fn opaque_id() -> Result<String, String> {
 pub(crate) type RecentStorage =
     crate::infrastructure::provider_storage::native::NativeScopedStorage;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Existence {
+    Present,
+    Missing,
+    Unknown,
+}
+
+/// A deliberately narrow metadata probe. Only an unambiguous not-found result
+/// removes a row from Recent; provider and permission failures remain Unknown.
+fn probe_existence(locator: &str) -> Existence {
+    use crate::core::fs::provider_registry::ResourceOwner;
+    match crate::core::fs::provider_registry::owner(locator) {
+        Ok(ResourceOwner::LocalFs) => match std::fs::symlink_metadata(locator) {
+            Ok(_) => Existence::Present,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Existence::Missing,
+            Err(_) => Existence::Unknown,
+        },
+        Ok(ResourceOwner::NativeVfs("core:usb-fs")) => {
+            let Some(route) = crate::usbfs::route(locator) else {
+                return Existence::Unknown;
+            };
+            match crate::usbfs::entry(&route) {
+                Ok(_) => Existence::Present,
+                Err(error) if error.contains("NotFound") => Existence::Missing,
+                Err(_) => Existence::Unknown,
+            }
+        }
+        // Plugin mounts do not expose a metadata-only existence capability.
+        // Do not fall back to stat, which can have different authorization
+        // semantics. Core VFS types without a dedicated probe are Unknown too.
+        Ok(ResourceOwner::PluginMount { .. }) | Ok(ResourceOwner::NativeVfs(_)) | Err(_) => {
+            Existence::Unknown
+        }
+    }
+}
+
+fn record_is_visible(record: &RecentRecord) -> bool {
+    probe_existence(&record.locator) != Existence::Missing
+}
+
+fn visible_records(records: Vec<RecentRecord>) -> Vec<RecentRecord> {
+    records.into_iter().filter(record_is_visible).collect()
+}
+
 fn locator_for(snapshot: &ResourceSnapshot, store: &RecentStorage) -> Result<String, String> {
     use crate::core::fs::provider_registry::ResourceOwner;
     if snapshot.display.starts_with("recent://") {
@@ -247,15 +291,74 @@ pub(crate) fn entry_for_alias_with_storage(
 }
 
 pub fn entries() -> Vec<Entry> {
-    entries_with_storage(&storage())
+    entries_with_storage(&storage()).unwrap_or_default()
 }
 
-pub(crate) fn entries_with_storage(store: &RecentStorage) -> Vec<Entry> {
-    records_with_storage(store)
-        .unwrap_or_default()
+pub(crate) fn entries_with_storage(store: &RecentStorage) -> Result<Vec<Entry>, String> {
+    Ok(visible_records(records_with_storage(store)?)
         .iter()
         .map(entry_for_record)
-        .collect()
+        .collect())
+}
+
+/// Filter a cached Recent snapshot before it can be painted. This preserves
+/// Unknown/offline rows while preventing a cached local path known to be
+/// missing from flashing back into the view before the next live listing.
+pub(crate) fn filter_cached_entries(
+    entries: &mut Vec<Entry>,
+    store: &RecentStorage,
+) -> Result<(), String> {
+    let records = records_with_storage(store)?;
+    let by_alias = records
+        .into_iter()
+        .map(|record| (format!("recent://{}", record.id), record))
+        .collect::<std::collections::HashMap<_, _>>();
+    entries.retain(|entry| by_alias.get(&entry.path).is_some_and(record_is_visible));
+    Ok(())
+}
+
+pub(crate) fn remove_aliases_with_storage(
+    aliases: &[String],
+    store: &RecentStorage,
+) -> Result<Vec<String>, String> {
+    let ids = aliases
+        .iter()
+        .filter_map(|alias| {
+            alias
+                .strip_prefix("recent://")
+                .filter(|id| !id.is_empty() && !id.contains('/'))
+                .map(str::to_owned)
+        })
+        .collect::<HashSet<_>>();
+    if ids.is_empty() || ids.len() != aliases.len() {
+        return Err("invalid Recent selection".into());
+    }
+    store.update(RECORDS_KEY, |current: Option<Vec<RecentRecord>>| {
+        let mut records = current.unwrap_or_default();
+        records.retain(|record| !ids.contains(&record.id));
+        Ok(records)
+    })?;
+    // Re-read the committed record set to distinguish selected aliases that
+    // were actually removed. The operation is idempotent if one is already
+    // absent; both cache and mutation overlay still discard that stale row.
+    let remaining = records_with_storage(store)?;
+    let remaining_ids = remaining
+        .iter()
+        .map(|record| record.id.as_str())
+        .collect::<HashSet<_>>();
+    let affected = aliases
+        .iter()
+        .filter(|alias| {
+            alias
+                .strip_prefix("recent://")
+                .is_some_and(|id| !remaining_ids.contains(id))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    for alias in &affected {
+        crate::core::fs::changes::removed_from(alias, "recent://");
+    }
+    Ok(affected)
 }
 
 #[cfg(test)]
@@ -271,5 +374,73 @@ mod tests {
         assert!(!id.contains(':'));
         assert_eq!(alias, format!("recent://{id}"));
         assert!(source_for("recent://unregistered-identity").is_err());
+    }
+
+    #[test]
+    fn local_existence_probe_distinguishes_missing_and_present_without_following_symlinks() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("recent.txt");
+        std::fs::write(&file, "contents").unwrap();
+        assert_eq!(probe_existence(file.to_str().unwrap()), Existence::Present);
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(probe_existence(file.to_str().unwrap()), Existence::Missing);
+    }
+
+    #[test]
+    fn remove_aliases_changes_only_the_selected_storage_records() {
+        let store = crate::core::volumes::native_vfs::management_storage_for_provider(
+            "core:recent",
+            "remove-test",
+        )
+        .unwrap();
+        let ids = [
+            opaque_id().unwrap(),
+            opaque_id().unwrap(),
+            opaque_id().unwrap(),
+        ];
+        let records = ids
+            .iter()
+            .enumerate()
+            .map(|(index, id)| RecentRecord {
+                id: id.clone(),
+                locator: format!("/fiex-recent-test/{index}.txt"),
+                name: format!("{index}.txt"),
+                extension: "txt".into(),
+                mime: "text/plain".into(),
+                size: Some(1),
+                modified: None,
+                accessed_at: index as i64,
+            })
+            .collect::<Vec<_>>();
+        store
+            .set(RECORDS_KEY, serde_json::to_value(&records).unwrap())
+            .unwrap();
+
+        let selected = vec![
+            format!("recent://{}", ids[0]),
+            format!("recent://{}", ids[1]),
+        ];
+        assert_eq!(
+            remove_aliases_with_storage(&selected, &store).unwrap(),
+            selected
+        );
+        assert!(source_for_with_storage(&format!("recent://{}", ids[0]), &store).is_err());
+        assert!(source_for_with_storage(&format!("recent://{}", ids[1]), &store).is_err());
+        assert_eq!(
+            source_for_with_storage(&format!("recent://{}", ids[2]), &store).unwrap(),
+            "/fiex-recent-test/2.txt"
+        );
+
+        store.delete(RECORDS_KEY).unwrap();
+        store.delete(LEGACY_MIGRATION_KEY).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_local_symlink_is_present_in_recent() {
+        let directory = tempfile::tempdir().unwrap();
+        let link = directory.path().join("broken-link");
+        std::os::unix::fs::symlink(directory.path().join("missing"), &link).unwrap();
+        assert_eq!(probe_existence(link.to_str().unwrap()), Existence::Present);
     }
 }

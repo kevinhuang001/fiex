@@ -28,6 +28,9 @@ export type Run = <T>(
   hold?: { value: boolean },
   /** Continue an activity that a conflict dialog left running. */
   resume?: string,
+  /** Directly name directories changed by this operation; cancelled or failed
+   * operations can return the same known scope to reconcile partial work. */
+  affectedDirectories?: (result: T | undefined) => string[],
 ) => Promise<T | undefined>
 
 export type HandleResult = (result: OperationResult) => void

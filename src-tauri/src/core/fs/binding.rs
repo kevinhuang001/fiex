@@ -117,7 +117,7 @@ pub(crate) fn move_to_trash(path: &str, owner: &str) -> Result<(), String> {
     trusted(path, owner)?.move_to_trash().map_err(String::from)
 }
 
-#[cfg(any(feature = "desktop", test))]
+#[cfg(test)]
 pub(crate) fn remove_path(path: &str, owner: &str) -> Result<(), String> {
     trusted(path, owner)?.remove().map_err(String::from)
 }

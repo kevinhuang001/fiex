@@ -90,7 +90,6 @@ pub(super) fn move_within_mount(
     destination: &crate::core::fs::ResourceBroker,
 ) -> Result<Vec<String>, String> {
     let mut paths = Vec::with_capacity(sources.len());
-    let mut previous_parents = Vec::with_capacity(sources.len());
     for source in sources {
         let stat = source.stat()?;
         let name = stat["name"]
@@ -98,18 +97,15 @@ pub(super) fn move_within_mount(
             .ok_or("source has no name")?
             .to_owned();
         source.review_move(destination, Some(&name), PreflightPhase::Execute)?;
-        previous_parents.push(applications::parent_uri(&source.path)?);
         paths.push(source.path.clone());
     }
-    applications::move_nodes(&paths, &destination.path)?;
-    for (source, previous) in sources.iter().zip(previous_parents) {
-        if previous == destination.path {
-            continue;
+    let moved = applications::move_nodes(&paths, &destination.path)?;
+    for (source, new_path) in sources.iter().zip(&moved) {
+        if source.path != *new_path {
+            crate::core::fs::changes::renamed(&source.path, new_path);
         }
-        crate::core::fs::directory_cache::remove_entry(&previous, &source.path);
-        crate::core::fs::changes::committed(&source.path);
     }
-    Ok(paths)
+    Ok(moved)
 }
 
 /// Imported entities are stored in the flat private asset root. No virtual

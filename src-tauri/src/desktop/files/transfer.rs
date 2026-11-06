@@ -5,7 +5,6 @@ use super::*;
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub(crate) async fn transfer(
-    app: tauri::AppHandle,
     paths: Vec<String>,
     destination: String,
     moving: bool,
@@ -20,7 +19,7 @@ pub(crate) async fn transfer(
     // Materialized OS paths must never become the transfer destination.
     let flag = cancel.flag();
     let emit = progress_emitter(on_progress);
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         crate::core::fs::transfer(
             &paths,
             &destination,
@@ -33,9 +32,5 @@ pub(crate) async fn transfer(
         )
     })
     .await
-    .map_err(|error| error.to_string())??;
-    if !result.paths.is_empty() {
-        let _ = app.emit("directory-changed", ());
-    }
-    Ok(result)
+    .map_err(|error| error.to_string())?
 }

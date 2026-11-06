@@ -697,18 +697,14 @@ body.col-resizing {
   max-width: 100%;
   white-space: nowrap;
 }
-.filename-head {
+.filename-fixed {
+  display: block;
+  flex: 1 1 auto;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-}
-.filename-tail {
-  flex: 0 0 auto;
-  max-width: 50%;
-  overflow: hidden;
   white-space: nowrap;
-  direction: rtl;
-  text-overflow: ellipsis;
 }
 .inline-rename {
   min-width: 0;

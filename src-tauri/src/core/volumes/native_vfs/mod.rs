@@ -30,7 +30,9 @@ pub use broker::{
     list_for, mkdir_for, preflight_for, read_for, remove_for, rename_for, require_for, search_for,
     stat_for, trash_for, write_sized_for,
 };
-pub(crate) use presentation::recent_reveal_source;
+#[cfg(test)]
+pub(crate) use presentation::navigable_source;
+pub(crate) use presentation::recent_navigation_source;
 pub use presentation::{default_view, icon_for, opaque, resource_entry};
 use recent_provider::RecentView;
 pub use shared::core_entry;
@@ -428,16 +430,6 @@ pub fn list(path: &str, owner: &str) -> Result<Vec<Entry>, String> {
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
         .map_err(provider_error_text)
-}
-
-fn revealable_source(source: &str) -> bool {
-    let path = std::path::Path::new(source);
-    !crate::remote::is_remote(source)
-        && !crate::plugins::mounts::handles(source)
-        && crate::usbfs::route(source).is_none()
-        && !opaque(source)
-        && path.is_absolute()
-        && path.is_file()
 }
 
 #[cfg(test)]

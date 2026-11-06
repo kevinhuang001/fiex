@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { ContextMenuProps } from './types'
@@ -26,10 +27,13 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
       if (entry) props.open(entry)
       break
     case 'reveal':
-      // Core resolves Recent aliases to local sources inside the command; the
-      // webview only ever passes the opaque alias.
       return (async () => {
-        for (const path of effect.paths) await call('reveal_path', { path })
+        const alias = effect.paths[0]
+        if (!alias) throw new Error('Recent navigation requires one selected alias')
+        const target = await call<{ parent: string; target: string }>('recent_navigation_target', {
+          alias,
+        })
+        x.navigateTo(target.parent, target.target)
       })()
     case 'preview':
       if (entry) props.previewEntry(entry)
@@ -73,6 +77,9 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'emptyTrash':
       props.emptyTrash()
       break
+    case 'removeFromRecent':
+      requestDirectoryRefresh([effect.directory])
+      break
     case 'copyPath':
       return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))
     default:
@@ -87,8 +94,12 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
       itemId: item.id,
       onProgress,
     })
-    if ('kind' in effect && effect.kind === 'coreAction') await applyCoreAction(effect, props)
-    else props.x.reload()
+    if ('kind' in effect && effect.kind === 'coreAction') {
+      await applyCoreAction(effect, props)
+      return true
+    }
+    requestDirectoryRefresh([props.x.path])
+    return false
   }
   try {
     if (item.activity)
@@ -102,6 +113,9 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
           onProgress = progressChannel(id) ?? quietProgressChannel()
         },
         item.activity.quiet,
+        undefined,
+        undefined,
+        (coreAction) => (coreAction === undefined ? [props.x.path] : []),
       )
     else await execute()
   } catch (error) {

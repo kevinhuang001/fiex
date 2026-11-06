@@ -11,7 +11,7 @@ pub use icons::cached_icon;
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 
 pub const URI: &str = "applications://";
 
@@ -75,7 +75,43 @@ fn store_system_entries(entries: &[Entry]) {
         .unwrap_or_else(|error| error.into_inner()) = Some(entries.to_vec());
 }
 
+#[derive(Default)]
+struct EnumerationState {
+    running: bool,
+    last_result: Option<Result<Vec<Entry>, String>>,
+}
+
+fn enumeration_state() -> &'static (Mutex<EnumerationState>, Condvar) {
+    static STATE: OnceLock<(Mutex<EnumerationState>, Condvar)> = OnceLock::new();
+    STATE.get_or_init(|| (Mutex::new(EnumerationState::default()), Condvar::new()))
+}
+
 fn refresh_system_entries() -> Result<Vec<Entry>, String> {
+    let (state, completed) = enumeration_state();
+    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
+    if current.running {
+        while current.running {
+            current = completed
+                .wait(current)
+                .unwrap_or_else(|error| error.into_inner());
+        }
+        return current
+            .last_result
+            .clone()
+            .unwrap_or_else(|| Err("application enumeration did not produce a result".into()));
+    }
+    current.running = true;
+    drop(current);
+
+    let result = enumerate_system_entries();
+    let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
+    current.last_result = Some(result.clone());
+    current.running = false;
+    completed.notify_all();
+    result
+}
+
+fn enumerate_system_entries() -> Result<Vec<Entry>, String> {
     let mut entries = platform::platform_list()?;
     let records = entries
         .iter()
@@ -113,14 +149,8 @@ pub fn system_entries() -> Result<Vec<Entry>, String> {
 }
 
 pub fn is_system_app(path: &str) -> bool {
-    state::app_id(path).is_some_and(|id| {
-        state::snapshot().ok().is_some_and(|state| {
-            state
-                .apps
-                .get(&id)
-                .is_some_and(|app| matches!(app.source, state::ApplicationSource::System { .. }))
-        })
-    })
+    state::source(path)
+        .is_ok_and(|app| matches!(app.source, state::ApplicationSource::System { .. }))
 }
 
 /// Whether a stored user node is a platform-verified launch target.
@@ -174,15 +204,20 @@ pub fn system_entry(path: &str) -> Result<Entry, String> {
     }
     match system_entries() {
         Ok(entries) => {
-            if let Some(entry) = entries.into_iter().find(|entry| entry.path == path) {
-                return Ok(entry);
+            if let Some(entry) = entries.iter().find(|entry| entry.path == path) {
+                return Ok(entry.clone());
+            }
+            if entries.iter().any(|entry| {
+                state::app_id(&entry.path) == state::app_id(path) && state::app_id(path).is_some()
+            }) {
+                return state::entry(path);
             }
         }
         Err(error) if !node.unavailable => return Err(error),
         Err(_) => {}
     }
     if node.unavailable {
-        return Ok(state::app_entry(&node));
+        return state::entry(path);
     }
     Err(crate::i18n::t("应用不存在").to_string())
 }
@@ -271,7 +306,7 @@ pub fn remove_node(path: &str) -> Result<(), String> {
     state::remove_node(path)
 }
 
-pub fn move_nodes(paths: &[String], destination: &str) -> Result<(), String> {
+pub fn move_nodes(paths: &[String], destination: &str) -> Result<Vec<String>, String> {
     state::move_nodes(paths, destination)
 }
 

@@ -103,12 +103,15 @@ fn native_vfs_operations_reject_invalid_mutations() {
 }
 
 #[test]
-fn recent_reveal_only_accepts_existing_local_files() {
+fn recent_navigation_requires_an_existing_resource_with_a_resolvable_parent() {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("recent.txt");
     std::fs::write(&file, b"x").unwrap();
-    assert!(revealable_source(&file.to_string_lossy()));
-    assert!(!revealable_source(&directory.path().to_string_lossy()));
-    assert!(!revealable_source("fiex://mount/example/recent.txt"));
-    assert!(!revealable_source("recent://invalid"));
+    assert_eq!(
+        navigable_source(&file.to_string_lossy()),
+        Some(file.to_string_lossy().into())
+    );
+    assert!(navigable_source(&directory.path().to_string_lossy()).is_none());
+    assert!(navigable_source(&directory.path().join("missing").to_string_lossy()).is_none());
+    assert!(navigable_source("fiex://mount/example/recent.txt").is_none());
 }

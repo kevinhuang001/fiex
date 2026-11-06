@@ -6,19 +6,19 @@ fn trash_operations(path: &str) -> Vec<FsOperation> {
     if path == trash_vfs::URI || path == recycle::URI {
         return vec![FsOperation::List, FsOperation::Stat, FsOperation::Search];
     }
-    match storage::trash_stat(
-        path,
-        &[FsOperation::List, FsOperation::Stat, FsOperation::Search],
-    ) {
-        Ok(entry) if entry.is_dir && !entry.is_symlink => {
-            vec![
-                FsOperation::List,
-                FsOperation::Stat,
-                FsOperation::Search,
-                FsOperation::Remove,
-            ]
-        }
-        Ok(_) => vec![FsOperation::Stat, FsOperation::Remove],
+    let entry = if trash_vfs::handles(path) {
+        trash_vfs::entry(path)
+    } else if recycle::is_virtual(path) {
+        recycle::stat(path)
+    } else {
+        return Vec::new();
+    };
+    match entry {
+        Ok(entry) => entry
+            .allowed_ops
+            .iter()
+            .filter_map(|operation| FsOperation::parse(operation))
+            .collect(),
         Err(_) => Vec::new(),
     }
 }

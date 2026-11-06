@@ -41,8 +41,14 @@ fn storage_vfs(selection: &str) -> ProviderMatchRule {
             types: Some(vec!["vfs".into()]),
             ..Default::default()
         }),
+        exclude: Some(exclude_views(&["core:trash"])),
         ..Default::default()
     }
+}
+
+fn excluding_trash(mut rule: ProviderMatchRule) -> ProviderMatchRule {
+    rule.exclude = Some(exclude_views(&["core:trash"]));
+    rule
 }
 
 /// Each registration owns both its match rule and one atomic action. Static
@@ -61,69 +67,71 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
     // Keep deletion attached to the projection's authorization, never the
     // backing file's broader capabilities.
     let mut move_to_trash = required("nonzero", &[FsOperation::Trash]);
-    move_to_trash.exclude = Some(exclude_views(&["core:recent"]));
+    move_to_trash.exclude = Some(exclude_views(&["core:recent", "core:trash"]));
     let mut delete_permanently = required("nonzero", &[FsOperation::Remove]);
     delete_permanently.exclude = Some(exclude_views(&["core:recent"]));
+    let mut info = selection("single");
+    info.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
+    let mut copy_path = selection("nonzero");
+    copy_path.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
+    let mut tags = ProviderMatchRule {
+        selection: Some("nonzero".into()),
+        storage: Some(LocationMatch {
+            provider_ids: Some(vec!["core:local-fs".into()]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    tags.exclude = Some(exclude_views(&["core:trash"]));
     let actions = [
         ("builtin:open", 120, selection("nonzero"), Action::Open),
         (
             "builtin:preview",
             119,
-            required("single", &[FsOperation::Read]),
+            excluding_trash(required("single", &[FsOperation::Read])),
             Action::Preview,
         ),
-        ("builtin:info", 118, selection("single"), Action::Info),
-        (
-            "builtin:tags",
-            117,
-            ProviderMatchRule {
-                selection: Some("nonzero".into()),
-                storage: Some(LocationMatch {
-                    provider_ids: Some(vec!["core:local-fs".into()]),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            Action::Tags,
-        ),
+        ("builtin:info", 118, info, Action::Info),
+        ("builtin:tags", 117, tags, Action::Tags),
         ("builtin:new-folder", 110, new_folder, Action::NewFolder),
         ("builtin:new-file", 109, new_file, Action::NewFile),
         (
             "builtin:rename",
             106,
-            required("single", &[FsOperation::Rename]),
+            excluding_trash(required("single", &[FsOperation::Rename])),
             Action::Rename,
         ),
         (
             "builtin:batch-rename",
             105,
-            required("multi", &[FsOperation::Rename]),
+            excluding_trash(required("multi", &[FsOperation::Rename])),
             Action::BatchRename,
         ),
         (
             "builtin:copy",
             103,
-            required("nonzero", &[FsOperation::Read]),
+            excluding_trash(required("nonzero", &[FsOperation::Read])),
             Action::Copy,
         ),
         (
             "builtin:cut",
             102,
-            required("nonzero", &[FsOperation::Read, FsOperation::Remove]),
+            excluding_trash(required(
+                "nonzero",
+                &[FsOperation::Read, FsOperation::Remove],
+            )),
             Action::Cut,
         ),
         (
             "builtin:duplicate",
             101,
-            required("nonzero", &[FsOperation::Read, FsOperation::Write]),
+            excluding_trash(required(
+                "nonzero",
+                &[FsOperation::Read, FsOperation::Write],
+            )),
             Action::Duplicate,
         ),
-        (
-            "builtin:copy-path",
-            100,
-            selection("nonzero"),
-            Action::CopyPath,
-        ),
+        ("builtin:copy-path", 100, copy_path, Action::CopyPath),
         ("builtin:pin", 90, storage_vfs("nonzero"), Action::Pin),
         ("builtin:unpin", 89, storage_vfs("nonzero"), Action::Unpin),
         ("builtin:cache", 88, storage_vfs("nonzero"), Action::Cache),

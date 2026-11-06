@@ -243,7 +243,7 @@ test('settings creates tags and the file dialog only applies them', async ({ pag
 test('Applications entry and search control', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
   await expect(
-    page.locator('[data-path="applications://app/fiex"]').getByText('Fiex', { exact: true }),
+    page.locator('[data-path="applications://app_fiex"]').getByText('Fiex', { exact: true }),
   ).toBeVisible()
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })

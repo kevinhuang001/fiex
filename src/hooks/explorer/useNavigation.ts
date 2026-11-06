@@ -2,6 +2,12 @@ import { useCallback, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 
+export interface PendingSelection {
+  directory: string
+  target: string
+  generation: number
+}
+
 /** Path, history, tab state and the transient per-pane view state every
  *  navigation resets: selection, rename target and the last error. The listing
  *  itself is loaded by useListing, which reads these values. */
@@ -12,6 +18,8 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   const initialPath = initialIndex >= 0 ? initialTabs!.paths[initialIndex] : ''
   const [path, setPath] = useState(initialPath)
   const [selected, setSelected] = useState<string[]>([])
+  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
+  const pendingSelectionGeneration = useRef(0)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -32,8 +40,13 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   const tabHistory = useRef<{ paths: string[]; cursor: number }[]>(
     initialTabs?.paths.map((value) => ({ paths: [value], cursor: 0 })) || [],
   )
-  const navigate = useCallback(
-    (next: string) => {
+  const setLocation = useCallback(
+    (next: string, target?: string) => {
+      setPendingSelection(
+        target
+          ? { directory: next, target, generation: ++pendingSelectionGeneration.current }
+          : null,
+      )
       setQuery('')
       setPath(next)
       setSelected([])
@@ -45,8 +58,17 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     },
     [cursor, tab],
   )
+  const navigate = useCallback((next: string) => setLocation(next), [setLocation])
+  const navigateTo = useCallback(
+    (directory: string, target: string) => setLocation(directory, target),
+    [setLocation],
+  )
+  const clearPendingSelection = useCallback((generation: number) => {
+    setPendingSelection((current) => (current?.generation === generation ? null : current))
+  }, [])
   // Start folder resolution is asynchronous; the first path arrives here.
   const startAt = (start: string) => {
+    setPendingSelection(null)
     setPath(start)
     setHistory([start])
     setCursor(0)
@@ -60,6 +82,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   const back = () => {
     if (cursor > 0) {
+      setPendingSelection(null)
       setCursor(cursor - 1)
       setPath(history[cursor - 1])
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor - 1] : p)))
@@ -70,6 +93,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   const forward = () => {
     if (cursor < history.length - 1) {
+      setPendingSelection(null)
       setCursor(cursor + 1)
       setPath(history[cursor + 1])
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor + 1] : p)))
@@ -79,6 +103,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     }
   }
   const newTab = (next = path) => {
+    setPendingSelection(null)
     tabHistory.current[tab] = { paths: history, cursor }
     tabHistory.current.push({ paths: [next], cursor: 0 })
     setTabs((t) => [...t, next])
@@ -92,6 +117,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   const switchTab = (i: number) => {
     if (!tabs[i] || i === tab) return
+    setPendingSelection(null)
     tabHistory.current[tab] = { paths: history, cursor }
     const saved = tabHistory.current[i] || { paths: [tabs[i]], cursor: 0 }
     setTab(i)
@@ -104,6 +130,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   const closeTab = (i: number, startPath = 'recent://') => {
     if (!tabs[i]) return
+    setPendingSelection(null)
     // The last folder tab closes onto the configured start page in the same
     // render, so the workspace never flashes an empty tab strip.
     if (tabs.length === 1) {
@@ -149,6 +176,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   ]
   const snapshotNavigation = () => ({ path, history, cursor })
   const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
+    setPendingSelection(null)
     setPath(state.path)
     setTabs((paths) => paths.map((path, index) => (index === tab ? state.path : path)))
     tabHistory.current[tab] = { paths: state.history, cursor: state.cursor }
@@ -163,6 +191,8 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     referencedPaths,
     selected,
     setSelected,
+    pendingSelection,
+    clearPendingSelection,
     renaming,
     setRenaming,
     error,
@@ -175,6 +205,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setSearchMode,
     history,
     navigate,
+    navigateTo,
     startAt,
     back,
     forward,

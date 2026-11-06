@@ -291,7 +291,7 @@ mod registry_tests {
             .descriptors()
             .filter(|descriptor| descriptor.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
-        assert_eq!(generic.len(), 22);
+        assert_eq!(generic.len(), 23);
         for descriptor in generic {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();

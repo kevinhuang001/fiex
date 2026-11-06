@@ -1846,6 +1846,7 @@ dependencies = [
  "trash",
  "urlencoding",
  "which",
+ "windows 0.62.2",
  "winreg 0.55.0",
  "xattr",
  "zip",

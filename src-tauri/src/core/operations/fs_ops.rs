@@ -204,12 +204,12 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
     let mut result = OperationResult::default();
     for path in paths {
         let before = crate::core::volumes::trash_names();
-        match trash::delete(path) {
+        match crate::core::volumes::move_to_trash(std::path::Path::new(path)) {
             Ok(()) => {
                 crate::core::volumes::record_trashed(path, &before);
                 result.paths.push(path.clone());
             }
-            Err(e) => result.errors.push(format!("{path}: {e}")),
+            Err(error) => result.errors.push(format!("{path}: {error}")),
         }
     }
     Ok(result)

@@ -34,14 +34,14 @@ use crate::plugins::{
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
-use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(test)]
 use session::session_ids;
 use session::{allowed, register, sessions, MenuScope};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Condvar, Mutex, OnceLock},
+    time::{Duration, Instant},
 };
 use validation::validated_submenu;
 
@@ -153,43 +153,146 @@ fn execute_provider(
 }
 
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    query_scope(directory, paths, MenuScope::All).map(|(menus, _)| menus)
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CoreMenuResolution {
-    pub menus: Vec<Value>,
-    pub has_eligible_plugins: bool,
+    query_scope(directory, paths, MenuScope::All, None)
 }
 
 /// Top-level, Core-owned items. This path must stay free of plugin IPC so the
 /// first visible menu is complete and cannot resize while plugins respond.
-pub fn query_core(directory: &str, paths: &[String]) -> Result<CoreMenuResolution, String> {
-    query_scope(directory, paths, MenuScope::Core).map(|(menus, has_eligible_plugins)| {
-        CoreMenuResolution {
-            menus,
-            has_eligible_plugins,
-        }
-    })
+pub fn query_core(
+    directory: &str,
+    paths: &[String],
+    session_id: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Core, session_id)
 }
 
-/// Plugin-owned items, requested by the lazy "插件" submenu.
-pub fn query_plugins(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    query_scope(directory, paths, MenuScope::Plugins).map(|(menus, _)| menus)
+/// Plugin-owned items are resolved independently from the Core top-level menu.
+pub fn query_plugins(
+    directory: &str,
+    paths: &[String],
+    session_id: Option<&str>,
+) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Plugins, session_id)
+}
+
+const MENU_CONTEXT_TTL: Duration = Duration::from_secs(10);
+const MENU_CONTEXT_LIMIT: usize = 512;
+
+struct MenuContextFlight {
+    result: Mutex<Option<Result<builtin::Context, String>>>,
+    ready: Condvar,
+}
+
+enum MenuContextEntry {
+    Loading(Arc<MenuContextFlight>),
+    Ready {
+        created: Instant,
+        context: Box<builtin::Context>,
+    },
+}
+
+fn menu_contexts() -> &'static Mutex<HashMap<String, MenuContextEntry>> {
+    static CONTEXTS: OnceLock<Mutex<HashMap<String, MenuContextEntry>>> = OnceLock::new();
+    CONTEXTS.get_or_init(Default::default)
+}
+
+/// Core and plugin requests from one right-click share the same resource
+/// snapshot, so local Stat and VFS metadata discovery run only once.
+fn menu_context(
+    directory: &str,
+    paths: &[String],
+    session_id: Option<&str>,
+) -> Result<builtin::Context, String> {
+    let Some(session_id) = session_id.filter(|value| {
+        !value.is_empty()
+            && value.len() <= 128
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    }) else {
+        return builtin::Context::load_for_menu(directory, paths, false);
+    };
+    let selection = serde_json::to_string(paths).map_err(|error| error.to_string())?;
+    let key = format!("{session_id}\0{directory}\0{selection}");
+    let (flight, load) = {
+        let mut contexts = menu_contexts()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        contexts.retain(|_, entry| match entry {
+            MenuContextEntry::Loading(_) => true,
+            MenuContextEntry::Ready { created, .. } => created.elapsed() < MENU_CONTEXT_TTL,
+        });
+        if let Some(entry) = contexts.get(&key) {
+            match entry {
+                MenuContextEntry::Ready { context, .. } => return Ok(context.as_ref().clone()),
+                MenuContextEntry::Loading(flight) => (Arc::clone(flight), false),
+            }
+        } else {
+            if contexts.len() >= MENU_CONTEXT_LIMIT {
+                return Err("too many active context-menu snapshots".into());
+            }
+            let flight = Arc::new(MenuContextFlight {
+                result: Mutex::new(None),
+                ready: Condvar::new(),
+            });
+            contexts.insert(key.clone(), MenuContextEntry::Loading(Arc::clone(&flight)));
+            (flight, true)
+        }
+    };
+    if load {
+        let result = builtin::Context::load_for_menu(directory, paths, false);
+        {
+            let mut contexts = menu_contexts()
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if let Ok(context) = &result {
+                contexts.insert(
+                    key,
+                    MenuContextEntry::Ready {
+                        created: Instant::now(),
+                        context: Box::new(context.clone()),
+                    },
+                );
+            } else {
+                contexts.remove(&key);
+            }
+        }
+        *flight
+            .result
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some(result.clone());
+        flight.ready.notify_all();
+        result
+    } else {
+        let mut result = flight
+            .result
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        while result.is_none() {
+            result = flight
+                .ready
+                .wait(result)
+                .unwrap_or_else(|error| error.into_inner());
+        }
+        result.as_ref().expect("context flight completed").clone()
+    }
 }
 
 fn query_scope(
     directory: &str,
     paths: &[String],
     scope: MenuScope,
-) -> Result<(Vec<Value>, bool), String> {
+    session_id: Option<&str>,
+) -> Result<Vec<Value>, String> {
     // An empty selection is the blank canvas. It uses the same provider
     // pipeline; manifests opt in with `match.selection: "zero"` (or `any`).
     if paths.len() > 256 || directory.is_empty() {
         return Err("invalid menu selection".into());
     }
-    let ctx = builtin::Context::load_for_menu(directory, paths, scope != MenuScope::Plugins)?;
+    let mut ctx = menu_context(directory, paths, session_id)?;
+    if scope != MenuScope::Plugins {
+        ctx.preflight = file_ops::preflight_availability(&ctx);
+    }
     let resources = Arc::clone(&ctx.resources);
     let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
@@ -201,8 +304,6 @@ fn query_scope(
             builtin::providers(&ctx)
         },
     );
-    let has_eligible_plugins =
-        scope != MenuScope::Plugins && providers.iter().any(|provider| provider.plugin.is_some());
     // Never invoke a plugin while resolving the Core-only top-level menu. For a
     // plugin-only request the empty seed above already excludes builtin rows.
     if scope == MenuScope::Core {
@@ -276,7 +377,7 @@ fn query_scope(
                 .collect()
         },
     );
-    Ok((menus, has_eligible_plugins))
+    Ok(menus)
 }
 
 #[cfg(test)]

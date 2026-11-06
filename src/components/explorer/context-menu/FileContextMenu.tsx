@@ -52,7 +52,8 @@ export function FileContextMenu(props: ContextMenuProps) {
   // Core snapshot is ready. Keep `open` false until then so the measuring
   // effect runs again when the real node mounts (otherwise the stale initial
   // 0,0 placement would survive).
-  const { paths, menus, error, ready, hasEligiblePlugins } = useContextMenu(props)
+  const { paths, menus, error, ready, pluginMenus, pluginLoading, pluginError, retryPlugins } =
+    useContextMenu(props)
   const setError = x.setError
   useEffect(() => {
     // Menu resolution errors use the one modal error channel, never an inline
@@ -60,19 +61,11 @@ export function FileContextMenu(props: ContextMenuProps) {
     if (error) setError(error)
   }, [error, setError])
   const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu) && ready)
-  // Core decides eligible providers from trusted view/storage identities.
-  // Never suppress IPC providers just because a resource is a Core-owned VFS;
-  // plugins can also opt in to blank-canvas selection via match.selection=zero.
-  const pluginEntry = hasEligiblePlugins
-  const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null
   // Wait for the Core-only snapshot: the menu must appear with its final
   // top-level height instead of growing as providers answer.
   if (!ready) return null
   if (error) return null
-  // Never leave an empty white popup when every provider declined and the
-  // plugin entry is not applicable (for example a blank canvas).
-  if (!populated) return null
   const render = (group: CoreMenu, item: CoreMenuItem) => {
     const Icon = icons[item.icon as keyof typeof icons]
     return (
@@ -106,14 +99,16 @@ export function FileContextMenu(props: ContextMenuProps) {
             .filter((item) => item.placement !== 'tail')
             .map((item) => render(group, item)),
         )}
-        {pluginEntry && (
-          <PluginContextActions
-            paths={paths}
-            path={x.path}
-            onClose={() => setMenu(null)}
-            onError={x.setError}
-          />
-        )}
+        <PluginContextActions
+          paths={paths}
+          path={x.path}
+          menus={pluginMenus}
+          loading={pluginLoading}
+          error={pluginError}
+          onRetry={retryPlugins}
+          onClose={() => setMenu(null)}
+          onError={x.setError}
+        />
         {menus.flatMap((group) =>
           group.items
             .filter((item) => item.placement === 'tail')

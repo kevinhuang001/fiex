@@ -212,7 +212,7 @@ pub fn run() {
             eject_usb,
             relaunch_elevated,
             mount_device,
-            reveal_path,
+            recent_navigation_target,
             trash_path,
             empty_trash,
             restore_from_trash,

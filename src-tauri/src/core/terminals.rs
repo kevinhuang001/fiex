@@ -173,35 +173,6 @@ pub fn open_path(path: &str) -> Result<(), String> {
     open::that_detached(path).map_err(|e| e.to_string())
 }
 
-pub fn reveal(path: &str) -> Result<(), String> {
-    crate::plugins::mounts::reject_local(path)?;
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg("-R")
-            .arg(path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("explorer.exe")
-            .arg(format!("/select,{path}"))
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        open::that_detached(
-            std::path::Path::new(path)
-                .parent()
-                .ok_or(crate::i18n::t("没有父目录"))?,
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
 /// Opens the macOS Full Disk Access settings. Other platforms have no
 /// equivalent page and report that the setting is macOS-only.
 pub fn open_full_disk_access() -> Result<(), String> {

@@ -56,7 +56,7 @@ pub(super) fn recent_list(
     storage: &crate::core::recent::RecentStorage,
 ) -> Result<Vec<Entry>, String> {
     if path == RECENT_URI {
-        Ok(crate::core::recent::entries_with_storage(storage))
+        crate::core::recent::entries_with_storage(storage)
     } else {
         Err("Unsupported: builtin node has no children".into())
     }
@@ -93,10 +93,7 @@ pub(super) fn trash_stat(path: &str, operations: &[FsOperation]) -> Result<Entry
         return Ok(root_entry("core:trash", path, operations));
     }
     if recycle::is_virtual(path) {
-        return recycle::list()?
-            .into_iter()
-            .find(|entry| entry.path == path)
-            .ok_or_else(|| "NotFound: Recycle Bin item missing".into());
+        return recycle::stat(path);
     }
     Err("Unsupported: unknown builtin node".into())
 }

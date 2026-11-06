@@ -61,8 +61,8 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           defaultView: 'icons',
           warnings: [],
           entries: [
-            app('Fiex', 'applications://app/fiex', 'app'),
-            app('我的快捷方式', 'applications://app/my-app', 'app'),
+            app('Fiex', 'applications://app_fiex', 'app'),
+            app('我的快捷方式', 'applications://app_my-app', 'app'),
           ],
         }
       }

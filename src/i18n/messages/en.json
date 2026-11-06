@@ -256,6 +256,11 @@
   "无法浏览废纸篓": "Cannot browse Trash",
   "在 Finder 中打开": "Open in Finder",
   "重试": "Retry",
+  "从最近使用中移除": "Remove from Recent",
+  "从最近使用中移除选中项": "Remove selected items from Recent",
+  "加载插件操作失败": "Could not load plugin actions",
+  "无可用插件操作": "No plugin actions available",
+  "彻底删除选中项": "Permanently delete selected items",
   "打开权限设置": "Open permission settings",
   "已连接 {0}": "Connected to {0}",
   "关闭通知": "Dismiss notification",
@@ -1409,5 +1414,6 @@
   "无法预览": "Preview unavailable",
   "插件面板无法加载": "Plugin panel failed to load",
   "连接失败": "Connection failed",
-  "无法读取文件夹": "Could not read folder"
+  "无法读取文件夹": "Could not read folder",
+  "无法定位已打开的文件": "The opened file could not be located"
 }

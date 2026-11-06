@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
@@ -130,7 +131,7 @@ export function ExplorerDialogs({
               setDialog(null)
             } catch (err) {
               reportError(err, 'explorer:dialog')
-              x.reload()
+              requestDirectoryRefresh([x.path])
             } finally {
               setDialogBusy(false)
             }

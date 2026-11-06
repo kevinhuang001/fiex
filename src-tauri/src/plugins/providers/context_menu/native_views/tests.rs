@@ -5,9 +5,22 @@ use crate::core::volumes::{recycle, trash_vfs};
 fn only_view_specific_actions_have_native_view_providers() {
     assert_eq!(
         PROVIDER_IDS,
-        ["builtin:reveal", "builtin:restore", "builtin:empty-trash"]
+        [
+            "builtin:reveal",
+            "builtin:remove-from-recent",
+            "builtin:restore",
+            "builtin:empty-trash"
+        ]
     );
     assert!(providers("applications://", &["applications://system-app".into()]).is_empty());
+}
+
+#[test]
+fn recent_menu_uses_the_recent_providers_storage_owner() {
+    assert_eq!(
+        super::registry().owner("builtin:remove-from-recent"),
+        crate::core::volumes::native_vfs::owner_for_provider("core:recent")
+    );
 }
 
 #[test]
@@ -28,6 +41,25 @@ fn restore_is_single_selection_and_empty_trash_is_root_only() {
         assert_eq!(
             execute("builtin:empty-trash", "emptyTrash", directory, &[]).unwrap()["command"],
             "emptyTrash"
+        );
+    }
+    assert!(
+        resolve("builtin:empty-trash", "trash://nested", &[]).unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(providers("recent://", &[]).is_empty());
+    let recent_single = vec!["recent://one".into()];
+    let recent_multiple = vec!["recent://one".into(), "recent://two".into()];
+    for recent in [&recent_single, &recent_multiple] {
+        assert!(providers("recent://", recent)
+            .iter()
+            .any(|provider| provider.id == "builtin:remove-from-recent"));
+        let resolved = resolve("builtin:remove-from-recent", "recent://", recent).unwrap();
+        assert_eq!(
+            resolved["items"].as_array().unwrap()[0]["id"],
+            "removeFromRecent"
         );
     }
     assert!(providers("recent://", &[]).is_empty());

@@ -39,134 +39,148 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
 }
 
 #[cfg(target_os = "windows")]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 struct WindowsRecycleItem {
-    index: u64,
+    /// Stable Shell parsing identity supplied by the same API used for every
+    /// subsequent stat, restore and purge operation.
+    id: String,
     name: String,
-    #[serde(default)]
     original: String,
-    #[serde(default)]
-    deleted: String,
-    #[serde(default)]
+    deleted_unix: i64,
     folder: bool,
 }
 
 #[cfg(target_os = "windows")]
 pub fn list() -> Result<Vec<Entry>, String> {
-    let script = r#"$ErrorActionPreference='SilentlyContinue'
-$bin=(New-Object -ComObject Shell.Application).Namespace(10)
-$items=@()
-$index=0
-foreach($item in $bin.Items()){
-  $items += [pscustomobject]@{ index=$index; name=$item.Name; original=[string]$item.ExtendedProperty('System.Recycle.DeletedFrom'); deleted=[string]$item.ExtendedProperty('System.Recycle.DateDeleted'); folder=[bool]$item.IsFolder }
-  $index++
-}
-ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
-    let output = super::windows_shell::run(script)?;
-    let value: serde_json::Value =
-        serde_json::from_str(&output).map_err(|error| error.to_string())?;
-    let values = match value {
-        serde_json::Value::Array(values) => values,
-        serde_json::Value::Null => vec![],
-        other => vec![other],
-    };
-    let mut entries = Vec::new();
-    for value in values {
-        let Ok(item) = serde_json::from_value::<WindowsRecycleItem>(value) else {
-            continue;
-        };
-        if item.name.trim().is_empty() {
-            continue;
-        }
-        // The index is only a shell-enumeration position, not a stable item
-        // identity. Capture the metadata too and reject a reordered/stale
-        // selection when executing destructive verbs.
-        let encoded = encode(&serde_json::to_string(&item).map_err(|e| e.to_string())?);
-        entries.push(entry(
-            item.name,
-            format!("{URI}{encoded}"),
-            item.folder,
-            &item.original,
-            &item.deleted,
-        ));
-    }
-    Ok(entries)
+    trash::os_limited::list()
+        .map_err(|error| error.to_string())?
+        .iter()
+        .map(|item| {
+            let identity = identity(item)?;
+            let encoded = encode(&serde_json::to_string(&identity).map_err(|e| e.to_string())?);
+            Ok(entry(
+                identity.name.clone(),
+                format!("{URI}{encoded}"),
+                identity.folder,
+                &identity.original,
+                &identity.deleted_unix.to_string(),
+            ))
+        })
+        .collect()
 }
 
 #[cfg(target_os = "windows")]
-fn verb_script(encoded: &str, verbs: &[&str]) -> Result<(), String> {
-    let item: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)
+fn identity(item: &trash::TrashItem) -> Result<WindowsRecycleItem, String> {
+    Ok(WindowsRecycleItem {
+        id: item
+            .id
+            .to_str()
+            .ok_or("Recycle Bin item identity is not valid Unicode")?
+            .to_owned(),
+        name: item
+            .name
+            .to_str()
+            .ok_or("Recycle Bin item name is not valid Unicode")?
+            .to_owned(),
+        original: item
+            .original_parent
+            .to_str()
+            .ok_or("Recycle Bin source path is not valid Unicode")?
+            .to_owned(),
+        deleted_unix: item.time_deleted,
+        folder: matches!(
+            trash::os_limited::metadata(item)
+                .map_err(|error| error.to_string())?
+                .size,
+            trash::TrashItemSize::Entries(_)
+        ),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_item(encoded: &str) -> Result<(WindowsRecycleItem, trash::TrashItem), String> {
+    let expected: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)
         .map_err(|_| crate::i18n::t("回收站项目无效").to_string())?;
-    let names: Vec<String> = verbs.iter().map(|value| ps_quote(value)).collect();
-    let index = item.index;
-    let expected_name = ps_quote(&item.name);
-    let expected_origin = ps_quote(&item.original);
-    let expected_deleted = ps_quote(&item.deleted);
-    let expected_folder = if item.folder { "$true" } else { "$false" };
-    let script = format!(
-        r#"$ErrorActionPreference='Stop'
-$bin=(New-Object -ComObject Shell.Application).Namespace(10)
-$target=$null
-$index=0
-foreach($item in $bin.Items()){{
-  if($index -eq {index}){{
-    if($item.Name -cne {expected_name} -or
-       [string]$item.ExtendedProperty('System.Recycle.DeletedFrom') -cne {expected_origin} -or
-       [string]$item.ExtendedProperty('System.Recycle.DateDeleted') -cne {expected_deleted} -or
-       [bool]$item.IsFolder -ne {expected_folder}){{
-      throw 'StaleRef: recycle item changed since enumeration'
-    }}
-    $target=$item
-    break
-  }}
-  $index++
-}}
-if($null -eq $target){{ throw 'recycle item not found' }}
-$names=@({names})
-$verb=$target.Verbs() | Where-Object {{ $name=($_.Name -replace '&',''); ($names | Where-Object {{ $name -match $_ }}) }} | Select-Object -First 1
-if($null -eq $verb){{ throw 'recycle action unavailable' }}
-$verb.DoIt()"#,
-        names = names.join(","),
-        expected_name = expected_name,
-        expected_origin = expected_origin,
-        expected_deleted = expected_deleted,
-        expected_folder = expected_folder,
-    );
-    super::windows_shell::run(&script).map(|_| ())
+    let mut matches = trash::os_limited::list()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .filter(|item| item.id.to_str() == Some(expected.id.as_str()));
+    let selected = matches
+        .next()
+        .ok_or_else(|| "StaleRef: Recycle Bin item no longer exists".to_owned())?;
+    if matches.next().is_some() {
+        return Err("StaleRef: Recycle Bin item identity is ambiguous".into());
+    }
+    if identity(&selected)? != expected {
+        return Err("StaleRef: Recycle Bin item changed since enumeration".into());
+    }
+    Ok((expected, selected))
+}
+
+/// Reconstruct the selected item from the same native Shell identity source
+/// used by enumeration. Enumeration order and localized display formatting
+/// are not part of the identity.
+#[cfg(target_os = "windows")]
+pub fn stat(uri: &str) -> Result<Entry, String> {
+    let encoded = uri
+        .strip_prefix(URI)
+        .filter(|encoded| !encoded.is_empty() && !encoded.contains('/'))
+        .ok_or("InvalidVfsUri: invalid Recycle Bin item")?;
+    let (item, _) = resolve_item(encoded)?;
+    Ok(entry(
+        item.name,
+        uri.to_owned(),
+        item.folder,
+        &item.original,
+        &item.deleted_unix.to_string(),
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn stat(_uri: &str) -> Result<Entry, String> {
+    Err("Unsupported: Recycle Bin item is unavailable".into())
 }
 
 #[cfg(target_os = "windows")]
 pub fn restore(encoded: &str) -> Result<(), String> {
-    verb_script(encoded, &["还原", "Restore", "Put Back", "放回原处"])
+    let (_, item) = resolve_item(encoded)?;
+    let id = item.id.clone();
+    trash::os_limited::restore_all([item]).map_err(|error| error.to_string())?;
+    if trash::os_limited::list()
+        .map_err(|error| error.to_string())?
+        .iter()
+        .any(|current| current.id == id)
+    {
+        return Err("Windows did not restore the selected Recycle Bin item".into());
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
 pub fn purge(encoded: &str) -> Result<(), String> {
-    verb_script(encoded, &["删除", "Delete", "Remove"])
+    let (_, item) = resolve_item(encoded)?;
+    trash::os_limited::purge_all([&item]).map_err(|error| error.to_string())?;
+    if trash::os_limited::list()
+        .map_err(|error| error.to_string())?
+        .iter()
+        .any(|current| current.id == item.id)
+    {
+        return Err("Windows did not permanently delete the selected Recycle Bin item".into());
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
 pub fn empty() -> Result<usize, String> {
-    let count = list().map(|items| items.len()).unwrap_or(0);
+    let items = trash::os_limited::list().map_err(|error| error.to_string())?;
+    let count = items.len();
     if count == 0 {
         return Ok(0);
     }
-    // Clear-RecycleBin fails on some Windows installations even with a valid
-    // bin; the shell's own "Empty Recycle Bin" verb is the reliable fallback.
-    // It belongs to the bin root, so Explorer is never opened.
-    super::windows_shell::run(
-        r#"$ErrorActionPreference='Stop'
-try {
-  Clear-RecycleBin -Force -Confirm:$false
-  Write-Output 'cleared'
-} catch {
-  $bin=(New-Object -ComObject Shell.Application).Namespace(10)
-  $verb=$bin.Self.Verbs() | Where-Object { ($_.Name -replace '&','') -match 'Empty Recycle Bin|清空回收站' } | Select-Object -First 1
-  if(-not $verb){ throw 'recycle bin has no empty verb' }
-  $verb.DoIt()
-  Write-Output 'verb'
-}"#,
-    )?;
+    trash::os_limited::purge_all(items).map_err(|error| error.to_string())?;
+    if !trash::os_limited::is_empty().map_err(|error| error.to_string())? {
+        return Err("Windows did not empty the Recycle Bin".into());
+    }
     Ok(count)
 }
 
@@ -203,9 +217,4 @@ fn decode(value: &str) -> Result<String, String> {
         .decode(value)
         .map_err(|error| error.to_string())?;
     String::from_utf8(bytes).map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn ps_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
 }

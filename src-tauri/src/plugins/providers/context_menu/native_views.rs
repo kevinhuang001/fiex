@@ -1,6 +1,7 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
+use crate::infrastructure::provider_storage::CoreOwnerKey;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 #[cfg(test)]
@@ -17,23 +18,38 @@ use serde_json::Value;
 use std::sync::Arc;
 
 mod implementations;
-use implementations::{EmptyTrash, Restore, Reveal};
+use implementations::{EmptyTrash, RemoveFromRecent, Restore, Reveal};
 
 #[cfg(test)]
-const PROVIDER_IDS: [&str; 3] = ["builtin:reveal", "builtin:restore", "builtin:empty-trash"];
+const PROVIDER_IDS: [&str; 4] = [
+    "builtin:reveal",
+    "builtin:remove-from-recent",
+    "builtin:restore",
+    "builtin:empty-trash",
+];
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    for (id, owner, selection, priority, implementation) in [
+    for (id, owner, storage_owner, selection, priority, implementation) in [
         (
             "builtin:reveal",
             "core:recent",
+            "recent",
             "single",
             80,
             Arc::new(Reveal) as Arc<dyn ContextMenuProvider>,
         ),
         (
+            "builtin:remove-from-recent",
+            "core:recent",
+            "recent",
+            "nonzero",
+            79,
+            Arc::new(RemoveFromRecent) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
             "builtin:restore",
             "core:trash",
+            "core",
             "single",
             20,
             Arc::new(Restore) as Arc<dyn ContextMenuProvider>,
@@ -41,14 +57,16 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
         (
             "builtin:empty-trash",
             "core:trash",
+            "core",
             "zero",
             8,
             Arc::new(EmptyTrash) as Arc<dyn ContextMenuProvider>,
         ),
     ] {
         values
-            .register(
+            .register_owned(
                 id,
+                CoreOwnerKey::new(storage_owner),
                 priority,
                 ProviderMatchRule {
                     selection: Some(selection.into()),

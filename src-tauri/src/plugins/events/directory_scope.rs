@@ -80,7 +80,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(child.reference.mount_id, "core:applications");
-        assert!(child.path.starts_with("applications://app/"));
+        assert!(child.path.starts_with("applications://app_"));
         assert!(scope
             .authorize(&std::env::temp_dir().to_string_lossy())
             .is_err());

@@ -236,15 +236,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           }
         })
       if (source === 'plugins') return plugins
-      const hasEligiblePlugins = demoPlugins.some(
-        (plugin) =>
-          plugin.enabled &&
-          plugin.approved &&
-          plugin.backendAvailable &&
-          !!plugin.extensions?.contextMenus,
-      )
       const builtins = demoBuiltinMenus(a)
-      if (source === 'core') return { menus: builtins, hasEligiblePlugins }
+      if (source === 'core') return builtins
       return [...builtins, ...plugins]
     }
     case 'plugin_context_menu_children': {

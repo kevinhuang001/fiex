@@ -16,7 +16,7 @@ mod transfer;
 pub(crate) use binding::trusted_snapshot;
 pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
-pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
+pub(crate) use binding::{create, move_to_trash, rename_path};
 pub use error::{FsError, FsErrorKind};
 pub(crate) use export::export as export_for_external_drag;
 #[cfg(feature = "desktop")]

@@ -4,6 +4,7 @@ import { FileIcon } from '../../FileIcon'
 import { InlineRename } from '../InlineRename'
 import { asset } from '@/lib/api'
 import { useDecorationIcon } from '@/lib/decorationIcons'
+import { formatDisplayFileName } from '@/lib/fileNameDisplay'
 import { isImage } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type {
@@ -134,8 +135,6 @@ export function NameCell({
     .filter(Boolean)
     .join(' · ')
   const label = decoration?.label || entry.name
-  const chars = Array.from(entry.name)
-  const split = Math.ceil(chars.length / 2)
   return (
     <>
       <span
@@ -148,8 +147,7 @@ export function NameCell({
         style={style}
         title={title}
       >
-        <span className="filename-head">{chars.slice(0, split).join('')}</span>
-        <span className="filename-tail">{chars.slice(split).join('')}</span>
+        <span className="filename-fixed">{formatDisplayFileName(entry.name)}</span>
       </span>
       <Badges badges={[...(decoration?.nativeBadges || []), ...(field?.badges || [])]} />
       {label !== entry.name && <small className="decoration-label">{label}</small>}

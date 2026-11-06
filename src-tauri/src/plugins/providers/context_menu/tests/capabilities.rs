@@ -68,7 +68,7 @@ fn cut_keeps_the_existing_read_and_remove_requirements() {
 
 #[test]
 fn generic_open_does_not_require_read_and_preview_keeps_its_read_rule() {
-    let path = "applications://app/system-app-test";
+    let path = "applications://app_system-app-test";
     let mut application = mount_entry(path, false);
     application.link_target = Some("stable-system-locator".into());
     let ctx = super::builtin::Context::for_test_caps(
@@ -81,7 +81,8 @@ fn generic_open_does_not_require_read_and_preview_keeps_its_read_rule() {
         },
     );
     assert_eq!(action_items(&ctx, "builtin:open")[0]["id"], "open");
-    assert_eq!(action_items(&ctx, "builtin:info")[0]["id"], "info");
+    assert!(action_items(&ctx, "builtin:info").is_empty());
+    assert!(action_items(&ctx, "builtin:copy-path").is_empty());
     assert!(action_items(&ctx, "builtin:preview").is_empty());
 }
 
