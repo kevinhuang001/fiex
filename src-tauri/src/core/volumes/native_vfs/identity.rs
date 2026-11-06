@@ -34,7 +34,7 @@ pub fn shared_provider_id(path: &str) -> Option<&'static str> {
 pub(crate) fn identity(path: &str) -> Option<NativeVfsIdentity> {
     let provider_id = shared_provider_id(path)?;
     let provider = registry().get(provider_id)?;
-    (provider.extensions().provider_identity?)(path, provider_id)
+    provider.behavior().provider_identity(path, provider_id)
 }
 
 pub(crate) fn storage_identity(path: &str) -> Option<NativeVfsIdentity> {

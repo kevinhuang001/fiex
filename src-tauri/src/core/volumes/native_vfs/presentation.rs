@@ -13,13 +13,13 @@ pub fn resource_entry(path: &str) -> Result<Entry, String> {
 pub fn icon_for(path: &str) -> Option<String> {
     let provider_id = shared_provider_id(path)?;
     let provider = registry().get(provider_id)?;
-    (provider.extensions().icon?)(path)
+    provider.behavior().icon(path)
 }
 
 pub fn default_view(path: &str) -> Option<&'static str> {
     let provider_id = shared_provider_id(path)?;
     let provider = registry().get(provider_id)?;
-    (provider.extensions().default_view?)(path)
+    provider.behavior().default_view(path)
 }
 
 /// Check a persisted locator against its current provider and parent rules.

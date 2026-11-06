@@ -49,8 +49,7 @@ pub(super) fn target_invocation(
     let provider_id = shared_provider_id(path).expect("invocation path has a registered provider");
     let kind = registry()
         .get(provider_id)
-        .and_then(|provider| provider.extensions().resource_kind)
-        .map(|resolve| resolve(path))
+        .and_then(|provider| provider.behavior().resource_kind(path))
         .unwrap_or("file");
     let mut target = crate::plugins::resource::resource_context::from_metadata(
         path,

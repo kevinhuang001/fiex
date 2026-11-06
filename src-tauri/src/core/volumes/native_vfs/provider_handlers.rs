@@ -1,5 +1,8 @@
 //! Provider-specific callbacks attached during native VFS registration.
-use super::{applications, recycle, trash_vfs, NativeVfsIdentity, APPLICATIONS_URI, RECENT_URI};
+use super::{
+    application_provider, applications, recycle, trash_vfs, NativeVfsBehavior, NativeVfsIdentity,
+    APPLICATIONS_URI, RECENT_URI,
+};
 use crate::core::files::Entry;
 use fiex_provider_contracts::ResourceType;
 use std::path::{Path, PathBuf};
@@ -199,4 +202,214 @@ pub(super) fn applications_child_path(
 ) -> Result<String, String> {
     let is_directory = matches!(kind, crate::core::fs::provider_registry::ChildKind::Folder);
     applications::reserve_child(parent, name, is_directory)
+}
+
+pub(super) struct RecentOperations;
+
+impl NativeVfsBehavior for RecentOperations {
+    fn validate_child(&self, parent: &str, child: &str) -> Option<Result<(), String>> {
+        Some(validate_recent_child(parent, child))
+    }
+
+    fn is_tree_path(&self, path: &str) -> bool {
+        recent_is_tree_path(path)
+    }
+
+    fn resource_kind(&self, path: &str) -> Option<&'static str> {
+        Some(recent_resource_kind(path))
+    }
+
+    fn provider_identity(
+        &self,
+        path: &str,
+        provider_id: &'static str,
+    ) -> Option<NativeVfsIdentity> {
+        recent_identity(path, provider_id)
+    }
+
+    #[cfg(feature = "desktop")]
+    fn navigation_source(&self, path: &str) -> Option<String> {
+        resolve_recent_navigation_source(path)
+    }
+
+    fn revalidate_cached_listing(&self, entries: &mut Vec<Entry>) -> Option<Result<(), String>> {
+        Some(revalidate_recent_listing(entries))
+    }
+}
+
+pub(super) struct ApplicationsOperations;
+
+impl NativeVfsBehavior for ApplicationsOperations {
+    #[cfg(feature = "desktop")]
+    fn open(&self, path: &str) -> Option<Result<(), String>> {
+        Some(applications::open(path))
+    }
+
+    fn validate_child(&self, parent: &str, child: &str) -> Option<Result<(), String>> {
+        Some(applications::validate_child(parent, child))
+    }
+
+    fn child_path(
+        &self,
+        parent: &str,
+        name: &str,
+        kind: crate::core::fs::provider_registry::ChildKind,
+    ) -> Option<Result<String, String>> {
+        Some(applications_child_path(parent, name, kind))
+    }
+
+    fn parent_path(&self, path: &str) -> Option<Result<String, String>> {
+        Some(applications::parent_uri(path))
+    }
+
+    fn same_mount_move(
+        &self,
+        sources: &[crate::core::fs::ResourceBroker],
+        destination: &crate::core::fs::ResourceBroker,
+    ) -> Option<Result<Vec<String>, String>> {
+        Some(application_provider::move_within_mount(
+            sources,
+            destination,
+        ))
+    }
+
+    fn backing_path(&self, path: &str) -> Option<PathBuf> {
+        application_provider::backing_path(path)
+    }
+
+    fn after_rename(&self, path: &str) {
+        applications::cancel_reservation(path);
+    }
+
+    fn is_tree_path(&self, path: &str) -> bool {
+        applications_is_tree_path(path)
+    }
+
+    fn resource_kind(&self, path: &str) -> Option<&'static str> {
+        Some(applications_resource_kind(path))
+    }
+
+    fn icon(&self, path: &str) -> Option<String> {
+        applications_icon(path)
+    }
+
+    fn default_view(&self, path: &str) -> Option<&'static str> {
+        applications_default_view(path)
+    }
+
+    fn provider_identity(
+        &self,
+        path: &str,
+        provider_id: &'static str,
+    ) -> Option<NativeVfsIdentity> {
+        vfs_identity(path, provider_id)
+    }
+}
+
+pub(super) struct TrashOperations;
+
+impl NativeVfsBehavior for TrashOperations {
+    fn validate_child(&self, parent: &str, child: &str) -> Option<Result<(), String>> {
+        Some(trash_vfs::validate_child(parent, child))
+    }
+
+    fn is_tree_path(&self, path: &str) -> bool {
+        trash_vfs::is_tree(path)
+    }
+
+    fn resource_kind(&self, path: &str) -> Option<&'static str> {
+        Some(trash_resource_kind(path))
+    }
+
+    fn provider_identity(
+        &self,
+        path: &str,
+        provider_id: &'static str,
+    ) -> Option<NativeVfsIdentity> {
+        vfs_identity(path, provider_id)
+    }
+
+    #[cfg(feature = "desktop")]
+    fn open(&self, path: &str) -> Option<Result<(), String>> {
+        Some(trash_open(path))
+    }
+
+    fn open_policy(&self, path: &str, entry: &Entry) -> Option<bool> {
+        trash_open_policy(path, entry)
+    }
+}
+
+pub(super) struct LocalStorageOperations;
+
+impl NativeVfsBehavior for LocalStorageOperations {
+    fn child_path(
+        &self,
+        parent: &str,
+        name: &str,
+        kind: crate::core::fs::provider_registry::ChildKind,
+    ) -> Option<Result<String, String>> {
+        Some(host_child_path(parent, name, kind))
+    }
+
+    fn backing_path(&self, path: &str) -> Option<PathBuf> {
+        host_backing_path(path)
+    }
+
+    fn provider_identity(
+        &self,
+        path: &str,
+        provider_id: &'static str,
+    ) -> Option<NativeVfsIdentity> {
+        host_identity(path, provider_id)
+    }
+
+    fn resource_kind(&self, path: &str) -> Option<&'static str> {
+        Some(host_resource_kind(path))
+    }
+
+    fn validate_scoped_child(
+        &self,
+        scope: &crate::plugins::resource::fs_access::Scope,
+        parent: &str,
+        child: &str,
+    ) -> Option<Result<(), String>> {
+        Some(validate_host_child(scope, parent, child))
+    }
+}
+
+pub(super) struct UsbStorageOperations;
+
+impl NativeVfsBehavior for UsbStorageOperations {
+    fn validate_child(&self, parent: &str, child: &str) -> Option<Result<(), String>> {
+        Some(usb_validate_child(parent, child))
+    }
+
+    fn child_path(
+        &self,
+        parent: &str,
+        name: &str,
+        kind: crate::core::fs::provider_registry::ChildKind,
+    ) -> Option<Result<String, String>> {
+        Some(usb_child_path(parent, name, kind))
+    }
+
+    fn validate_binding(
+        &self,
+        path: &str,
+        reference: &crate::plugins::contracts::ResourceRef,
+    ) -> Option<Result<(), String>> {
+        Some(usb_ensure_current_binding(path, reference))
+    }
+
+    fn provider_identity(
+        &self,
+        path: &str,
+        provider_id: &'static str,
+    ) -> Option<NativeVfsIdentity> {
+        usb_identity(path, provider_id)
+    }
+
+    fn resource_kind(&self, path: &str) -> Option<&'static str> {
+        Some(host_resource_kind(path))
+    }
 }
