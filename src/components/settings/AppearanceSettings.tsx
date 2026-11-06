@@ -2,7 +2,6 @@ import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
-import { demo } from '@/lib/api'
 import { openFilePicker } from '@/lib/filePicker'
 import { reportError } from '@/lib/errorCenter'
 import type { Preferences } from '@/lib/types'
@@ -18,17 +17,12 @@ export function AppearanceSettings({
   const [themes, setThemes] = useState<Theme[]>([])
   const pickBackground = async () => {
     try {
-      const picked = demo
-        ? '/demo/background.svg'
-        : await openFilePicker({
-            mode: 'openFile',
-            extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
-          })
+      const picked = await openFilePicker({
+        mode: 'openFile',
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
+      })
       const path = Array.isArray(picked) ? picked[0] : picked
-      if (path) {
-        localStorage.removeItem('fiex:background-removed')
-        update({ backgroundImage: path })
-      }
+      if (path) update({ backgroundImage: path })
     } catch (error) {
       reportError(error, 'appearance:background')
     }
@@ -128,26 +122,11 @@ export function AppearanceSettings({
               >
                 {prefs.backgroundImage ? t('更换图片…') : t('选择图片…')}
               </button>
-              {demo && (
-                <button
-                  type="button"
-                  className="settings-pill-button ghost"
-                  onClick={() => {
-                    localStorage.removeItem('fiex:background-removed')
-                    update({ backgroundImage: '/demo/dog.svg', backgroundOpacity: 0.6 })
-                  }}
-                >
-                  {t('示例小狗')}
-                </button>
-              )}
               {prefs.backgroundImage && (
                 <button
                   type="button"
                   className="settings-pill-button ghost"
-                  onClick={() => {
-                    localStorage.setItem('fiex:background-removed', '1')
-                    update({ backgroundImage: '' })
-                  }}
+                  onClick={() => update({ backgroundImage: '' })}
                 >
                   {t('移除')}
                 </button>

@@ -35,6 +35,6 @@ pub(crate) fn navigable_source(source: &str) -> Option<String> {
 /// A Recent alias can navigate only when Core can still stat its source and
 /// resolve that source's provider-owned parent.
 pub(crate) fn recent_navigation_source(alias: &str) -> Option<String> {
-    let source = crate::core::recent::source_for(alias).ok()?;
+    let source = crate::core::volumes::native_vfs::recent_source_for(alias).ok()?;
     navigable_source(&source)
 }

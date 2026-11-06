@@ -1,7 +1,6 @@
 import { t } from '@/i18n'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
-import { demo, native } from '@/lib/api'
 import type { OperationProgress } from '@/lib/types'
 
 type ActivityStatus = 'running' | 'done' | 'error'
@@ -146,28 +145,10 @@ export function updateActivity(
 
 /** A progress channel for actions that have no activity row to update. */
 export function quietProgressChannel(): Channel<OperationProgress> {
-  if (native) return new Channel<OperationProgress>()
-  return { onmessage: undefined } as unknown as Channel<OperationProgress>
+  return new Channel<OperationProgress>()
 }
 
-export function progressChannel(id: string) {
-  // The browser fixture has no Tauri internals, so it receives a plain object
-  // whose `onmessage` the demo mock can call to simulate a progress channel.
-  if (!native) {
-    if (!demo) return undefined
-    const channel = {
-      onmessage: undefined as ((progress: OperationProgress) => void) | undefined,
-    }
-    channel.onmessage = ({ done, total, step, unit }) =>
-      updateActivity(id, {
-        done,
-        total,
-        progress: total > 0 ? done / total : undefined,
-        step: step || undefined,
-        unit,
-      })
-    return channel as unknown as Channel<OperationProgress>
-  }
+export function progressChannel(id: string): Channel<OperationProgress> {
   const channel = new Channel<OperationProgress>()
   channel.onmessage = ({ done, total, step, unit }) =>
     updateActivity(id, {

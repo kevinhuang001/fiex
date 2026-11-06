@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn menu_rejects_nested_legacy_fields_and_unknown_parent() {
+fn menu_rejects_unknown_fields_and_unknown_parent() {
     assert!(menu_response_valid(&json!({"items": [
         {"id":"root","kind":"submenu","title":"Root"},
         {"id":"open","kind":"action","title":"Open","parentId":"root"}

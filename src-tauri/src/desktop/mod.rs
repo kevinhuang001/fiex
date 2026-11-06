@@ -118,7 +118,6 @@ pub fn run() {
             plugin_panel_html,
             preview_open,
             preview_candidates,
-            preview_loading,
             preview_loading_asset,
             local_terminal_open,
             detect_shells,

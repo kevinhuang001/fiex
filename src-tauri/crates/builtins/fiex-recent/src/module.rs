@@ -46,7 +46,6 @@ pub trait RecentModuleServices: Send + Sync {
         &self,
         ctx: &dyn ProviderInvocation,
     ) -> Result<RecentResource, ProviderError>;
-    fn legacy_resource(&self, locator: &str) -> Option<RecentResource>;
     fn normalize_locator(&self, locator: &str, store: &RecentStore) -> Result<String, String>;
     fn existence(&self, locator: &str) -> Existence;
     fn open_source(
@@ -89,31 +88,7 @@ pub(super) fn store(
     services: &dyn RecentModuleServices,
     ctx: &dyn ProviderInvocation,
 ) -> Result<RecentStore, ProviderError> {
-    let store = RecentStore::new(services.storage(ctx, SCOPE)?);
-    ensure_migrated(&store, services).map_err(ProviderError::internal)?;
-    Ok(store)
-}
-
-fn ensure_migrated(store: &RecentStore, services: &dyn RecentModuleServices) -> Result<(), String> {
-    store.ensure_legacy_migrated(|locator| {
-        let candidate = services.legacy_resource(locator)?;
-        legacy_record(candidate).ok().flatten()
-    })
-}
-
-fn legacy_record(resource: RecentResource) -> Result<Option<RecentRecord>, String> {
-    if resource.is_directory {
-        return Ok(None);
-    }
-    RecentRecord::new(
-        resource.locator,
-        resource.name,
-        resource.extension,
-        resource.mime,
-        resource.size,
-        resource.modified,
-    )
-    .map(Some)
+    Ok(RecentStore::new(services.storage(ctx, SCOPE)?))
 }
 
 pub(super) fn recent_record(

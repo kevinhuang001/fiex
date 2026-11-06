@@ -49,7 +49,7 @@ export default function App() {
   })
   const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
   const tabName = (path: string) => viewTitles[path] || app.displayName(path)
-  const uiScale = useAppEnvironment(app)
+  useAppEnvironment(app)
   const backgroundPath = app.prefs.backgroundImage
   const backgroundUrl = backgroundPath
     ? native && !backgroundPath.includes('://')
@@ -62,18 +62,7 @@ export default function App() {
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''} ${backgroundUrl ? 'has-background' : ''}`}
       data-platform={app.platform}
-      style={
-        {
-          '--label-size': '11px',
-          ...(native
-            ? {}
-            : {
-                zoom: uiScale,
-                width: `calc(100vw / ${uiScale})`,
-                height: `calc(100vh / ${uiScale})`,
-              }),
-        } as CSSProperties
-      }
+      style={{ '--label-size': '11px' } as CSSProperties}
     >
       {backgroundUrl && (
         <div

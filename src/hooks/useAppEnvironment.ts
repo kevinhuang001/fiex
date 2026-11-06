@@ -3,24 +3,9 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { call, native } from '@/lib/api'
 import type { useAppController } from './useAppController'
 
-/** Browser/native window integration, independent of the explorer render tree. */
+/** Native window integration, independent of the explorer render tree. */
 export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
   const autostarted = useRef(false)
-  // Browser demo has no native webview zoom; scale the app shell instead so
-  // the preference still resizes text, icons, menus and dialogs together.
-  const uiScale = native ? 1 : app.prefs.fontSize / 11
-  useEffect(() => {
-    if (native) return
-    const root = document.documentElement
-    root.style.setProperty('--ui-scale', String(uiScale))
-    root.style.setProperty('--ui-vw', `calc(100vw / ${uiScale})`)
-    root.style.setProperty('--ui-vh', `calc(100vh / ${uiScale})`)
-    return () => {
-      root.style.removeProperty('--ui-scale')
-      root.style.removeProperty('--ui-vw')
-      root.style.removeProperty('--ui-vh')
-    }
-  }, [uiScale])
   useEffect(() => {
     const navigate = (event: Event) => {
       const detail = (event as CustomEvent<{ path?: string; pane?: string }>).detail
@@ -67,5 +52,4 @@ export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
       .setZoom(app.prefs.fontSize / 11)
       .catch(() => {})
   }, [app.prefs.fontSize])
-  return uiScale
 }

@@ -2,7 +2,7 @@
 //!
 //! Filesystem discovery, authorization, UI projection, and provider registration
 //! are supplied by the application adapter. This crate owns the stable records,
-//! alias validation, storage updates, and legacy storage import.
+//! alias validation and storage updates.
 
 use fiex_storage::native::NativeScopedStorage;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,6 @@ pub use module::{
 
 const LIMIT: usize = 40;
 const RECORDS_KEY: &str = "items";
-const LEGACY_MIGRATION_KEY: &str = "legacy-json-migrated";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RecentRecord {
@@ -63,51 +62,6 @@ pub struct RecentStore {
 impl RecentStore {
     pub fn new(storage: NativeScopedStorage) -> Self {
         Self { storage }
-    }
-
-    pub fn ensure_legacy_migrated(
-        &self,
-        mut resolve_legacy: impl FnMut(&str) -> Option<RecentRecord>,
-    ) -> Result<(), String> {
-        if self.storage.get(LEGACY_MIGRATION_KEY)?.is_some() {
-            return Ok(());
-        }
-        let Some(file) = dirs::home_dir().map(|home| home.join(".fiex").join("recent.json")) else {
-            self.storage
-                .set(LEGACY_MIGRATION_KEY, serde_json::Value::Bool(true))?;
-            return Ok(());
-        };
-        let legacy = std::fs::read(&file).ok();
-        let paths = legacy
-            .as_deref()
-            .and_then(|bytes| serde_json::from_slice::<Vec<String>>(bytes).ok())
-            .unwrap_or_default();
-        let mut records = self.records()?;
-        let mut seen: HashSet<String> = records
-            .iter()
-            .map(|record| record.locator.clone())
-            .collect();
-        for path in paths.into_iter().take(LIMIT) {
-            if seen.contains(&path) {
-                continue;
-            }
-            if let Some(record) = resolve_legacy(&path) {
-                seen.insert(path);
-                records.push(record);
-            }
-        }
-        records.sort_by_key(|record| std::cmp::Reverse(record.accessed_at));
-        records.truncate(LIMIT);
-        self.save_records(records)?;
-        if let Some(bytes) = legacy {
-            let backup = file.with_extension("json.migrated-backup");
-            if !backup.exists() {
-                std::fs::write(&backup, bytes).map_err(|error| error.to_string())?;
-            }
-            std::fs::remove_file(&file).map_err(|error| error.to_string())?;
-        }
-        self.storage
-            .set(LEGACY_MIGRATION_KEY, serde_json::Value::Bool(true))
     }
 
     pub fn records(&self) -> Result<Vec<RecentRecord>, String> {
@@ -175,13 +129,6 @@ impl RecentStore {
             .filter(|alias| alias_id(alias).is_ok_and(|id| !remaining_ids.contains(id)))
             .cloned()
             .collect())
-    }
-
-    fn save_records(&self, records: Vec<RecentRecord>) -> Result<(), String> {
-        self.storage.set(
-            RECORDS_KEY,
-            serde_json::to_value(records).map_err(|error| error.to_string())?,
-        )
     }
 }
 

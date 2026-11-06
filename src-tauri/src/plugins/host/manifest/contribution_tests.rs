@@ -194,7 +194,7 @@ fn metadata_and_file_operations_are_independent_grants() {
     assert!(!grants.contains("folders.read"));
     assert!(serde_json::from_value::<PluginManifest>(json!({
         "schemaVersion": 2,
-        "id": "test.legacy", "name": "Legacy", "version": "1",
+        "id": "test.invalid", "name": "Invalid", "version": "1",
         "contributions": {}
     }))
     .is_err());

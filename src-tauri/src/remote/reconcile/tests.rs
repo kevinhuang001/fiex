@@ -13,10 +13,3 @@ fn fingerprints_include_content() {
     fs::write(file.path(), b"two").unwrap();
     assert_ne!(first, fingerprint(file.path()).unwrap());
 }
-#[test]
-fn metadata_migration_defaults() {
-    let file: RemoteMetaFile =
-        serde_json::from_str(r#"{"size":1,"modified":0,"isDir":false,"downloaded":true}"#).unwrap();
-    assert!(file.baseline.is_empty());
-    assert!(!file.pinned);
-}

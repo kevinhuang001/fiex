@@ -24,25 +24,6 @@ fn storage_location(path: &str) -> Option<ResourceLocation> {
     descriptor(kind, &provider, &mount)
 }
 
-fn projected_storage_location(source: &str) -> Option<ResourceLocation> {
-    let identity = crate::core::volumes::native_vfs::storage_identity(source)?;
-    if !identity.available {
-        return None;
-    }
-    if identity.host_path && std::fs::symlink_metadata(source).is_err() {
-        return None;
-    }
-    let kind = match identity.storage_type? {
-        ResourceType::Fs => "fs",
-        ResourceType::Vfs => "vfs",
-    };
-    descriptor(kind, identity.provider_id, &identity.mount_id)
-}
-
-pub(crate) fn projected_storage_for_source(source: &str) -> Option<ResourceLocation> {
-    projected_storage_location(source)
-}
-
 /// The view determines presentation contributions; storage controls actual IO.
 /// Recent aliases retain their view identity but resolve storage only while
 /// their source remains available and authorized.
@@ -120,18 +101,6 @@ mod tests {
         let (view, storage) = typed_locations_for("applications://");
         assert_eq!(view.as_ref().unwrap().provider_id, "core:applications");
         assert_eq!(storage.as_ref().unwrap().resource_type, ResourceType::Vfs);
-    }
-
-    #[test]
-    fn stale_recent_local_source_never_advertises_storage_owner() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("recent.txt");
-        assert!(projected_storage_location(&path.to_string_lossy()).is_none());
-        std::fs::write(&path, b"data").unwrap();
-        let live = projected_storage_location(&path.to_string_lossy()).unwrap();
-        assert_eq!(live.resource_type, ResourceType::Fs);
-        assert_eq!(live.provider_id, "core:local-fs");
-        assert!(projected_storage_location("unregistered://file").is_none());
     }
 
     #[test]

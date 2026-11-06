@@ -62,16 +62,12 @@ pub(super) fn validate_host_child(
 }
 
 pub(super) fn revalidate_recent_listing(entries: &mut Vec<Entry>) -> Result<(), String> {
-    let storage = crate::core::volumes::native_vfs::management_storage_for_provider(
-        fiex_recent::PROVIDER_ID,
-        "history",
-    )?;
-    crate::core::recent::filter_cached_entries(entries, &storage)
+    crate::core::volumes::native_vfs::filter_recent_cached_entries(entries)
 }
 
 #[cfg(feature = "desktop")]
 pub(super) fn resolve_recent_navigation_source(alias: &str) -> Option<String> {
-    crate::core::recent::source_for(alias).ok()
+    crate::core::volumes::native_vfs::recent_source_for(alias).ok()
 }
 
 pub(super) fn trash_open_policy(_path: &str, entry: &Entry) -> Option<bool> {
@@ -168,7 +164,7 @@ pub(super) fn validate_recent_child(parent: &str, child: &str) -> Result<(), Str
     if parent != RECENT_URI {
         return Err("recent view has no writable child identities".into());
     }
-    crate::core::recent::source_for(child).map(|_| ())
+    crate::core::volumes::native_vfs::recent_source_for(child).map(|_| ())
 }
 
 pub(super) fn host_child_path(

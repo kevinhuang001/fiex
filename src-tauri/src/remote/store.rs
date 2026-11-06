@@ -18,33 +18,22 @@ pub use navigation::*;
 #[serde(rename_all = "camelCase")]
 pub struct StoredConnection {
     pub(crate) id: String,
-    #[serde(default)]
     pub(crate) mount_id: String,
     /// Rotated when authorization/configuration changes. The cache layer
     /// reads this public epoch without fetching credentials from the keyring.
-    #[serde(default)]
     pub(crate) cache_revision: String,
     pub(crate) name: String,
     pub(crate) kind: String,
     /// The exact installed provider ID, never derived from publisher privilege.
-    #[serde(default)]
     pub(crate) plugin_id: String,
     /// Non-secret manifest-declared connection configuration.
-    #[serde(default)]
     pub(crate) settings: serde_json::Map<String, serde_json::Value>,
     /// Secret field identifiers whose values are persisted in the OS keyring.
-    #[serde(default)]
     pub(crate) secret_keys: Vec<String>,
     /// Saved sessions appear in the connection + menu.
-    #[serde(default = "saved_default")]
     pub(crate) saved: bool,
     /// Open this session automatically when Fiex starts.
-    #[serde(default)]
     pub(crate) autostart: bool,
-}
-
-fn saved_default() -> bool {
-    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -101,17 +90,10 @@ pub(crate) fn load_stored_public() -> Vec<StoredConnection> {
 }
 
 fn load_stored_with_secrets(hydrate: bool) -> Vec<StoredConnection> {
-    // Sidebar and the background scheduler may both be the first reader of an
-    // old registry. Serialize assignment so its new identity is persisted once.
-    static MIGRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let Ok(_guard) = MIGRATION.lock() else {
-        return Vec::new();
-    };
     let mut items: Vec<StoredConnection> = fs::read(connections_path())
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
-    let mut changed = false;
     items.retain(|c| {
         !c.id.is_empty()
             && c.id.len() <= 128
@@ -132,13 +114,6 @@ fn load_stored_with_secrets(hydrate: bool) -> Vec<StoredConnection> {
     });
     let mut identities = std::collections::HashSet::new();
     for item in &mut items {
-        if item.mount_id.is_empty() {
-            let Ok(id) = crate::plugins::mounts::new_id() else {
-                continue;
-            };
-            item.mount_id = id;
-            changed = true;
-        }
         if crate::plugins::mounts::uri(&item.mount_id, "").is_err()
             || !identities.insert(item.mount_id.clone())
         {
@@ -147,9 +122,6 @@ fn load_stored_with_secrets(hydrate: bool) -> Vec<StoredConnection> {
         }
     }
     items.retain(|c| !c.mount_id.is_empty());
-    if changed && save_stored(&items).is_err() {
-        return Vec::new();
-    }
     if hydrate {
         for item in &mut items {
             for field in &item.secret_keys {

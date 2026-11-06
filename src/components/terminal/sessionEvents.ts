@@ -1,4 +1,4 @@
-export type SessionStatus = 'connecting' | 'open' | 'closed' | 'error' | 'demo'
+export type SessionStatus = 'connecting' | 'open' | 'closed' | 'error'
 export type TerminalEvent =
   | { type: 'ready' }
   | { type: 'data'; data: number[] }

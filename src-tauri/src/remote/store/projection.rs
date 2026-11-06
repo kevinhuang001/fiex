@@ -65,7 +65,7 @@ mod edit_tests {
     #[test]
     fn editing_exposes_configuration_but_never_credentials() {
         let connection: StoredConnection = serde_json::from_value(serde_json::json!({
-            "id":"saved-ssh", "mountId":"stable", "name":"SSH", "kind":"org.example.connection", "pluginId":"org.example.connection",
+            "id":"saved-ssh", "mountId":"stable", "cacheRevision":"", "name":"SSH", "kind":"org.example.connection", "pluginId":"org.example.connection",
             "settings":{"host":"example.com", "port":2222, "password":"private-value"},
             "secretKeys":["password"], "saved":true, "autostart":true
         })).unwrap();

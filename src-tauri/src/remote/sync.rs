@@ -61,38 +61,27 @@ pub(crate) struct RemoteMetaFile {
     pub(crate) modified: u64,
     pub(crate) is_dir: bool,
     pub(crate) downloaded: bool,
-    #[serde(default)]
     pub(crate) node_id: String,
-    #[serde(default)]
     pub(crate) revision: String,
     /// Provider `allowedOps` for this node; `None` means unrestricted.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_ops: Option<Vec<String>>,
-    #[serde(default)]
     pub(crate) baseline: String,
-    #[serde(default)]
     pub(crate) local_stamp: String,
-    #[serde(default)]
     pub(crate) pinned: bool,
-    #[serde(default)]
     pub(crate) excluded: bool,
-    #[serde(default)]
     pub(crate) conflict: bool,
     /// The last local edit was accepted by the remote.
-    #[serde(default)]
     pub(crate) uploaded: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct RemoteMeta {
     pub(crate) files: HashMap<String, RemoteMetaFile>,
-    #[serde(default)]
     pub(crate) listed: std::collections::HashSet<String>,
     /// Direct child paths from the last complete listing of each directory.
     /// This keeps offline snapshots from reviving entries removed remotely.
-    #[serde(default)]
     pub(crate) listed_children: HashMap<String, Vec<String>>,
-    #[serde(default)]
     pub(crate) errors: HashMap<String, String>,
 }
 

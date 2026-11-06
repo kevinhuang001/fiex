@@ -20,8 +20,6 @@ export function PluginPreviewFrame({
   timeoutMs,
   loading = false,
   onPreviewReady,
-  name,
-  extension,
 }: {
   pluginId: string
   contributionId: string
@@ -36,8 +34,6 @@ export function PluginPreviewFrame({
   loading?: boolean
   /** Called once the plugin's preview data has rendered in the frame. */
   onPreviewReady?: () => void
-  name: string
-  extension: string
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const dispose = useRef<(() => void) | null>(null)
@@ -100,8 +96,6 @@ export function PluginPreviewFrame({
             }).catch(() => ({}))
             return {
               ...(loading ? {} : ((context || {}) as Record<string, JsonValue>)),
-              // Compatibility alias for panel code that only needs the name.
-              preview: { name, extension },
               locale: getLocale(),
               uiTimeoutMs: timeoutMs ?? 15000,
               settings,
@@ -175,7 +169,7 @@ export function PluginPreviewFrame({
       dispose.current = null
       emit.current = null
     }
-  }, [html, src, sessionId, pluginId, timeoutMs, loading, name, extension, context])
+  }, [html, src, sessionId, pluginId, timeoutMs, loading, context])
 
   if (error) return <div className="preview-plugin-state">{t('无法预览')}</div>
   return (
@@ -185,7 +179,7 @@ export function PluginPreviewFrame({
       sandbox="allow-scripts"
       src={src}
       srcDoc={src ? undefined : html}
-      title={name}
+      title={contributionId || pluginId}
       data-contribution={contributionId}
       data-loading={loading ? 'true' : undefined}
       referrerPolicy="no-referrer"

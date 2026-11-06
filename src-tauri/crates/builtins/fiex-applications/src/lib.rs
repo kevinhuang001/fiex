@@ -37,8 +37,6 @@ pub struct ApplicationsState {
     pub schema: u32,
     pub revision: u64,
     #[serde(default)]
-    pub migration_id: Option<String>,
-    #[serde(default)]
     pub folders: BTreeMap<String, VirtualFolder>,
     #[serde(default)]
     pub apps: BTreeMap<String, ApplicationNode>,

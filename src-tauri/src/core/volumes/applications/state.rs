@@ -2,7 +2,6 @@
 //! identities; physical paths exist only for imported assets.
 mod assets;
 mod entries;
-mod migration;
 mod mutations;
 mod removal;
 mod reservations;
@@ -25,9 +24,9 @@ pub use fiex_applications::{
 use fiex_applications::{app_uri_in, child_uri, folder_uri_in, parent_uri_matches};
 const SCOPE: &str = fiex_applications::STORAGE_SCOPE;
 const KEY: &str = fiex_applications::STATE_KEY;
-pub(super) use fiex_applications::{
-    valid_extension, valid_id, validate_state, APP_SEGMENT, FOLDER_SEGMENT, SCHEMA,
-};
+pub(super) use fiex_applications::{valid_extension, valid_id, APP_SEGMENT, FOLDER_SEGMENT};
+#[cfg(test)]
+use fiex_applications::{validate_state, SCHEMA};
 
 pub(super) fn storage() -> fiex_storage::native::NativeScopedStorage {
     super::super::native_vfs::management_storage_for_provider(fiex_applications::PROVIDER_ID, SCOPE)
@@ -40,7 +39,6 @@ pub fn snapshot() -> Result<ApplicationsState, String> {
 }
 
 pub(super) fn ensure_ready() -> Result<(), String> {
-    migration::ensure_migrated()?;
     removal::recover_pending()
 }
 
@@ -48,7 +46,6 @@ fn update<F>(mutate: F) -> Result<ApplicationsState, String>
 where
     F: FnMut(&mut ApplicationsState) -> Result<(), String>,
 {
-    migration::ensure_migrated()?;
     fiex_applications::ApplicationsStore::new(storage()).update(mutate)
 }
 

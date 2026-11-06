@@ -1957,7 +1957,6 @@ dependencies = [
 name = "fiex-recent"
 version = "0.1.0"
 dependencies = [
- "dirs 6.0.0",
  "fiex-provider-contracts",
  "fiex-storage",
  "getrandom 0.2.17",

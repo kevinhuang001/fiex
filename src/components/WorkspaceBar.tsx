@@ -2,7 +2,6 @@ import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
-import { uiScale } from '@/lib/uiScale'
 
 export function WorkspaceBar({
   items,
@@ -36,7 +35,6 @@ export function WorkspaceBar({
     if (!handle) return
     let bottom = 0
     let next = 0
-    let scale = 1
     let limit = 0
     const apply = () => {
       const main = panel.current?.parentElement
@@ -46,7 +44,7 @@ export function WorkspaceBar({
       if (main) main.style.setProperty('--workspace-height', `${next}px`)
     }
     const move = (event: MouseEvent) => {
-      next = Math.min(limit, Math.max(52, (bottom - event.clientY) / scale))
+      next = Math.min(limit, Math.max(52, bottom - event.clientY))
       apply()
     }
     const up = () => {
@@ -56,8 +54,7 @@ export function WorkspaceBar({
       setHeight(next)
     }
     const start = () => {
-      scale = uiScale()
-      limit = Math.max(64, (window.innerHeight / scale) * 0.6)
+      limit = Math.max(64, window.innerHeight * 0.6)
       bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
       next = panel.current?.getBoundingClientRect().height ?? 0
       document.body.classList.add('resizing-workspace')

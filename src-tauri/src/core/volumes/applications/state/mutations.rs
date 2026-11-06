@@ -219,7 +219,6 @@ pub fn validate_child(parent_uri: &str, child_uri: &str) -> Result<(), String> {
 }
 
 pub fn move_nodes(uris: &[String], target_uri: &str) -> Result<Vec<String>, String> {
-    migration::ensure_migrated()?;
     fiex_applications::ApplicationsStore::new(storage())
         .move_nodes(uris, target_uri)
         .map_err(|error| match error.as_str() {

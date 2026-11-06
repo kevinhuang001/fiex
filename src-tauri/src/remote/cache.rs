@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn downloads_are_not_pins() {
         let meta: RemoteMeta = serde_json::from_str(
-            r#"{"files":{"a":{"size":1,"modified":0,"isDir":false,"downloaded":true}}}"#,
+            r#"{"files":{"a":{"size":1,"modified":0,"isDir":false,"downloaded":true,"nodeId":"a","revision":"r1","baseline":"","localStamp":"","pinned":false,"excluded":false,"conflict":false,"uploaded":false}},"listed":[],"listed_children":{},"errors":{}}"#,
         )
         .unwrap();
         assert!(meta.files["a"].downloaded);

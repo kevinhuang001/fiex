@@ -246,15 +246,15 @@ mod tests {
 
     #[test]
     fn undeclared_plugins_cannot_receive_file_requests() {
-        forget("org.example.legacy");
-        assert!(authorize_method("org.example.legacy", "vfs.list").is_err());
+        forget("org.example.uninstalled");
+        assert!(authorize_method("org.example.uninstalled", "vfs.list").is_err());
         register(
-            "org.example.legacy",
-            &json!({"pluginId":"org.example.legacy"}),
+            "org.example.uninstalled",
+            &json!({"pluginId":"org.example.uninstalled"}),
         );
-        assert!(authorize_method("org.example.legacy", "vfs.list").is_err());
-        assert!(authorize_method("org.example.legacy", "connection.open").is_ok());
-        forget("org.example.legacy");
+        assert!(authorize_method("org.example.uninstalled", "vfs.list").is_err());
+        assert!(authorize_method("org.example.uninstalled", "connection.open").is_ok());
+        forget("org.example.uninstalled");
     }
 
     #[test]

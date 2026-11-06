@@ -37,10 +37,6 @@ pub(crate) fn identity(path: &str) -> Option<NativeVfsIdentity> {
     provider.behavior().provider_identity(path, provider_id)
 }
 
-pub(crate) fn storage_identity(path: &str) -> Option<NativeVfsIdentity> {
-    identity(path).filter(|identity| identity.storage_type.is_some())
-}
-
 pub(crate) fn is_host_path(path: &str) -> bool {
     identity(path).is_some_and(|identity| identity.host_path)
 }

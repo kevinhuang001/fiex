@@ -135,9 +135,7 @@ pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String>
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// Raw loading document used when the preview host cannot serve assets (the
-/// browser demo and the non-native test path). It is still only read from the
-/// approved plugin package.
+/// Reads a loading document from an approved plugin package.
 pub fn preview_loading(plugin_id: &str) -> Result<Option<String>, String> {
     let (manifest, folder) = approved_package(plugin_id)?;
     preview_loading_source(&manifest, &folder)

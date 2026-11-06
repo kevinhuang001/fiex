@@ -8,7 +8,6 @@ publish = false
 [dependencies]
 fiex-provider-contracts = { path = "../../../../sdk/rust/contracts" }
 fiex-storage = { path = "../../foundation/fiex-storage" }
-dirs = { workspace = true }
 getrandom = "0.2"
 globset = "0.4"
 hex = "0.4"
