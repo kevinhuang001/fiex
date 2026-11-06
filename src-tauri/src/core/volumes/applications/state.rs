@@ -87,7 +87,7 @@ fn pending_reservations() -> &'static Mutex<HashMap<String, PendingReservation>>
     RESERVATIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
+fn storage() -> fiex_storage::native::NativeScopedStorage {
     super::super::native_vfs::management_storage_for_provider("core:applications", SCOPE)
         .expect("Applications provider registration binds its storage owner")
 }

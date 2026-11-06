@@ -2,16 +2,16 @@
 //! Provider IDs are deliberately not storage owners: all providers registered
 //! by one module use that module's OwnerId.
 mod engine;
-pub(crate) mod native;
+pub mod native;
 mod owner;
 
-pub(crate) use owner::CoreOwnerKey;
+pub use owner::CoreOwnerKey;
 
-pub(crate) fn plugin_validate(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
+pub fn plugin_validate(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
     engine::validate(&owner::OwnerId::plugin(plugin_id), scope, key)
 }
 
-pub(crate) fn plugin_get(
+pub fn plugin_get(
     plugin_id: &str,
     scope: &str,
     key: &str,
@@ -19,7 +19,7 @@ pub(crate) fn plugin_get(
     engine::get(&owner::OwnerId::plugin(plugin_id), scope, key)
 }
 
-pub(crate) fn plugin_set(
+pub fn plugin_set(
     plugin_id: &str,
     scope: &str,
     key: &str,
@@ -28,15 +28,15 @@ pub(crate) fn plugin_set(
     engine::set(&owner::OwnerId::plugin(plugin_id), scope, key, value)
 }
 
-pub(crate) fn plugin_delete(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
+pub fn plugin_delete(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
     engine::delete(&owner::OwnerId::plugin(plugin_id), scope, key)
 }
 
-pub(crate) fn plugin_keys(plugin_id: &str, scope: &str) -> Result<Vec<String>, String> {
+pub fn plugin_keys(plugin_id: &str, scope: &str) -> Result<Vec<String>, String> {
     engine::list_keys(&owner::OwnerId::plugin(plugin_id), scope)
 }
 
-pub(crate) fn plugin_compare_and_set(
+pub fn plugin_compare_and_set(
     plugin_id: &str,
     scope: &str,
     key: &str,
@@ -63,10 +63,10 @@ mod tests {
 
     #[test]
     fn core_modules_and_plugins_have_separate_storage_owners() {
-        let applications = OwnerBoundStorage::from_registry(CoreOwnerKey::new("applications"))
+        let applications = OwnerBoundStorage::from_registry(CoreOwnerKey::new("owner-a"))
             .scoped("owner-test")
             .unwrap();
-        let recent = OwnerBoundStorage::from_registry(CoreOwnerKey::new("recent"))
+        let recent = OwnerBoundStorage::from_registry(CoreOwnerKey::new("owner-b"))
             .scoped("owner-test")
             .unwrap();
         let plugin = OwnerId::plugin("org.example.module");

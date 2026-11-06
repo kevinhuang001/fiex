@@ -1801,6 +1801,7 @@ dependencies = [
  "ed25519-dalek",
  "fiex-plugin-sdk",
  "fiex-provider-contracts",
+ "fiex-storage",
  "file_icon_provider",
  "fontdb",
  "futures",
@@ -1869,6 +1870,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fiex-storage"
+version = "0.1.0"
+dependencies = [
+ "dirs 6.0.0",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

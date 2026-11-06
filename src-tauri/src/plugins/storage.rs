@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 pub(super) fn validate(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
-    crate::infrastructure::provider_storage::plugin_validate(plugin_id, scope, key)
+    fiex_storage::plugin_validate(plugin_id, scope, key)
 }
 
 pub fn compare_and_set(
@@ -14,25 +14,23 @@ pub fn compare_and_set(
     expected: Option<Value>,
     next: Option<Value>,
 ) -> Result<bool, String> {
-    crate::infrastructure::provider_storage::plugin_compare_and_set(
-        plugin_id, scope, key, expected, next,
-    )
+    fiex_storage::plugin_compare_and_set(plugin_id, scope, key, expected, next)
 }
 
 pub fn get(plugin_id: &str, scope: &str, key: &str) -> Result<Option<Value>, String> {
-    crate::infrastructure::provider_storage::plugin_get(plugin_id, scope, key)
+    fiex_storage::plugin_get(plugin_id, scope, key)
 }
 
 pub fn set(plugin_id: &str, scope: &str, key: &str, value: Value) -> Result<(), String> {
-    crate::infrastructure::provider_storage::plugin_set(plugin_id, scope, key, value)
+    fiex_storage::plugin_set(plugin_id, scope, key, value)
 }
 
 pub fn delete(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
-    crate::infrastructure::provider_storage::plugin_delete(plugin_id, scope, key)
+    fiex_storage::plugin_delete(plugin_id, scope, key)
 }
 
 pub fn list_keys(plugin_id: &str, scope: &str) -> Result<Vec<String>, String> {
-    crate::infrastructure::provider_storage::plugin_keys(plugin_id, scope)
+    fiex_storage::plugin_keys(plugin_id, scope)
 }
 
 pub use super::credentials::{

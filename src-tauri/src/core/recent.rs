@@ -21,7 +21,7 @@ struct RecentRecord {
     accessed_at: i64,
 }
 
-fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
+fn storage() -> fiex_storage::native::NativeScopedStorage {
     crate::core::volumes::native_vfs::management_storage_for_provider("core:recent", SCOPE)
         .expect("Recent provider registration binds its storage owner")
 }
@@ -49,8 +49,7 @@ fn opaque_id() -> Result<String, String> {
     ))
 }
 
-pub(crate) type RecentStorage =
-    crate::infrastructure::provider_storage::native::NativeScopedStorage;
+pub(crate) type RecentStorage = fiex_storage::native::NativeScopedStorage;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Existence {
@@ -202,7 +201,7 @@ fn records_with_storage(store: &RecentStorage) -> Result<Vec<RecentRecord>, Stri
 /// validated by Core; only its stable locator and display metadata are saved.
 pub(crate) fn record_opened(
     snapshot: &ResourceSnapshot,
-    store: &crate::infrastructure::provider_storage::native::NativeScopedStorage,
+    store: &fiex_storage::native::NativeScopedStorage,
 ) -> Result<(), String> {
     let locator = locator_for(snapshot, store)?;
     if locator.starts_with("applications://") {

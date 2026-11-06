@@ -1,7 +1,6 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
-use crate::infrastructure::provider_storage::CoreOwnerKey;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 #[cfg(test)]
@@ -11,6 +10,7 @@ use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, ProviderMatchR
 use fiex_provider_contracts::{
     ProviderError, ProviderInvocation, ProviderMatcher, ResourceMetadata,
 };
+use fiex_storage::CoreOwnerKey;
 #[cfg(test)]
 use serde_json::json;
 #[cfg(test)]
