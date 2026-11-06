@@ -6,8 +6,10 @@ rust-version = "1.90"
 publish = false
 
 [dependencies]
+fiex-provider-contracts = { path = "../../../../sdk/rust/contracts" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
 serde = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+trash = "5"
 winreg = "0.55"
