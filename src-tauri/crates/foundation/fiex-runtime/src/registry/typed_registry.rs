@@ -2,11 +2,9 @@
 use super::{
     module_registrar::ModuleRegistrar,
     runtime::{global_runtime_registry, RuntimeRegistry},
-    types::{ModuleDescriptor, ProviderCandidate, RegistrationRequest},
+    types::{ModuleDescriptor, ProviderCandidate},
 };
-use fiex_provider_contracts::{
-    MatchResource, ProviderDescriptor, ProviderKind, ProviderMatchRule, ProviderMatcher,
-};
+use fiex_provider_contracts::{MatchResource, ProviderDescriptor, ProviderKind, ProviderMatcher};
 use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
 
@@ -46,65 +44,6 @@ impl<T: ?Sized + Send + Sync + 'static> TypedProviderRegistry<T> {
             registry: self,
             descriptor,
         }
-    }
-
-    pub fn register(
-        &mut self,
-        id: &str,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        self.register_owned(
-            id,
-            CoreOwnerKey::new("core"),
-            priority,
-            rule,
-            implementation,
-        )
-    }
-
-    pub fn register_owned(
-        &mut self,
-        id: &str,
-        owner: CoreOwnerKey,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        let module = ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION"));
-        self.runtime.register(RegistrationRequest {
-            kind: self.kind,
-            module,
-            id: id.into(),
-            uri_route: None,
-            event: None,
-            priority,
-            rule,
-            implementation,
-        })
-    }
-
-    pub fn register_for_event(
-        &mut self,
-        id: &str,
-        event: &str,
-        owner: CoreOwnerKey,
-        priority: i64,
-        rule: ProviderMatchRule,
-        implementation: Arc<T>,
-    ) -> Result<(), String> {
-        let module = ModuleDescriptor::new(id, owner, env!("CARGO_PKG_VERSION"));
-        self.runtime.register(RegistrationRequest {
-            kind: self.kind,
-            module,
-            id: id.into(),
-            uri_route: None,
-            event: Some(event.into()),
-            priority,
-            rule,
-            implementation,
-        })
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<T>> {

@@ -52,23 +52,35 @@ mod unit_tests {
             TypedProviderRegistry::from_runtime(Arc::clone(&runtime), ProviderKind::Hook);
         let mut info: TypedProviderRegistry<dyn Handler> =
             TypedProviderRegistry::from_runtime(runtime, ProviderKind::Info);
-        hooks
-            .register(
-                "builtin:test",
-                1,
-                ProviderMatchRule::default(),
-                Arc::new(TestHandler(1)),
-            )
-            .unwrap();
-        assert!(hooks
-            .register(
-                "builtin:test",
-                2,
-                ProviderMatchRule::default(),
-                Arc::new(TestHandler(2))
-            )
-            .is_err());
-        info.register(
+        {
+            let mut module = hooks.module(ModuleDescriptor::new(
+                "core:test-hooks",
+                CoreOwnerKey::new("core"),
+                "1",
+            ));
+            module
+                .register(
+                    "builtin:test",
+                    1,
+                    ProviderMatchRule::default(),
+                    Arc::new(TestHandler(1)),
+                )
+                .unwrap();
+            assert!(module
+                .register(
+                    "builtin:test",
+                    2,
+                    ProviderMatchRule::default(),
+                    Arc::new(TestHandler(2))
+                )
+                .is_err());
+        }
+        info.module(ModuleDescriptor::new(
+            "core:test-info",
+            CoreOwnerKey::new("core"),
+            "1",
+        ))
+        .register(
             "builtin:test",
             1,
             ProviderMatchRule::default(),

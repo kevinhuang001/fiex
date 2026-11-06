@@ -9,6 +9,8 @@ use fiex_provider_contracts::{
     ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItemKind, ProviderError,
     ProviderInput, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
+use fiex_runtime::ModuleDescriptor;
+use fiex_storage::CoreOwnerKey;
 use serde_json::json;
 
 mod providers;
@@ -73,6 +75,11 @@ fn available_action(
 }
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ConnectionContextMenuProvider>) {
+    let mut module = values.module(ModuleDescriptor::new(
+        "core:connection-menu",
+        CoreOwnerKey::new("core"),
+        env!("CARGO_PKG_VERSION"),
+    ));
     let implementations: [(&str, i64, Arc<dyn ConnectionContextMenuProvider>); 4] = [
         (
             "builtin:connection-edit",
@@ -96,7 +103,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ConnectionContext
         ),
     ];
     for (id, priority, provider) in implementations {
-        values
+        module
             .register(id, priority, ProviderMatchRule::default(), provider)
             .expect("invalid native connection-menu registration");
     }
