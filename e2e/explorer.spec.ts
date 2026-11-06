@@ -1,6 +1,15 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+
+async function openDocuments(page: Page) {
+  await page.getByRole('button', { name: '文稿', exact: true }).click()
+  await expect(page.getByRole('tab')).toContainText('Documents')
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/?fixture&pluginFixture')
+  // The product now starts in Recent. Most explorer fixtures use Documents,
+  // so choose that directory explicitly instead of relying on defaults.
+  await openDocuments(page)
 })
 test('four views, grouping, and keyboard preview', async ({ page }) => {
   await page.getByRole('grid', { name: '文件' }).click({ position: { x: 400, y: 400 } })
@@ -49,7 +58,7 @@ test('closing the last tab reopens the configured start page', async ({ page }) 
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(1)
-  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByRole('tab')).toContainText('最近使用')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
 })
 test('closing the last tab collapses the split pane', async ({ page }) => {
@@ -57,7 +66,7 @@ test('closing the last tab collapses the split pane', async ({ page }) => {
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toBeVisible()
   await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(1)
-  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByRole('tab')).toContainText('最近使用')
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toHaveCount(0)
 })
 test('plugin search providers add results to the same query', async ({ page }) => {
@@ -249,12 +258,14 @@ test('Applications entry and search control', async ({ page }) => {
 })
 test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.evaluate(() => {
-    const key = 'fiex:preferences'
+    const key = 'fiex:e2e-state:explorer:preferences'
     const prefs = JSON.parse(localStorage.getItem(key) || '{}')
     localStorage.setItem(key, JSON.stringify({ ...prefs, terminal: 'builtin' }))
   })
   await page.reload()
+  await openDocuments(page)
   const contentHeight = await page.locator('.pane-main').evaluate((element) => element.clientHeight)
   await page.getByRole('button', { name: 'Open in Terminal' }).click()
   await expect(page.locator('.terminal-panel')).toBeVisible()
@@ -434,6 +445,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.getByRole('button', { name: '添加连接' }).click()
   await page.getByRole('menuitem', { name: '新建连接…' }).click()
   const dialog = page.getByRole('dialog')
@@ -490,6 +502,7 @@ test('ten thousand icons stay virtualized and support end selection and rename',
   page,
 }) => {
   await page.goto('/?fixture&count=10000')
+  await openDocuments(page)
   await expect(page.locator('.statusbar')).toContainText('10,015')
   await page.getByRole('button', { name: '图标视图', exact: true }).click()
   await expect(page.locator('.virtual-file-grid')).toBeVisible()
@@ -560,6 +573,7 @@ test('copy conflicts offer compare and keep both, ordinary pastes need no confir
 
 test('optional archive and checksum features are not preinstalled', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
@@ -701,6 +715,7 @@ test('caption buttons stay clear of tabs and the sidebar starts below the tab st
   page,
 }) => {
   await page.goto('/?fixture&platform=windows')
+  await openDocuments(page)
   await expect(page.getByText('Fiex — 产品设计.pdf', { exact: true })).toBeVisible()
   for (let i = 0; i < 12; i += 1)
     await page.getByRole('button', { name: '新建标签页', exact: true }).click()
@@ -773,6 +788,9 @@ test('nested plugin menus meet their parent without gap or overlap', async ({ pa
 })
 
 test('Core Open With submenu loads lazily and opens the application picker', async ({ page }) => {
+  // Open With must work for Recent entries too, where the original regression
+  // surfaced.
+  await page.getByRole('button', { name: '最近使用', exact: true }).click()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   const trigger = page.getByRole('menuitem', { name: '打开方式', exact: true })
   await expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
