@@ -21,27 +21,13 @@ fn badge(text: &'static str, color: &str, status: Option<&str>, icon: Option<&st
     }
 }
 fn connection(entry: &DecorationEntry) -> Vec<NativeBadge> {
-    let Some(status) = entry.sync.as_deref() else {
-        return vec![];
-    };
-    let value = match status {
-        "synced" => badge("已缓存", "green", Some(status), Some("cloud-check")),
-        "cloud" => badge("未缓存", "gray", Some(status), Some("cloud-download")),
-        "pinned" => badge("始终保留在本地", "purple", Some(status), Some("pin")),
-        "pending" => badge("等待上传", "orange", Some(status), Some("cloud-check")),
-        "conflict" => badge("同步冲突", "red", Some(status), Some("cloud-check")),
-        _ => return vec![],
-    };
-    let mut badges = vec![value];
-    if entry.uploaded && (entry.has_cache || entry.pinned) {
-        badges.push(badge(
-            "已上传",
-            "blue",
-            Some("uploaded"),
-            Some("cloud-upload"),
-        ));
-    }
-    badges
+    fiex_decorations::connection_badges(
+        entry.sync.as_deref(),
+        entry.uploaded,
+        entry.has_cache,
+        entry.pinned,
+        |value| crate::i18n::t(value).to_string(),
+    )
 }
 pub(super) fn resolve_in(
     kind: NativeKind,
@@ -74,35 +60,12 @@ pub(super) fn resolve_in(
         }
         let native_badges = match kind {
             NativeKind::ConnectionStatus => connection(entry),
-            NativeKind::Tags => entry
-                .tags
-                .iter()
-                .take(5)
-                .map(|tag| {
-                    const COLORS: &[&str] = &[
-                        "#8e8e93", "#8e8e93", "#34c759", "#af52de", "#007aff", "#ffcc00",
-                        "#ff3b30", "#ff9500",
-                    ];
-                    let color = tag
-                        .hex
-                        .as_deref()
-                        .filter(|hex| {
-                            hex.starts_with('#')
-                                && matches!(hex.len(), 4 | 7)
-                                && hex[1..].chars().all(|c| c.is_ascii_hexdigit())
-                        })
-                        .unwrap_or_else(|| {
-                            COLORS.get(tag.color as usize).copied().unwrap_or(COLORS[0])
-                        });
-                    NativeBadge {
-                        text: tag.name.clone(),
-                        tooltip: tag.name.clone(),
-                        color: color.into(),
-                        dot: true,
-                        ..Default::default()
-                    }
-                })
-                .collect(),
+            NativeKind::Tags => fiex_decorations::tag_badges(
+                entry
+                    .tags
+                    .iter()
+                    .map(|tag| (tag.name.as_str(), tag.color, tag.hex.as_deref())),
+            ),
             NativeKind::ApplicationIcon => unreachable!("application icon handled above"),
         };
         if !native_badges.is_empty() {
