@@ -17,14 +17,14 @@ impl ApplicationsStore {
     }
 }
 
-/// Resolve a node's canonical parent URI without inspecting display names.
+/// Resolve the parent path from the VFS hierarchy.
 pub fn parent_uri(uri: &str) -> Result<String, String> {
-    if folder_id(uri).is_none() && app_id(uri).is_none() {
-        return Err("invalid Applications node URI".into());
-    }
     let relative = uri
         .strip_prefix(URI)
         .ok_or("invalid Applications node URI")?;
+    if relative.is_empty() || relative.ends_with('/') {
+        return Err("invalid Applications node URI".into());
+    }
     let separator = relative.rfind('/');
     Ok(separator
         .map(|index| format!("{URI}{}", &relative[..index]))
@@ -37,18 +37,18 @@ pub fn validate_child_in(
     parent_uri: &str,
     child_uri: &str,
 ) -> Result<(), String> {
-    let expected_parent = folder_id_or_root(parent_uri)?;
+    let expected_parent = folder_id_or_root(state, parent_uri)?;
     if !parent_uri_matches(state, parent_uri) {
         return Err("StaleRef: Applications parent moved".into());
     }
-    if let Some(id) = folder_id(child_uri) {
+    if let Some(id) = folder_id(state, child_uri) {
         let folder = state.folders.get(&id);
         if folder.and_then(|item| item.parent.as_deref()) == expected_parent.as_deref()
             && folder_uri_in(state, &id).as_deref() == Some(child_uri)
         {
             return Ok(());
         }
-    } else if let Some(id) = app_id(child_uri) {
+    } else if let Some(id) = app_id(state, child_uri) {
         let app = state.apps.get(&id);
         if app.and_then(|item| item.parent.as_deref()) == expected_parent.as_deref()
             && app_uri_in(state, &id).as_deref() == Some(child_uri)
@@ -64,17 +64,18 @@ fn move_nodes_in_state(
     uris: &[String],
     target_uri: &str,
 ) -> Result<Vec<String>, String> {
-    let target = folder_id_or_root(target_uri)?;
-    let mut ids = Vec::new();
+    let target = folder_id_or_root(state, target_uri)?;
+    let mut resolved = Vec::new();
     for uri in uris {
-        if let Some(id) = folder_id(uri) {
-            ids.push((id, true));
-        } else if let Some(id) = app_id(uri) {
-            ids.push((id, false));
+        if let Some(id) = folder_id(state, uri) {
+            resolved.push((id, true));
+        } else if let Some(id) = app_id(state, uri) {
+            resolved.push((id, false));
         } else {
             return Err("invalid Applications node".into());
         }
     }
+    let mut ids = resolved.clone();
     ids.sort();
     ids.dedup();
     require_parent(state, target.as_deref())?;
@@ -82,9 +83,9 @@ fn move_nodes_in_state(
         return Err("StaleRef: Applications destination moved".into());
     }
     for uri in uris {
-        let current = folder_id(uri)
+        let current = folder_id(state, uri)
             .and_then(|id| folder_uri_in(state, &id))
-            .or_else(|| app_id(uri).and_then(|id| app_uri_in(state, &id)));
+            .or_else(|| app_id(state, uri).and_then(|id| app_uri_in(state, &id)));
         if current.as_deref() != Some(uri) {
             return Err("StaleRef: Applications item moved".into());
         }
@@ -176,23 +177,23 @@ fn move_nodes_in_state(
         }
     }
 
-    uris.iter()
-        .map(|uri| {
-            if let Some(id) = folder_id(uri) {
-                return folder_uri_in(state, &id)
+    resolved
+        .iter()
+        .map(|(id, is_folder)| {
+            if *is_folder {
+                return folder_uri_in(state, id)
                     .ok_or_else(|| "NotFound: application folder".into());
             }
-            let id = app_id(uri).ok_or("invalid Applications node")?;
-            app_uri_in(state, &id).ok_or_else(|| "NotFound: application".into())
+            app_uri_in(state, id).ok_or_else(|| "NotFound: application".into())
         })
         .collect()
 }
 
-fn folder_id_or_root(uri: &str) -> Result<Option<String>, String> {
+fn folder_id_or_root(state: &ApplicationsState, uri: &str) -> Result<Option<String>, String> {
     if uri == URI {
         Ok(None)
     } else {
-        folder_id(uri)
+        folder_id(state, uri)
             .map(Some)
             .ok_or_else(|| "invalid Applications folder URI".into())
     }

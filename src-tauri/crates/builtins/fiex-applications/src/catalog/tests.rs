@@ -65,16 +65,13 @@ fn catalog_caches_reads_and_preserves_stable_identity_across_refreshes() {
     backend.applications.lock().unwrap()[0] = application("Editor Renamed");
     let refreshed = catalog.refresh().unwrap();
     assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
-    assert_eq!(refreshed[0].uri, initial[0].uri);
+    assert_ne!(refreshed[0].uri, initial[0].uri);
+    assert_eq!(initial[0].uri, "applications://Editor");
+    assert_eq!(refreshed[0].uri, "applications://Editor%20Renamed");
     assert_eq!(refreshed[0].display_name, "Editor Renamed");
     let persisted = store.snapshot().unwrap();
-    let id = refreshed[0]
-        .uri
-        .strip_prefix(crate::URI)
-        .unwrap()
-        .strip_prefix(crate::APP_SEGMENT)
-        .unwrap();
-    assert_eq!(persisted.apps[id].display_name, "Editor Renamed");
+    let id = app_id(&persisted, &refreshed[0].uri).unwrap();
+    assert_eq!(persisted.apps[&id].display_name, "Editor Renamed");
 }
 
 #[test]
@@ -89,14 +86,10 @@ fn missing_system_app_is_retained_as_unavailable_with_its_identity() {
     backend.applications.lock().unwrap().clear();
     assert!(catalog.refresh().unwrap().is_empty());
 
-    let id = uri
-        .strip_prefix(crate::URI)
-        .unwrap()
-        .strip_prefix(crate::APP_SEGMENT)
-        .unwrap();
     let state = store.snapshot().unwrap();
-    assert!(state.apps[id].unavailable);
-    assert!(app_uri_in(&state, id).is_some());
+    let id = app_id(&state, &uri).unwrap();
+    assert!(state.apps[&id].unavailable);
+    assert!(app_uri_in(&state, &id).is_some());
 }
 
 #[test]
@@ -120,7 +113,7 @@ fn decoration_info_tracks_system_apps_after_they_move_into_virtual_folders() {
     });
     let catalog = ApplicationCatalog::new(store.clone(), backend);
     let original = catalog.entries().unwrap()[0].uri.clone();
-    let id = app_id(&original).unwrap();
+    let id = app_id(&store.snapshot().unwrap(), &original).unwrap();
 
     let tree = store
         .update(|tree| {

@@ -1,6 +1,5 @@
 import { call } from './api'
 import type { Location } from './types'
-const KEY = 'fiex:locations:v1'
 let snapshot: Location[] = []
 export function readCachedLocations(): Location[] {
   return snapshot
@@ -10,21 +9,7 @@ export async function loadCachedLocations(): Promise<Location[]> {
     namespace: 'explorer',
     key: 'locations',
   })
-  if (stored) {
-    snapshot = stored
-    localStorage.removeItem(KEY)
-    return stored
-  }
-  try {
-    const old = JSON.parse(localStorage.getItem(KEY) || '[]')
-    if (Array.isArray(old) && old.length) {
-      await call('state_put', { namespace: 'explorer', key: 'locations', value: old })
-      snapshot = old
-      localStorage.removeItem(KEY)
-    }
-  } catch {
-    /* malformed migration data is not a live location source */
-  }
+  snapshot = stored ?? []
   return snapshot
 }
 export function cacheLocations(locations: Location[]) {

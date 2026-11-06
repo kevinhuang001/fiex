@@ -3,7 +3,10 @@ import { t } from '@/i18n'
 import { tagHex } from '@/lib/tags'
 import type { DecorationBadge, Entry, EntryDecoration } from '@/lib/types'
 
-export function demoDecorations(entries: Entry[], plugins: EntryDecoration[]): EntryDecoration[] {
+export function fixtureDecorations(
+  entries: Entry[],
+  plugins: EntryDecoration[],
+): EntryDecoration[] {
   const byPath = new Map(plugins.map((value) => [value.path, value]))
   for (const entry of entries) {
     const badges: DecorationBadge[] = entry.tags

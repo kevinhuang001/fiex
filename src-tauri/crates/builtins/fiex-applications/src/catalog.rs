@@ -1,9 +1,10 @@
 //! Application discovery, stable identities, and platform boundary.
-use crate::{
-    app_uri, app_uri_in, ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore,
-};
+use crate::{app_uri_in, ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore};
 use sha2::{Digest, Sha256};
-use std::sync::{Arc, Condvar, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Condvar, Mutex},
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstalledApplication {
@@ -16,6 +17,7 @@ pub struct InstalledApplication {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CatalogApplication {
+    pub(crate) id: String,
     pub uri: String,
     pub display_name: String,
     pub icon_source: Option<String>,
@@ -43,7 +45,7 @@ pub(super) struct CatalogState {
     last_result: Option<Result<Vec<CatalogApplication>, String>>,
 }
 
-/// Caches installed applications while persisting their stable VFS identities.
+/// Caches installed applications while persisting stable internal identities.
 pub struct ApplicationCatalog {
     pub(super) store: ApplicationsStore,
     backend: Arc<dyn ApplicationsBackend>,
@@ -126,7 +128,7 @@ impl ApplicationCatalog {
 
     fn enumerate_and_register(&self) -> Result<Vec<CatalogApplication>, String> {
         let discovered = self.backend.enumerate_installed()?;
-        let records = discovered
+        let mut records = discovered
             .iter()
             .map(|application| {
                 (
@@ -135,17 +137,26 @@ impl ApplicationCatalog {
                 )
             })
             .collect::<Vec<_>>();
+        records.sort_by(|left, right| left.0.cmp(&right.0));
         let identities = self.store.register_system_apps(&records)?;
+        let tree = self.store.snapshot()?;
         discovered
             .into_iter()
             .map(|application| {
+                let id = system_id(&application.stable_locator);
                 let uri = identities
                     .get(&application.stable_locator)
                     .cloned()
                     .ok_or("system application identity was not persisted")?;
+                let display_name = tree
+                    .apps
+                    .get(&id)
+                    .map(|app| app.display_name.clone())
+                    .ok_or("system application state was not persisted")?;
                 Ok(CatalogApplication {
+                    id,
                     uri,
-                    display_name: application.display_name,
+                    display_name,
                     icon_source: application.icon_source,
                     extension: application.extension,
                     modified: application.modified,
@@ -165,15 +176,33 @@ impl ApplicationsStore {
             .map(|(locator, _)| (system_id(locator), locator.clone()))
             .collect::<Vec<_>>();
         let state = self.update(|state| {
+            let incoming = identities
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<HashSet<_>>();
+            let mut names = state
+                .folders
+                .values()
+                .map(|folder| (folder.parent.clone(), folder.name.to_lowercase()))
+                .chain(
+                    state
+                        .apps
+                        .values()
+                        .filter(|app| !incoming.contains(app.id.as_str()))
+                        .map(|app| (app.parent.clone(), app.display_name.to_lowercase())),
+                )
+                .collect::<HashSet<_>>();
             for app in state.apps.values_mut() {
                 if matches!(app.source, ApplicationSource::System { .. }) {
                     app.unavailable = true;
                 }
             }
             for ((_, name), (id, locator)) in records.iter().zip(identities.iter()) {
+                let parent = state.apps.get(id).and_then(|app| app.parent.clone());
+                let unique_name = unique_name(&safe_name(name), &parent, &mut names);
                 match state.apps.get_mut(id) {
                     Some(app) => {
-                        app.display_name = name.clone();
+                        app.display_name = unique_name;
                         app.unavailable = false;
                     }
                     None => {
@@ -183,7 +212,7 @@ impl ApplicationsStore {
                             ApplicationNode {
                                 id: id.clone(),
                                 parent: None,
-                                display_name: name.clone(),
+                                display_name: unique_name,
                                 source: ApplicationSource::System {
                                     stable_locator: locator.clone(),
                                 },
@@ -199,10 +228,42 @@ impl ApplicationsStore {
         Ok(identities
             .into_iter()
             .map(|(id, locator)| {
-                let uri = app_uri_in(&state, &id).unwrap_or_else(|| app_uri(&id));
+                let uri = app_uri_in(&state, &id).expect("system application was inserted");
                 (locator, uri)
             })
             .collect())
+    }
+}
+
+fn unique_name(
+    desired: &str,
+    parent: &Option<String>,
+    names: &mut HashSet<(Option<String>, String)>,
+) -> String {
+    let mut candidate = desired.to_owned();
+    let mut suffix = 2_u32;
+    while names.contains(&(parent.clone(), candidate.to_lowercase())) {
+        candidate = format!("{desired} ({suffix})");
+        suffix += 1;
+    }
+    names.insert((parent.clone(), candidate.to_lowercase()));
+    candidate
+}
+
+fn safe_name(value: &str) -> String {
+    let name = value
+        .chars()
+        .map(|character| match character {
+            '/' => '／',
+            '\\' => '＼',
+            character if character.is_control() => '�',
+            character => character,
+        })
+        .collect::<String>();
+    if name.trim().is_empty() {
+        "Unnamed application".into()
+    } else {
+        name
     }
 }
 

@@ -1,6 +1,6 @@
-import type { DemoPlugin } from './types'
+import type { FixturePlugin } from './types'
 
-const fixturePlugin: DemoPlugin = {
+const fixturePlugin: FixturePlugin = {
   id: 'org.test.fixture',
   name: '测试插件',
   version: '1.0.0',
@@ -28,13 +28,13 @@ const fixturePlugin: DemoPlugin = {
   },
 }
 
-export const fixturePlugins: DemoPlugin[] = [
+export const fixturePlugins: FixturePlugin[] = [
   fixturePlugin,
   {
     id: 'org.example.terminal',
     name: 'SSH',
     version: '1.0.0',
-    description: 'Demo connection provider for editing saved SSH sessions.',
+    description: 'Fixture connection provider for editing saved SSH sessions.',
     enabled: true,
     approved: true,
     backendAvailable: true,

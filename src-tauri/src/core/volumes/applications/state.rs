@@ -1,8 +1,7 @@
-//! Durable Applications tree. Folder and application IDs are stable VFS
-//! identities; physical paths exist only for imported assets.
+//! Durable Applications tree. Internal IDs remain stable across renames while
+//! VFS URI segments follow the visible folder and application names.
 mod assets;
 mod entries;
-mod migration;
 mod mutations;
 mod removal;
 mod reservations;
@@ -19,15 +18,15 @@ pub(super) use reservations::{
 };
 
 pub use fiex_applications::{
-    app_id, app_uri, folder_id, folder_uri, ApplicationNode, ApplicationSource, ApplicationsState,
-    PendingKind, PendingTarget, VirtualFolder,
+    app_id, folder_id, ApplicationNode, ApplicationSource, ApplicationsState, PendingKind,
+    PendingTarget, VirtualFolder,
 };
 use fiex_applications::{app_uri_in, child_uri, folder_uri_in, parent_uri_matches};
 const SCOPE: &str = fiex_applications::STORAGE_SCOPE;
 const KEY: &str = fiex_applications::STATE_KEY;
-pub(super) use fiex_applications::{
-    valid_extension, valid_id, validate_state, APP_SEGMENT, FOLDER_SEGMENT, SCHEMA,
-};
+pub(super) use fiex_applications::{valid_extension, valid_id};
+#[cfg(test)]
+use fiex_applications::{validate_state, SCHEMA};
 
 pub(super) fn storage() -> fiex_storage::native::NativeScopedStorage {
     super::super::native_vfs::management_storage_for_provider(fiex_applications::PROVIDER_ID, SCOPE)
@@ -40,7 +39,6 @@ pub fn snapshot() -> Result<ApplicationsState, String> {
 }
 
 pub(super) fn ensure_ready() -> Result<(), String> {
-    migration::ensure_migrated()?;
     removal::recover_pending()
 }
 
@@ -48,16 +46,15 @@ fn update<F>(mutate: F) -> Result<ApplicationsState, String>
 where
     F: FnMut(&mut ApplicationsState) -> Result<(), String>,
 {
-    migration::ensure_migrated()?;
     fiex_applications::ApplicationsStore::new(storage()).update(mutate)
 }
 
 pub fn is_folder(uri: &str) -> bool {
-    uri == super::URI || folder_id(uri).is_some()
+    uri == super::URI || snapshot().is_ok_and(|state| folder_id(&state, uri).is_some())
 }
 
 pub fn is_app(uri: &str) -> bool {
-    app_id(uri).is_some()
+    snapshot().is_ok_and(|state| app_id(&state, uri).is_some())
 }
 
 pub fn is_user_app(uri: &str) -> bool {
@@ -72,7 +69,8 @@ fn folder_id_or_root(uri: &str) -> Result<Option<String>, String> {
     if uri == super::URI {
         Ok(None)
     } else {
-        folder_id(uri)
+        let state = snapshot()?;
+        folder_id(&state, uri)
             .map(Some)
             .ok_or_else(|| "invalid Applications folder URI".into())
     }
@@ -148,18 +146,6 @@ mod tests {
     }
 
     #[test]
-    fn virtual_identity_is_opaque_and_independent_of_display_name() {
-        let id = "folder-0123456789abcdef";
-        let before = folder_uri(id);
-        let mut node = folder(id, None);
-        node.name = "Design".into();
-        let after_rename = folder_uri(&node.id);
-        assert_eq!(before, after_rename);
-        assert_eq!(folder_id(&before).as_deref(), Some(id));
-        assert!(folder_id("applications://folder_../escape").is_none());
-    }
-
-    #[test]
     fn virtual_paths_follow_the_visible_folder_tree_without_type_directories() {
         let mut state = ApplicationsState {
             schema: SCHEMA,
@@ -201,26 +187,25 @@ mod tests {
 
         assert_eq!(
             folder_uri_in(&state, "root-folder").as_deref(),
-            Some("applications://folder_root-folder")
+            Some("applications://root-folder")
         );
         assert_eq!(
             folder_uri_in(&state, "child-folder").as_deref(),
-            Some("applications://folder_root-folder/folder_child-folder")
+            Some("applications://root-folder/child-folder")
         );
         assert_eq!(
             app_uri_in(&state, "root-app").as_deref(),
-            Some("applications://app_root-app")
+            Some("applications://Root%20app")
         );
         assert_eq!(
             app_uri_in(&state, "nested-app").as_deref(),
-            Some("applications://folder_root-folder/folder_child-folder/app_nested-app")
+            Some("applications://root-folder/child-folder/Nested%20app")
         );
         assert_eq!(
-            parent_uri("applications://folder_root-folder/folder_child-folder/app_nested-app")
-                .unwrap(),
-            "applications://folder_root-folder/folder_child-folder"
+            parent_uri("applications://root-folder/child-folder/Nested%20app").unwrap(),
+            "applications://root-folder/child-folder"
         );
-        assert!(app_id("applications://app_root-app/app_nested-app").is_none());
+        assert!(app_id(&state, "applications://Root%20app/Nested%20app").is_none());
     }
 
     #[test]

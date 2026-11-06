@@ -1,7 +1,6 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
-#[cfg(test)]
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
@@ -20,6 +19,21 @@ use std::sync::Arc;
 
 mod implementations;
 use implementations::Reveal;
+
+pub(super) fn providers_for_context(context: &super::builtin::Context) -> Vec<Resolver> {
+    let registry = registry();
+    registry
+        .matched_candidates(
+            &context.match_targets,
+            context.directory_target.as_ref(),
+            context.paths.len(),
+        )
+        .into_iter()
+        .filter(|candidate| {
+            registry.module_id(&candidate.id).as_deref() != Some(fiex_actions::MODULE_ID)
+        })
+        .collect()
+}
 
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     let trash_module =
@@ -86,7 +100,6 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
     }
 }
 
-#[cfg(test)]
 fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
 }

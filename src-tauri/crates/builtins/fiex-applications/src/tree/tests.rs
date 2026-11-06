@@ -45,7 +45,8 @@ fn fixture() -> ApplicationsState {
 fn relocation_changes_only_the_virtual_tree_parent() {
     let mut state = fixture();
     let old_uri = app_uri_in(&state, "app").unwrap();
-    let moved = move_nodes_in_state(&mut state, &[old_uri], &crate::folder_uri("target")).unwrap();
+    let target = folder_uri_in(&state, "target").unwrap();
+    let moved = move_nodes_in_state(&mut state, &[old_uri], &target).unwrap();
     assert_eq!(state.apps["app"].parent.as_deref(), Some("target"));
     assert_eq!(moved, vec![app_uri_in(&state, "app").unwrap()]);
     assert_eq!(state.apps["app"].source, fixture().apps["app"].source);
@@ -65,8 +66,8 @@ fn moving_into_a_descendant_is_rejected_without_mutation() {
     );
     let before = state.clone();
     let target = folder_uri_in(&state, "nested").unwrap();
-    let error =
-        move_nodes_in_state(&mut state, &[crate::folder_uri("source")], &target).unwrap_err();
+    let source = folder_uri_in(&state, "source").unwrap();
+    let error = move_nodes_in_state(&mut state, &[source], &target).unwrap_err();
     assert_eq!(error, "Cannot move a folder into its descendant");
     assert_eq!(state, before);
 }
@@ -74,7 +75,7 @@ fn moving_into_a_descendant_is_rejected_without_mutation() {
 #[test]
 fn same_parent_is_a_no_op_and_child_validation_uses_canonical_uri() {
     let mut state = fixture();
-    let source = crate::folder_uri("source");
+    let source = folder_uri_in(&state, "source").unwrap();
     let app = app_uri_in(&state, "app").unwrap();
     let before = state.clone();
     assert_eq!(

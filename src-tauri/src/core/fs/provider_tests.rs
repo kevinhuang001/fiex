@@ -342,5 +342,5 @@ fn builtin_view_storage_and_presentation_are_separate() {
         native_vfs::provider_id(applications::URI),
         Some("core:applications")
     );
-    assert!(native_vfs::list(native_vfs::RECENT_URI, "core:test-migration").is_ok());
+    assert!(native_vfs::list(native_vfs::RECENT_URI, "core:test-recent").is_ok());
 }

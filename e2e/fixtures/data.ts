@@ -1,6 +1,6 @@
-// Demo file tree, history and static fixtures for the isolated ?demo route.
-import type { Entry } from '../types'
-import { basename, join } from '../files'
+// Fixture file tree, history and static fixtures for the isolated ?fixture route.
+import type { Entry } from '@/lib/types'
+import { basename, join } from '@/lib/files'
 
 export const root = '/Users/kevin'
 const now = Date.now() / 1000
@@ -40,7 +40,7 @@ export function ignored(name: string, patterns: unknown): boolean {
 
 export const firstCommit = 'a'.repeat(40),
   secondCommit = 'b'.repeat(40)
-export const demoHistory = [
+export const fixtureHistory = [
   {
     id: secondCommit,
     shortId: 'bbbbbbbb',
@@ -58,14 +58,14 @@ export const demoHistory = [
     timestamp: now - 86400,
   },
 ]
-export const demoRoots = new Set([root + '/Documents'])
-export const demoChanges: Record<string, string> = { [root + '/Documents/Notes.md']: ' M' }
+export const fixtureRoots = new Set([root + '/Documents'])
+export const fixtureChanges: Record<string, string> = { [root + '/Documents/Notes.md']: ' M' }
 export const repoFor = (path: string) =>
-  [...demoRoots]
+  [...fixtureRoots]
     .sort((a, b) => b.length - a.length)
     .find((r) => path === r || path.startsWith(r + '/'))
 
-export let demoEntries = [
+export let fixtureEntries = [
   ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies'].map((x) =>
     item(join(root, x), true),
   ),
@@ -119,7 +119,7 @@ export let demoEntries = [
   item(root + '/.Trash', true),
   item(root + '/.Trash/Old draft.txt', false, 'text/plain', 1200),
 ]
-demoEntries = demoEntries.map((entry) =>
+fixtureEntries = fixtureEntries.map((entry) =>
   entry.name === 'Notes.md'
     ? {
         ...entry,
@@ -136,7 +136,7 @@ const bulkCount = Math.min(
   Math.max(0, Number(new URLSearchParams(location.search).get('count')) || 0),
 )
 for (let i = 0; i < bulkCount; i++)
-  demoEntries.push(
+  fixtureEntries.push(
     item(
       root + '/Documents/zz-file-' + String(i).padStart(5, '0') + '.txt',
       false,
@@ -145,11 +145,11 @@ for (let i = 0; i < bulkCount; i++)
     ),
   )
 
-export let demoGitEntries: Record<string, string> = {
+export let fixtureGitEntries: Record<string, string> = {
   '/Users/kevin/Documents/Notes.md': ' M',
 }
 
-export const demoGpgKeys = [
+export const fixtureGpgKeys = [
   {
     fingerprint: '0123456789ABCDEF0123456789ABCDEF01234567',
     keyId: '01234567',
@@ -168,44 +168,44 @@ export const demoGpgKeys = [
   },
 ]
 
-export const demoRemoteRoot = 'fiex://mount/demo-webdav'
+export const fixtureRemoteRoot = 'fiex://mount/demo-webdav'
 
 /** Connection fixture covering every cache/pin badge, including a conflict. */
-export const demoRemoteEntries: Entry[] = [
+export const fixtureRemoteEntries: Entry[] = [
   {
-    ...item(demoRemoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
+    ...item(fixtureRemoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
     sync: 'synced',
     hasCache: true,
     uploaded: true,
   },
   {
-    ...item(demoRemoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
+    ...item(fixtureRemoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
     sync: 'synced',
     hasCache: true,
   },
   {
-    ...item(demoRemoteRoot + '/设计素材.psd', false, 'image/vnd.adobe.photoshop', 88_000_000),
+    ...item(fixtureRemoteRoot + '/设计素材.psd', false, 'image/vnd.adobe.photoshop', 88_000_000),
     sync: 'pinned',
     pinned: true,
     hasCache: true,
     uploaded: true,
   },
   {
-    ...item(demoRemoteRoot + '/季度汇报.key', false, 'application/vnd.apple.keynote', 6_400_000),
+    ...item(fixtureRemoteRoot + '/季度汇报.key', false, 'application/vnd.apple.keynote', 6_400_000),
     sync: 'conflict',
     hasCache: true,
   },
   {
-    ...item(demoRemoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
+    ...item(fixtureRemoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
     sync: 'cloud',
   },
-  { ...item(demoRemoteRoot + '/2026 规划', true), sync: 'synced', hasCache: true },
+  { ...item(fixtureRemoteRoot + '/2026 规划', true), sync: 'synced', hasCache: true },
   {
-    ...item(demoRemoteRoot + '/离线备份', true),
+    ...item(fixtureRemoteRoot + '/离线备份', true),
     sync: 'pinned',
     pinned: true,
     hasCache: true,
   },
 ]
 
-export const demoRemoteWarnings = ['季度汇报.key: 本地与云端均有修改，请处理同步冲突']
+export const fixtureRemoteWarnings = ['季度汇报.key: 本地与云端均有修改，请处理同步冲突']

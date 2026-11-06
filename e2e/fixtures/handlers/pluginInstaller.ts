@@ -1,4 +1,4 @@
-import { demoPlugins, marketplace } from '../plugins'
+import { fixturePlugins, marketplace } from '../plugins'
 import { notHandled } from './shared'
 const preparedInstalls = new Map<
   string,
@@ -81,8 +81,8 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
       const entry = preparedInstalls.get(String(a.ticket))
       if (!entry) throw new Error('安装预览已过期')
       preparedInstalls.delete(String(a.ticket))
-      if (!demoPlugins.some((plugin) => plugin.id === entry.id)) {
-        demoPlugins.push({
+      if (!fixturePlugins.some((plugin) => plugin.id === entry.id)) {
+        fixturePlugins.push({
           id: entry.id,
           name: entry.name,
           version: entry.version,
@@ -105,8 +105,8 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
       preparedInstalls.delete(String(a.ticket))
       return null
     case 'plugin_uninstall': {
-      const index = demoPlugins.findIndex((plugin) => plugin.id === a.pluginId)
-      if (index >= 0) demoPlugins.splice(index, 1)
+      const index = fixturePlugins.findIndex((plugin) => plugin.id === a.pluginId)
+      if (index >= 0) fixturePlugins.splice(index, 1)
       return null
     }
     default:

@@ -50,15 +50,60 @@ fn store_validates_updates_and_advances_revision_once() {
 }
 
 #[test]
-fn virtual_identity_is_opaque_and_independent_of_display_name() {
+fn persisted_state_requires_all_current_fields() {
+    let missing_apps: Result<ApplicationsState, _> = serde_json::from_value(serde_json::json!({
+        "schema": SCHEMA,
+        "revision": 0,
+        "folders": {}
+    }));
+    assert!(missing_apps.is_err());
+
+    let obsolete_field: Result<ApplicationsState, _> = serde_json::from_value(serde_json::json!({
+        "schema": SCHEMA,
+        "revision": 0,
+        "folders": {},
+        "apps": {},
+        "migrationId": "old-layout"
+    }));
+    assert!(obsolete_field.is_err());
+
+    let missing_unavailable: Result<ApplicationNode, _> =
+        serde_json::from_value(serde_json::json!({
+            "id": "app",
+            "parent": null,
+            "displayName": "Editor",
+            "source": { "kind": "system", "stableLocator": "editor" },
+            "order": 0
+        }));
+    assert!(missing_unavailable.is_err());
+
+    let missing_extension: Result<ApplicationSource, _> =
+        serde_json::from_value(serde_json::json!({
+            "kind": "imported",
+            "assetId": "asset"
+        }));
+    assert!(missing_extension.is_err());
+}
+
+#[test]
+fn virtual_uri_tracks_visible_folder_name_and_encodes_segments() {
     let id = "folder-0123456789abcdef";
-    let before = folder_uri(id);
+    let mut state = ApplicationsState {
+        schema: SCHEMA,
+        ..Default::default()
+    };
     let mut node = folder(id, None);
-    node.name = "Design".into();
-    let after_rename = folder_uri(&node.id);
-    assert_eq!(before, after_rename);
-    assert_eq!(folder_id(&before).as_deref(), Some(id));
-    assert!(folder_id("applications://folder_../escape").is_none());
+    node.name = "Design Folder".into();
+    state.folders.insert(id.into(), node);
+    let uri = folder_uri_in(&state, id).unwrap();
+    assert_eq!(uri, "applications://Design%20Folder");
+    assert_eq!(folder_id(&state, &uri).as_deref(), Some(id));
+    assert!(folder_id(&state, "applications://Design%20Folder/%2E%2E").is_none());
+    state.folders.get_mut(id).unwrap().name = "Projects".into();
+    assert_eq!(
+        folder_uri_in(&state, id).as_deref(),
+        Some("applications://Projects")
+    );
 }
 
 #[test]
@@ -102,21 +147,33 @@ fn virtual_paths_follow_the_visible_folder_tree_without_type_directories() {
     );
     assert_eq!(
         folder_uri_in(&state, "root-folder").as_deref(),
-        Some("applications://folder_root-folder")
+        Some("applications://root-folder")
     );
     assert_eq!(
         folder_uri_in(&state, "child-folder").as_deref(),
-        Some("applications://folder_root-folder/folder_child-folder")
+        Some("applications://root-folder/child-folder")
     );
     assert_eq!(
         app_uri_in(&state, "root-app").as_deref(),
-        Some("applications://app_root-app")
+        Some("applications://Root%20app")
     );
     assert_eq!(
         app_uri_in(&state, "nested-app").as_deref(),
-        Some("applications://folder_root-folder/folder_child-folder/app_nested-app")
+        Some("applications://root-folder/child-folder/Nested%20app")
     );
-    assert!(app_id("applications://app_root-app/app_nested-app").is_none());
+    assert_eq!(
+        folder_id(&state, "applications://root-folder/child-folder").as_deref(),
+        Some("child-folder")
+    );
+    assert_eq!(
+        app_id(
+            &state,
+            "applications://root-folder/child-folder/Nested%20app"
+        )
+        .as_deref(),
+        Some("nested-app")
+    );
+    assert!(app_id(&state, "applications://Root%20app/Nested%20app").is_none());
 }
 
 #[test]

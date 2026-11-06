@@ -4,9 +4,9 @@
  * mirrors that contract so a plugin action can wait for the same Core-owned
  * prompt, which keeps the UI fixture honest.
  */
-import type { DemoPlugin } from './plugins/types'
+import type { FixturePlugin } from './plugins/types'
 
-export interface DemoPermissionRequest {
+export interface FixturePermissionRequest {
   pluginId: string
   pluginName: string
   icon?: string
@@ -16,13 +16,13 @@ export interface DemoPermissionRequest {
 }
 
 interface Pending {
-  request: DemoPermissionRequest
+  request: FixturePermissionRequest
   resolve: (allow: boolean) => void
 }
 
 const pending = new Map<string, Pending>()
 
-export function requestDemoPermission(request: DemoPermissionRequest): Promise<boolean> {
+export function requestFixturePermission(request: FixturePermissionRequest): Promise<boolean> {
   const id = `demo-permission-${crypto.randomUUID()}`
   return new Promise((resolve) => {
     pending.set(id, { request, resolve })
@@ -42,7 +42,10 @@ export function requestDemoPermission(request: DemoPermissionRequest): Promise<b
   })
 }
 
-function resolveDemoPermission(id: string, allow: boolean): DemoPermissionRequest | undefined {
+function resolveFixturePermission(
+  id: string,
+  allow: boolean,
+): FixturePermissionRequest | undefined {
   const entry = pending.get(id)
   if (!entry) return undefined
   pending.delete(id)
@@ -52,8 +55,12 @@ function resolveDemoPermission(id: string, allow: boolean): DemoPermissionReques
 
 /** Apply an allow decision to the demo catalog. Denials only resolve the
  *  pending action; they do not grant anything. */
-export function applyDemoPermissionResponse(id: string, allow: boolean, plugins: DemoPlugin[]) {
-  const request = resolveDemoPermission(id, allow)
+export function applyFixturePermissionResponse(
+  id: string,
+  allow: boolean,
+  plugins: FixturePlugin[],
+) {
+  const request = resolveFixturePermission(id, allow)
   if (!request || !allow) return
   const plugin = plugins.find((entry) => entry.id === request.pluginId)
   if (!plugin) return

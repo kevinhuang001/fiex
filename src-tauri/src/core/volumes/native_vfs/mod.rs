@@ -43,9 +43,7 @@ pub(crate) use extensions::{
 pub use extensions::{is_tree_path, parent_path, tree_path_key, validate_child};
 #[cfg(feature = "desktop")]
 pub(crate) use extensions::{navigation_source, open};
-pub(crate) use identity::{
-    identity, is_filesystem_path, is_host_path, reference_mount_id, storage_identity,
-};
+pub(crate) use identity::{identity, is_filesystem_path, is_host_path, reference_mount_id};
 pub use identity::{provider_id, shared_provider_id};
 #[cfg(test)]
 pub(crate) use presentation::navigable_source;
@@ -61,6 +59,17 @@ pub const APPLICATIONS_URI: &str = applications::URI;
 
 pub(crate) fn recent_services() -> Arc<dyn fiex_recent::RecentModuleServices> {
     recent_provider::services()
+}
+
+pub(crate) fn recent_source_for(alias: &str) -> Result<String, String> {
+    recent_provider::source_for(alias)
+}
+
+pub(crate) fn filter_recent_cached_entries(
+    entries: &mut Vec<crate::core::files::Entry>,
+) -> Result<(), String> {
+    let storage = management_storage_for_provider(fiex_recent::PROVIDER_ID, "history")?;
+    recent_provider::filter_cached_entries(entries, &storage)
 }
 
 pub(crate) fn trash_services() -> Arc<dyn fiex_trash::TrashModuleServices> {

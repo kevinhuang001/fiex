@@ -4,8 +4,7 @@ use fiex_provider_contracts::{
 };
 use serde_json::json;
 
-/// Legacy-shaped fixtures stay at the test boundary; production matching only
-/// accepts typed Core-resolved inputs.
+/// Production matching accepts typed Core-resolved inputs.
 trait MatchRulesTestExt {
     fn matches_event(&self, values: &[Value], directory: &str) -> bool;
 }

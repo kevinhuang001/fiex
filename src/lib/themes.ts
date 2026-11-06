@@ -9,12 +9,7 @@ export interface Theme {
 let applied: string[] = []
 export async function installedThemes(): Promise<Theme[]> {
   if (native) return call<Theme[]>('plugin_themes')
-  // The browser demo has no plugin host. In development the Vite server mirrors
-  // the sibling official theme packages so they stay previewable on the web;
-  // production browser builds have no plugins and no fallback.
-  if (!import.meta.env.DEV) return []
-  const response = await fetch('/__fiex_theme/index.json').catch(() => null)
-  return response?.ok ? ((await response.json()) as Theme[]) : []
+  return []
 }
 export function applyTheme(theme: Theme | undefined, mode: 'light' | 'dark') {
   const root = document.documentElement

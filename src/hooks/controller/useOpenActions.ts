@@ -60,11 +60,25 @@ export function useOpenActions({
       pane.navigate(e.path)
       return
     }
-    const remote = isRemotePath(e.path)
+    let targetPath = e.path
+    if (e.path.startsWith('recent://')) {
+      try {
+        targetPath = (
+          await call<{ parent: string; target: string }>('recent_navigation_target', {
+            alias: e.path,
+          })
+        ).target
+      } catch (error) {
+        const message = String(error)
+        if (!reportFilesystemPermissionError(message, e.name)) pane.setError(message)
+        return
+      }
+    }
+    const remote = isRemotePath(targetPath)
     // The listing snapshot can be stale after an upload or eviction. Ask the
     // cache registry before deciding whether this open needs an activity.
     const cached = remote
-      ? await call<boolean>('remote_cached', { path: e.path }).catch(() => Boolean(e.hasCache))
+      ? await call<boolean>('remote_cached', { path: targetPath }).catch(() => Boolean(e.hasCache))
       : false
     let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     void run(
@@ -76,8 +90,8 @@ export function useOpenActions({
         if (outcome.handled) {
           return
         }
-        if (remote) await call('remote_open', { path: e.path, onProgress })
-        else await call('open_path', { path: e.path })
+        if (remote) await call('remote_open', { path: targetPath, onProgress })
+        else await call('open_path', { path: targetPath })
       },
       e.name,
       false,

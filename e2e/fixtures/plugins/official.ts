@@ -1,10 +1,10 @@
-import type { DemoPlugin } from './types'
+import type { FixturePlugin } from './types'
 
 export const query = new URLSearchParams(location.search)
 export const officialMode =
   query.has('officialPlugins') ||
-  (import.meta.env.DEV && !query.has('demo') && !query.has('pluginFixture'))
-export const officialPlugins: DemoPlugin[] = officialMode
+  (import.meta.env.DEV && !query.has('fixture') && !query.has('pluginFixture'))
+export const officialPlugins: FixturePlugin[] = officialMode
   ? [
       {
         id: 'org.fiex.git',

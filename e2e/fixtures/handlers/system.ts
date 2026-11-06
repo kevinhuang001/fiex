@@ -2,7 +2,7 @@ import type { RemoteConnection } from '@/lib/types'
 import { root } from '../data'
 import { notHandled } from './shared'
 
-const demoConnections: RemoteConnection[] = [
+const fixtureConnections: RemoteConnection[] = [
   {
     id: 'demo-webdav',
     name: '团队 WebDAV',
@@ -23,7 +23,7 @@ const demoConnections: RemoteConnection[] = [
   },
 ]
 
-const demoConnectionSettings: Record<string, Record<string, string | number | boolean>> = {
+const fixtureConnectionSettings: Record<string, Record<string, string | number | boolean>> = {
   'demo-ssh': {
     host: 'server.example.com',
     port: 22,
@@ -33,7 +33,7 @@ const demoConnectionSettings: Record<string, Record<string, string | number | bo
   'demo-webdav': { url: 'https://example.com' },
 }
 
-let demoUsbMounted = true
+let fixtureUsbMounted = true
 
 export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
@@ -93,7 +93,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
           mounted: true,
           usbfs: false,
         },
-        ...(demoUsbMounted
+        ...(fixtureUsbMounted
           ? [
               {
                 name: 'SanDisk USB',
@@ -112,7 +112,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       ]
     case 'eject_device':
     case 'eject_usb':
-      demoUsbMounted = false
+      fixtureUsbMounted = false
       return null
     case 'detect_shells':
       return [
@@ -141,15 +141,15 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'plugin_file_dialog':
       return '/demo/background.svg'
     case 'remote_connection_config': {
-      const connection = demoConnections.find((item) => item.id === a.id)
+      const connection = fixtureConnections.find((item) => item.id === a.id)
       if (!connection) throw new Error('connection not found')
-      return { ...connection, settings: { ...demoConnectionSettings[connection.id] } }
+      return { ...connection, settings: { ...fixtureConnectionSettings[connection.id] } }
     }
     case 'save_remote_connection': {
       const input = a.input as RemoteConnection & {
         settings: Record<string, string | number | boolean>
       }
-      const existing = demoConnections.find((item) => item.id === input.id)
+      const existing = fixtureConnections.find((item) => item.id === input.id)
       if (input.id && !existing) throw new Error('connection not found')
       const connection: RemoteConnection = existing || {
         ...input,
@@ -160,12 +160,12 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       }
       connection.name = input.name
       connection.mountPath ||= 'fiex-plugin-view://' + connection.id
-      demoConnectionSettings[connection.id] = { ...input.settings }
-      if (!existing) demoConnections.push(connection)
+      fixtureConnectionSettings[connection.id] = { ...input.settings }
+      if (!existing) fixtureConnections.push(connection)
       return connection
     }
     case 'connection_open': {
-      const connection = demoConnections.find((item) => item.id === a.id)
+      const connection = fixtureConnections.find((item) => item.id === a.id)
       if (!connection) throw new Error('connection not found')
       return connection.mountPath.startsWith('fiex-plugin-view://')
         ? {
@@ -178,16 +178,16 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         : { kind: 'vfs', path: connection.mountPath }
     }
     case 'remote_connections':
-      return demoConnections
+      return fixtureConnections
     case 'update_connection_session': {
-      const connection = demoConnections.find((item) => item.id === String(a.id || ''))
+      const connection = fixtureConnections.find((item) => item.id === String(a.id || ''))
       if (!connection) throw new Error('connection not found')
       if (typeof a.saved === 'boolean') connection.saved = a.saved
       if (typeof a.autostart === 'boolean') connection.autostart = a.autostart
       return connection
     }
     case 'plugin_connection_menu_resolve': {
-      const connection = demoConnections.find((item) => item.id === String(a.connectionId || ''))
+      const connection = fixtureConnections.find((item) => item.id === String(a.connectionId || ''))
       if (!connection) throw new Error('connection not found')
       const vfs = connection.mountPath.startsWith('fiex://mount/')
       const session = crypto.randomUUID()
@@ -233,7 +233,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       return menu
     }
     case 'plugin_connection_menu_execute': {
-      const connection = demoConnections.find((item) => item.id === String(a.connectionId || ''))
+      const connection = fixtureConnections.find((item) => item.id === String(a.connectionId || ''))
       if (!connection) throw new Error('connection not found')
       const command = String(a.itemId || '')
       if (command === 'connection.edit')

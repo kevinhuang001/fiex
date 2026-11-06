@@ -4,7 +4,6 @@ pub mod files;
 pub mod fs;
 pub mod ignores;
 pub mod operations;
-pub mod recent;
 pub mod search;
 #[cfg(any(feature = "desktop", test))]
 pub(crate) mod shells;

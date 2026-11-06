@@ -294,15 +294,18 @@ fn query_scope(
         ctx.preflight = file_ops::preflight_availability(&ctx);
     }
     let resources = Arc::clone(&ctx.resources);
+    let native = if scope == MenuScope::Plugins {
+        Vec::new()
+    } else {
+        let mut candidates = builtin::providers(&ctx);
+        candidates.extend(native_views::providers_for_context(&ctx));
+        candidates
+    };
     let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &ctx.match_targets,
         directory,
-        if scope == MenuScope::Plugins {
-            Vec::new()
-        } else {
-            builtin::providers(&ctx)
-        },
+        native,
     );
     // Never invoke a plugin while resolving the Core-only top-level menu. For a
     // plugin-only request the empty seed above already excludes builtin rows.

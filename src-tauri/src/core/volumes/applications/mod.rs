@@ -153,9 +153,11 @@ pub fn system_entry(path: &str) -> Result<Entry, String> {
             if let Some(entry) = entries.iter().find(|entry| entry.path == path) {
                 return Ok(entry.clone());
             }
-            if entries.iter().any(|entry| {
-                state::app_id(&entry.path) == state::app_id(path) && state::app_id(path).is_some()
-            }) {
+            let tree = state::snapshot()?;
+            if entries
+                .iter()
+                .any(|entry| state::app_id(&tree, &entry.path).as_deref() == Some(node.id.as_str()))
+            {
                 return state::entry(path);
             }
         }

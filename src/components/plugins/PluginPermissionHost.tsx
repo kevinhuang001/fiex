@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
-import { call, demo, native } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { refreshPluginCatalog } from '@/lib/plugins'
 import {
   PluginPermissionPrompt,
@@ -59,15 +59,7 @@ export function PluginPermissionHost() {
         current.some((entry) => entry.id === request.id) ? current : [...current, request],
       )
     }
-    // Browser demo only: lets the local fixture exercise the real Core prompt
-    // component without a Tauri event bridge. Native builds never listen here.
-    const onDemoRequest = (event: Event) => {
-      receive((event as CustomEvent<RuntimePermissionRequest>).detail)
-    }
-    if (demo) window.addEventListener('fiex:demo-permission-request', onDemoRequest)
-    if (!native) {
-      return () => window.removeEventListener('fiex:demo-permission-request', onDemoRequest)
-    }
+    if (!native) return
     const requested = listen<RuntimePermissionRequest>('plugin-permission-request', ({ payload }) =>
       receive(payload),
     )
@@ -76,7 +68,6 @@ export function PluginPermissionHost() {
       setRequests((current) => current.filter((request) => request.id !== payload.id))
     })
     return () => {
-      window.removeEventListener('fiex:demo-permission-request', onDemoRequest)
       void requested.then((stop) => stop())
       void resolved.then((stop) => stop())
     }
