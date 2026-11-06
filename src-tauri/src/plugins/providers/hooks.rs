@@ -20,28 +20,6 @@ impl HookProvider for FailedHookProvider {
     }
 }
 
-struct RecentHook;
-
-impl HookProvider for RecentHook {
-    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<HookResult, ProviderError> {
-        let request = ctx
-            .input()?
-            .hook_request()
-            .ok_or_else(|| ProviderError::invalid_params("expected HookRequest"))?;
-        if request.event != "afterOpen" {
-            return Err(ProviderError::invalid_params(
-                "unexpected Recent hook event",
-            ));
-        }
-        let resource =
-            crate::plugins::native_invocation::NativeProviderInvocation::resource(ctx, 0)?;
-        let storage =
-            crate::plugins::native_invocation::NativeProviderInvocation::storage(ctx, "history")?;
-        crate::core::recent::record_opened(resource, &storage).map_err(ProviderError::internal)?;
-        Ok(HookResult { handled: false })
-    }
-}
-
 fn candidates(
     resource: &ResourceSnapshot,
     event: &str,

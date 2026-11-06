@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 mod implementations;
-use implementations::{EmptyTrash, RemoveFromRecent, Restore, Reveal};
+use implementations::{EmptyTrash, Restore, Reveal};
 
 #[cfg(test)]
 const PROVIDER_IDS: [&str; 4] = [
@@ -47,7 +47,8 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             "recent",
             "nonzero",
             79,
-            Arc::new(RemoveFromRecent) as Arc<dyn ContextMenuProvider>,
+            fiex_recent::RecentModule::new(crate::core::volumes::native_vfs::recent_services())
+                .context_menu(),
         ),
         (
             "builtin:restore",
