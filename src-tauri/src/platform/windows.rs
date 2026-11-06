@@ -19,33 +19,6 @@ pub(crate) fn eject_path(path: &str) -> Result<(), String> {
 }
 
 fn eject_drive(drive: char) -> Result<(), String> {
-    let script = r#"
-$ErrorActionPreference = 'Stop'
-$drive = $env:FIEX_EJECT_DRIVE
-$shell = New-Object -ComObject Shell.Application
-$item = $shell.Namespace(17).ParseName("${drive}:\")
-if ($null -eq $item) { $item = $shell.Namespace(17).ParseName("${drive}:") }
-if ($null -eq $item) { exit 2 }
-$verb = @($item.Verbs()) | Where-Object {
-  ($_.Name -replace '&', '') -match '^(Eject|弹出|退出)'
-} | Select-Object -First 1
-if ($null -ne $verb) { $verb.DoIt() } else { $item.InvokeVerb('Eject') }
-for ($i = 0; $i -lt 40; $i++) {
-  if (-not (Test-Path "${drive}:\")) { exit 0 }
-  Start-Sleep -Milliseconds 250
-}
-throw 'FIEX_EJECT_BUSY'
-"#;
-    let drive_text = drive.to_string();
-    let result = crate::core::volumes::windows_shell::run_with_env(
-        script,
-        &[("FIEX_EJECT_DRIVE", drive_text.as_str())],
-    );
-    match result {
-        Ok(_) => Ok(()),
-        Err(error) if error.contains("FIEX_EJECT_BUSY") => {
-            Err(crate::i18n::t("无法弹出该设备，请确认没有程序正在使用它").into())
-        }
-        Err(_) => Err(crate::i18n::t("无法弹出该设备").into()),
-    }
+    crate::core::volumes::windows_native::eject_drive(drive)
+        .map_err(|_| crate::i18n::t("无法弹出该设备，请确认没有程序正在使用它").to_string())
 }

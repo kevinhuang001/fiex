@@ -1,27 +1,23 @@
 use super::*;
 
 pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
-    let (provider, remote_session_id, directory, resources, depth) = {
+    let (provider, remote_session_id, directory, paths, resources, depth) = {
         let registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
         let session = registry.get(session_id).ok_or("menu session expired")?;
         if session.created.elapsed().as_secs() >= 90 || !allowed(session) {
             return Err("menu session expired".into());
         }
-        if session.provider.plugin.is_none() {
-            return Err("builtin submenu is not lazy".into());
-        }
         (
             session.provider.clone(),
-            session
-                .remote_session_id
-                .clone()
-                .ok_or("plugin session missing")?,
+            session.remote_session_id.clone(),
             session.directory.clone(),
+            session.paths.clone(),
             session.resources.clone(),
             *session.submenus.get(parent_id).ok_or("unknown submenu")?,
         )
     };
-    let params = json!({"menuSessionId":remote_session_id,"parentId":parent_id,
+    let menu_session_id = remote_session_id.as_deref().unwrap_or(session_id);
+    let params = json!({"menuSessionId":menu_session_id,"parentId":parent_id,
         "interactionId":crate::plugins::mounts::new_id()?});
     let request = ProviderRequest {
         method: "contextMenu.resolve".into(),
@@ -32,12 +28,22 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         resolver: provider.clone(),
         implementation,
     };
-    let invocation = NativeProviderInvocation::new(
-        request.method.clone(),
-        request.params.clone(),
-        resources.as_slice(),
-        None,
-    );
+    let invocation = if provider.plugin.is_none() {
+        let context = builtin::Context::load_for_menu(&directory, &paths, true)?;
+        file_ops::invocation_for(
+            &provider.id,
+            &context,
+            &request.method,
+            request.params.clone(),
+        )?
+    } else {
+        NativeProviderInvocation::new(
+            request.method.clone(),
+            request.params.clone(),
+            resources.as_slice(),
+            None,
+        )
+    };
     let result = EventRouter::resolve_shared(
         "contextMenu.resolve",
         vec![candidate],

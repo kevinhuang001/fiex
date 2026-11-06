@@ -26,6 +26,10 @@ export function search(
   engine: string,
   onBatch: (b: Batch) => void,
 ): Promise<void> {
+  if (e2eFixtures)
+    return call<Batch>('search_files', { pane, root, query, hidden, ignores, mode, engine }).then(
+      onBatch,
+    )
   const onBatchChannel = new Channel<Batch>()
   onBatchChannel.onmessage = onBatch
   return invoke('search_files', {

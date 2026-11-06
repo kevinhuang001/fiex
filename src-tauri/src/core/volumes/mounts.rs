@@ -430,76 +430,27 @@ fn unmounted_removable() -> Vec<Location> {
 
 #[cfg(all(windows, feature = "usbfs"))]
 fn unmounted_removable() -> Vec<Location> {
-    let script = r#"
-$usb = @(Get-Disk | Where-Object { $_.BusType -eq 'USB' } | Select-Object -ExpandProperty Number)
-Get-Partition | Where-Object { $usb -contains $_.DiskNumber } | ForEach-Object {
-  $v = Get-Volume -Partition $_ -ErrorAction SilentlyContinue
-  [pscustomobject]@{
-    Name = if ($v.FileSystemLabel) { $v.FileSystemLabel } else { 'USB ' + $_.PartitionNumber }
-    Device = "$($_.DiskNumber):$($_.PartitionNumber)"
-    DriveLetter = $_.DriveLetter
-    FileSystem = $v.FileSystem
-    GptType = $_.GptType
-    Size = [uint64]$_.Size
-    Remaining = [uint64]$v.SizeRemaining
-  }
-} | ConvertTo-Json -Compress
-"#;
-    let Ok(output) = crate::core::volumes::windows_shell::run(script) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&output) else {
-        return Vec::new();
-    };
-    let items = match value {
-        serde_json::Value::Array(items) => items,
-        serde_json::Value::Object(_) => vec![value],
-        _ => return Vec::new(),
-    };
-    let mut out = Vec::new();
-    for item in items {
-        let Some(device) = item
-            .get("Device")
-            .and_then(|v| v.as_str())
-            .filter(|v| !v.is_empty())
-        else {
-            continue;
-        };
-        let filesystem = item
-            .get("FileSystem")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
-        let has_drive_letter = item
-            .get("DriveLetter")
-            .and_then(|value| value.as_str())
-            .is_some_and(|value| !value.is_empty());
-        let fallback = active_fallback(device);
-        if fallback.is_none() && has_drive_letter {
-            continue;
-        }
-        let path = fallback
-            .as_ref()
-            .map(|mount| mount.path.clone())
-            .unwrap_or_default();
-        out.push(Location {
-            name: item
-                .get("Name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("USB")
-                .into(),
-            path,
-            kind: "disk".into(),
-            available: item.get("Remaining").and_then(|v| v.as_u64()).unwrap_or(0),
-            total: item.get("Size").and_then(|v| v.as_u64()).unwrap_or(0),
-            removable: true,
-            filesystem,
-            device: device.into(),
-            mounted: false,
-            usbfs: fallback.is_some(),
-        });
-    }
-    out
+    crate::core::volumes::windows_native::enumerate_unmounted_removable()
+        .into_iter()
+        .map(|volume| {
+            let fallback = active_fallback(&volume.device);
+            Location {
+                name: volume.name,
+                path: fallback
+                    .as_ref()
+                    .map(|mount| mount.path.clone())
+                    .unwrap_or_default(),
+                kind: "disk".into(),
+                available: volume.available,
+                total: volume.total,
+                removable: true,
+                filesystem: volume.filesystem,
+                device: volume.device,
+                mounted: false,
+                usbfs: fallback.is_some(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(any(
@@ -630,50 +581,16 @@ pub fn mount_device(device: &str) -> Result<String, String> {
 #[cfg(windows)]
 pub fn mount_device(device: &str) -> Result<String, String> {
     clear_usb_fallback(device);
-    let (disk, partition) = device
-        .split_once(':')
-        .ok_or_else(|| crate::i18n::t("无效设备").to_string())?;
-    if !disk.bytes().all(|value| value.is_ascii_digit())
-        || !partition.bytes().all(|value| value.is_ascii_digit())
-    {
-        return Err(crate::i18n::t("无效设备").into());
-    }
-    let script = r#"
-$ErrorActionPreference = 'Stop'
-$partition = Get-Partition -DiskNumber ([int]$env:FIEX_USB_DISK) -PartitionNumber ([int]$env:FIEX_USB_PARTITION)
-if (-not $partition.DriveLetter) {
-  Add-PartitionAccessPath -InputObject $partition -AssignDriveLetter
-  $partition = Get-Partition -DiskNumber ([int]$env:FIEX_USB_DISK) -PartitionNumber ([int]$env:FIEX_USB_PARTITION)
-}
-$volume = Get-Volume -Partition $partition -ErrorAction SilentlyContinue
-$letter = $partition.DriveLetter
-if ($letter) { $path = "$letter`:" + '\' } else { $path = '' }
-[pscustomobject]@{ Path = $path; FileSystem = $volume.FileSystem } | ConvertTo-Json -Compress
-"#;
-    let output = crate::core::volumes::windows_shell::run_with_env(
-        script,
-        &[("FIEX_USB_DISK", disk), ("FIEX_USB_PARTITION", partition)],
-    )
-    .map_err(|error| {
-        if error.starts_with("PowerShell exited") {
-            format!("{}: {error}", crate::i18n::t("无法使用系统驱动挂载该设备"))
-        } else {
-            error
-        }
-    })?;
-    let value: serde_json::Value =
-        serde_json::from_str(&output).map_err(|error| error.to_string())?;
-    let path = value
-        .get("Path")
-        .and_then(serde_json::Value::as_str)
-        .filter(|path| !path.is_empty())
-        .ok_or_else(|| crate::i18n::t("系统未为该设备分配挂载路径").to_string())?;
-    let filesystem = value
-        .get("FileSystem")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    match std::fs::read_dir(path) {
-        Ok(_) => Ok(path.into()),
+    let (path, filesystem) =
+        crate::core::volumes::windows_native::mount_volume(device).map_err(|error| {
+            if error.contains("No drive letter") {
+                crate::i18n::t("系统未为该设备分配挂载路径").to_string()
+            } else {
+                error
+            }
+        })?;
+    match std::fs::read_dir(&path) {
+        Ok(_) => Ok(path),
         Err(error) => {
             if windows_native_mount_unsupported(&error) {
                 let letter = path
@@ -685,7 +602,7 @@ if ($letter) { $path = "$letter`:" + '\' } else { $path = '' }
                     .ok_or_else(|| crate::i18n::t("系统未为该设备分配挂载路径").to_string())?;
                 let raw_device = format!(r"\\.\{letter}:");
                 #[cfg(feature = "usbfs")]
-                if let Some(fallback) = fallback_mount(device, &raw_device, path, filesystem) {
+                if let Some(fallback) = fallback_mount(device, &raw_device, &path, &filesystem) {
                     return fallback;
                 }
             }

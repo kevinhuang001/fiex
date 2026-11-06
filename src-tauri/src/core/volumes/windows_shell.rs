@@ -1,48 +1,4 @@
-//! Hidden PowerShell bridge for shell-namespace enumeration. It runs with no
-//! console window and never asks Explorer to show a folder.
-#[cfg(target_os = "windows")]
-pub fn run(script: &str) -> Result<String, String> {
-    run_with_env(script, &[])
-}
-
-#[cfg(target_os = "windows")]
-pub fn run_with_env(script: &str, environment: &[(&str, &str)]) -> Result<String, String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    // PowerShell 5 otherwise emits the active OEM code page for native stdout.
-    let script =
-        format!("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); {script}");
-    let mut not_found = None;
-    for executable in ["powershell.exe", "pwsh.exe"] {
-        match std::process::Command::new(executable)
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .envs(environment.iter().copied())
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-        {
-            Ok(output) if output.status.success() => {
-                return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            }
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                return Err(if stderr.is_empty() {
-                    format!("PowerShell exited with status {}", output.status)
-                } else {
-                    stderr
-                });
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                not_found = Some(error.to_string());
-            }
-            Err(error) => return Err(error.to_string()),
-        }
-    }
-    Err(if not_found.is_none() {
-        crate::i18n::t("无法访问系统应用列表").into()
-    } else {
-        not_found.unwrap_or_else(|| crate::i18n::t("无法访问系统应用列表").into())
-    })
-}
+//! Small Windows Shell helpers that still require Shell-specific COM APIs.
 
 /// Shell icon work is serialized through a bounded STA queue. Shell COM
 /// interfaces never cross worker threads, and application icons are disk
