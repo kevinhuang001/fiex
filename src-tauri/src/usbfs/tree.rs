@@ -1,32 +1,13 @@
 //! Read-only listing, lookup, search and copy-out operations.
 
-use super::mount::{btrfs_fs, ensure_access};
-use super::util::{clean_path, join_rel, FsKind, Route, UsbEntry};
+use super::{copy_file_to, ensure_access, list, read, Route};
 use std::path::{Path, PathBuf};
 
-mod drivers;
-mod stream;
-use drivers::*;
-pub use stream::{copy_file_to, read_at};
-
-pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
-    let _guard = super::access::lock(device)?;
-    if !Path::new(device).exists() {
-        return Err(crate::i18n::t("设备不存在").into());
-    }
-    match kind {
-        FsKind::Apfs => apple_list(device, path, FsKind::Apfs),
-        FsKind::Hfs => apple_list(device, path, FsKind::Hfs),
-        FsKind::Btrfs => btrfs_list(device, path),
-    }
-}
-
-pub fn read(device: &str, kind: FsKind, path: &str) -> Result<Vec<u8>, String> {
-    let _guard = super::access::lock(device)?;
-    match kind {
-        FsKind::Apfs => apple_read(device, path, FsKind::Apfs),
-        FsKind::Hfs => apple_read(device, path, FsKind::Hfs),
-        FsKind::Btrfs => btrfs_read(device, path),
+fn join_rel(rel: &str, name: &str) -> String {
+    if rel.is_empty() {
+        name.into()
+    } else {
+        format!("{}/{name}", rel.trim_matches('/'))
     }
 }
 
