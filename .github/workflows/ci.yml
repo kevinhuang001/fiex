@@ -264,7 +264,7 @@ jobs:
           CARGO_TERM_COLOR: never
         run: |
           set +e
-          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --target ${{ matrix.target }} --no-default-features --features fiex/usbfs -- -D warnings 2>&1 | tee clippy.log
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --target ${{ matrix.target }} --no-default-features --features fiex/ci-driver -- -D warnings 2>&1 | tee clippy.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             {
