@@ -2,6 +2,7 @@ use super::common::{display_parent, fallback_name, resource_kind, size_text, tim
 use crate::{InfoMetadataInput, Localization};
 use fiex_provider_contracts::{InfoFieldKey, InfoFieldResult, ResourceMetadata};
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -18,6 +19,16 @@ pub fn compute_metadata_fields(
     let stat = input.stat.as_ref();
     let projected = input.metadata.as_ref();
     let cancelled = input.cancelled.as_ref();
+    let directory_fields = fields
+        .iter()
+        .filter(|field| field.section_id == "directoryStats")
+        .map(|field| field.field_id.as_str())
+        .collect::<HashSet<_>>();
+    let directory_values = if is_local && !directory_fields.is_empty() {
+        directory_stat_values(local, &directory_fields, cancelled)?
+    } else {
+        HashMap::new()
+    };
     fields
         .iter()
         .map(|field| {
@@ -72,9 +83,7 @@ pub fn compute_metadata_fields(
                     Some(localization.text(if is_hidden(local, stat) { "是" } else { "否" }))
                 }
                 ("filesystem", id) if is_local => filesystem_value(id, stat, localization),
-                ("directoryStats", id) if is_local => {
-                    Some(directory_stat_value(local, id, cancelled)?)
-                }
+                ("directoryStats", id) if is_local => directory_values.get(id).cloned(),
                 _ => None,
             };
             Ok(InfoFieldResult {
@@ -184,16 +193,24 @@ fn filesystem_value(
     }
 }
 
-fn directory_stat_value(
+fn directory_stat_values(
     path: &Path,
-    field: &str,
+    requested: &HashSet<&str>,
     cancelled: &AtomicBool,
-) -> Result<String, String> {
-    let direct = matches!(field, "directFiles" | "directDirectories" | "directOther");
-    let mut count = 0_u64;
-    let mut bytes = 0_u64;
-    let mut stack = vec![PathBuf::from(path)];
-    while let Some(directory) = stack.pop() {
+) -> Result<HashMap<String, String>, String> {
+    let recursive = requested
+        .iter()
+        .any(|field| !matches!(*field, "directFiles" | "directDirectories" | "directOther"));
+    let mut direct_files = 0_u64;
+    let mut direct_directories = 0_u64;
+    let mut direct_other = 0_u64;
+    let mut recursive_files = 0_u64;
+    let mut recursive_directories = 0_u64;
+    let mut symbolic_links = 0_u64;
+    let mut recursive_size = 0_u64;
+    let mut allocated_size = 0_u64;
+    let mut stack = vec![(PathBuf::from(path), true)];
+    while let Some((directory, root)) = stack.pop() {
         if cancelled.load(Ordering::Acquire) {
             return Err("Info calculation cancelled".into());
         }
@@ -204,50 +221,65 @@ fn directory_stat_value(
             let entry = entry.map_err(|error| error.to_string())?;
             let metadata = fs::symlink_metadata(entry.path()).map_err(|error| error.to_string())?;
             let file_type = metadata.file_type();
-            if direct {
-                let matches = match field {
-                    "directFiles" => file_type.is_file(),
-                    "directDirectories" => file_type.is_dir(),
-                    "directOther" => !file_type.is_file() && !file_type.is_dir(),
-                    _ => false,
-                };
-                if matches {
-                    count += 1;
+            if root {
+                if file_type.is_file() {
+                    direct_files += 1;
+                } else if file_type.is_dir() {
+                    direct_directories += 1;
+                } else {
+                    direct_other += 1;
+                }
+            }
+            if !root && file_type.is_symlink() {
+                if requested.contains("symbolicLinks") {
+                    symbolic_links += 1;
                 }
             } else if file_type.is_symlink() {
-                if field == "symbolicLinks" {
-                    count += 1;
+                if requested.contains("symbolicLinks") && recursive {
+                    symbolic_links += 1;
                 }
             } else if file_type.is_dir() {
-                if field == "recursiveDirectories" {
-                    count += 1;
+                if recursive && requested.contains("recursiveDirectories") {
+                    recursive_directories += 1;
                 }
-                stack.push(entry.path());
-            } else if file_type.is_file() {
-                match field {
-                    "recursiveFiles" => count += 1,
-                    "recursiveSize" => bytes = bytes.saturating_add(metadata.len()),
-                    "recursiveAllocatedSize" => {
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::MetadataExt;
-                            bytes = bytes.saturating_add(metadata.blocks().saturating_mul(512));
-                        }
-                        #[cfg(not(unix))]
-                        {
-                            let _ = &metadata;
-                        }
+                if recursive {
+                    stack.push((entry.path(), false));
+                }
+            } else if file_type.is_file() && recursive {
+                if requested.contains("recursiveFiles") {
+                    recursive_files += 1;
+                }
+                if requested.contains("recursiveSize") {
+                    recursive_size = recursive_size.saturating_add(metadata.len());
+                }
+                if requested.contains("recursiveAllocatedSize") {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::MetadataExt;
+                        allocated_size =
+                            allocated_size.saturating_add(metadata.blocks().saturating_mul(512));
                     }
-                    _ => {}
                 }
             }
         }
-        if direct {
-            break;
+    }
+    let mut values = HashMap::new();
+    for (field, value) in [
+        ("directFiles", direct_files.to_string()),
+        ("directDirectories", direct_directories.to_string()),
+        ("directOther", direct_other.to_string()),
+        ("recursiveFiles", recursive_files.to_string()),
+        ("recursiveDirectories", recursive_directories.to_string()),
+        ("recursiveSize", size_text(recursive_size)),
+        ("symbolicLinks", symbolic_links.to_string()),
+    ] {
+        if requested.contains(field) {
+            values.insert(field.to_string(), value);
         }
     }
-    Ok(match field {
-        "recursiveSize" | "recursiveAllocatedSize" => size_text(bytes),
-        _ => count.to_string(),
-    })
+    #[cfg(unix)]
+    if requested.contains("recursiveAllocatedSize") {
+        values.insert("recursiveAllocatedSize".into(), size_text(allocated_size));
+    }
+    Ok(values)
 }

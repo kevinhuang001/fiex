@@ -1,9 +1,8 @@
 //! Persistent InfoProvider IPC identity with invocation-scoped resources.
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    InfoFieldKey, InfoFieldResult, InfoProvider, InfoSectionDescriptor, ProviderDescriptor,
-    ProviderError, ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule,
-    ProviderRequestContext,
+    InfoFieldKey, InfoFieldResult, InfoProvider, ProviderDescriptor, ProviderError,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     any::Any,
@@ -80,26 +79,6 @@ impl IpcInfo {
 }
 
 impl InfoProvider for IpcInfo {
-    fn describe(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
-        let services = self.services(ctx, "info.describe")?;
-        let response = crate::plugins::events::invoke_resources_with_context(
-            &services.plugin,
-            ctx.method(),
-            ctx.input()?
-                .to_params()
-                .map_err(ProviderError::invalid_params)?,
-            std::slice::from_ref(&services.resource),
-            None,
-            false,
-        )
-        .map_err(ProviderError::internal)?;
-        serde_json::from_value(response["sections"].clone())
-            .map_err(|error| ProviderError::invalid_params(error.to_string()))
-    }
-
     fn compute(
         &self,
         ctx: &dyn ProviderInvocation,
@@ -184,23 +163,6 @@ impl ScopedInfoProxy {
 }
 
 impl InfoProvider for ScopedInfoProxy {
-    fn describe(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
-        if ctx.method() != "info.describe" {
-            return Err(ProviderError::invalid_params(
-                "InfoProvider method mismatch",
-            ));
-        }
-        let invocation = CoreInfoInvocation::new(
-            ctx,
-            self.plugin.clone(),
-            self.resource.as_ref().clone(),
-            &self.provider_id,
-        )?;
-        self.handler.describe(&invocation)
-    }
     fn compute(
         &self,
         ctx: &dyn ProviderInvocation,

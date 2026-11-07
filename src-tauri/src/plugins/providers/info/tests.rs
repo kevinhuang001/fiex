@@ -13,19 +13,8 @@ fn metadata_descriptors_keep_file_and_directory_attributes_separate() {
         file.to_str().unwrap(),
         &file,
     );
-    let provider = native::provider("core.metadata").unwrap();
-
-    let describe = |resource: &crate::plugins::resource::resource_context::ResourceSnapshot| {
-        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
-            "info.describe",
-            serde_json::json!({}),
-            std::slice::from_ref(resource),
-            None,
-        );
-        provider.describe(&invocation).unwrap()
-    };
-    let file_sections = describe(&file_resource);
-    let directory_sections = describe(&directory);
+    let file_sections = native::sections("core.metadata", &file_resource).unwrap();
+    let directory_sections = native::sections("core.metadata", &directory).unwrap();
     let file_basic = file_sections
         .iter()
         .find(|section| section.id == "basic")

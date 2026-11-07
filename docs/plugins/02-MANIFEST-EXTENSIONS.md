@@ -37,7 +37,7 @@
 | `contextMenus`           | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute`                     |
 | `connectionContextMenus` | `true` 或 `{priority}`                             | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
 | `decorations`            | `{match?, priority?}`                              | `decorations.resolve`                                             |
-| `info`                   | `{match?, priority?}`                              | `info.describe / info.compute`                                    |
+| `info`                   | `{match?, priority?, sections}`                    | `info.compute`                                                    |
 | `preview`                | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                                    |
 | `connections`            | `{title, fields}`                                  | `connection.validate/open/create`                                 |
 | `vfs`                    | `{title}`                                          | `vfs.list/stat/read…`                                             |

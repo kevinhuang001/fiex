@@ -300,25 +300,16 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       return state.entries.find((e) => e.path === a.path)
     case 'file_parent':
       return parent(String(a.path ?? ''))
-    case 'file_info_session_open': {
+    case 'file_info_open': {
       const entry = state.entries.find((e) => e.path === a.path)
       if (!entry) throw new Error('文件不存在')
       const sessionId = `fixture-info-${crypto.randomUUID()}`
-      infoSessions.set(sessionId, { path: entry.path, sections: fixtureInfoSections(entry) })
-      return sessionId
-    }
-    case 'file_info_describe': {
-      const session = infoSessions.get(String(a.sessionId))
-      if (!session) throw new Error('Info session expired')
-      const entry = state.entries.find((item) => item.path === session.path)
-      if (!entry) throw new Error('Info resource no longer exists')
-      const channel = a.onPartial as
-        { onmessage?: (value: FixtureInfoSection[]) => void } | undefined
-      for (const field of session.sections.flatMap((section) => section.fields)) {
+      const sections = fixtureInfoSections(entry)
+      infoSessions.set(sessionId, { path: entry.path, sections })
+      for (const field of sections.flatMap((section) => section.fields)) {
         if (field.compute === 'onOpen') computeFixtureField(field, entry)
       }
-      for (const section of session.sections) channel?.onmessage?.([section])
-      return session.sections
+      return { sessionId, sections }
     }
     case 'file_info_compute': {
       const session = infoSessions.get(String(a.sessionId))
@@ -326,15 +317,31 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       const requests = a.fields as { sectionId: string; fieldId: string }[]
       const entry = state.entries.find((item) => item.path === session.path)
       if (!entry) throw new Error('Info resource no longer exists')
+      const updates = []
       for (const request of requests) {
-        const section = session.sections.find((item) => item.providerId === a.providerId)
+        const section = session.sections.find(
+          (item) =>
+            item.providerId === a.providerId &&
+            item.fields.some(
+              (candidate) =>
+                candidate.sectionId === request.sectionId && candidate.id === request.fieldId,
+            ),
+        )
         const field = section?.fields.find(
           (item) => item.sectionId === request.sectionId && item.id === request.fieldId,
         )
         if (!field) throw new Error('Info field is not declared')
         computeFixtureField(field, entry)
+        updates.push({
+          providerId: String(a.providerId),
+          sectionId: field.sectionId,
+          fieldId: field.id,
+          status: field.status,
+          value: field.value,
+          error: field.error,
+        })
       }
-      return session.sections
+      return { sessionId: String(a.sessionId), revision: 1, updates }
     }
     case 'file_info_cancel':
       return null

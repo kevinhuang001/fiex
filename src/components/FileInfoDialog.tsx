@@ -28,6 +28,35 @@ type InfoSection = {
   fields: InfoField[]
   error?: string
 }
+type InfoFieldUpdate = {
+  providerId: string
+  sectionId: string
+  fieldId: string
+  status: InfoField['status']
+  value?: string
+  error?: string
+}
+type InfoFieldDelta = { sessionId: string; revision: number; updates: InfoFieldUpdate[] }
+type InfoOpenResult = { sessionId: string; sections: InfoSection[] }
+
+function mergeFieldUpdates(sections: InfoSection[], updates: InfoFieldUpdate[]) {
+  if (!updates.length) return sections
+  const byKey = new Map(
+    updates.map((update) => [
+      `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
+      update,
+    ]),
+  )
+  return sections.map((section) => ({
+    ...section,
+    fields: section.fields.map((field) => {
+      const update = byKey.get(`${section.providerId}\u0000${field.sectionId}\u0000${field.id}`)
+      return update
+        ? { ...field, status: update.status, value: update.value, error: update.error }
+        : field
+    }),
+  }))
+}
 
 export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose: () => void }) {
   const [sections, setSections] = useState<InfoSection[]>([])
@@ -36,6 +65,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const copiedTimer = useRef<number | null>(null)
   const sessionId = useRef<string | null>(null)
   const tasks = useRef(new Set<string>())
+  const earlyUpdates = useRef(new Map<string, InfoFieldUpdate>())
 
   useEffect(
     () => () => {
@@ -50,30 +80,34 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     let activeSession: string | null = null
     setSections([])
     setLoading(true)
-    const onPartial = native ? new Channel<InfoSection[]>() : undefined
-    if (onPartial)
-      onPartial.onmessage = (partial) => {
-        if (!alive || !Array.isArray(partial)) return
-        setSections((previous) => {
-          const merged = new Map(previous.map((section) => [section.id, section]))
-          for (const section of partial) merged.set(section.id, section)
-          return [...merged.values()]
-        })
+    earlyUpdates.current.clear()
+    const onUpdate = native ? new Channel<InfoFieldDelta>() : undefined
+    if (onUpdate)
+      onUpdate.onmessage = (delta) => {
+        if (!alive || !Array.isArray(delta?.updates)) return
+        for (const update of delta.updates) {
+          earlyUpdates.current.set(
+            `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
+            update,
+          )
+        }
+        setSections((previous) => mergeFieldUpdates(previous, delta.updates))
       }
     const open = async () => {
       try {
-        activeSession = await call<string>('file_info_session_open', { path: info.path })
+        const result = await call<InfoOpenResult>('file_info_open', {
+          path: info.path,
+          ...(onUpdate ? { onUpdate } : {}),
+        })
+        activeSession = result.sessionId
         if (!alive) {
           await call('file_info_session_close', { sessionId: activeSession }).catch(() => {})
           return
         }
         sessionId.current = activeSession
-        await call<InfoSection[]>('file_info_describe', {
-          sessionId: activeSession,
-          ...(onPartial ? { onPartial } : {}),
-        }).then((value) => {
-          if (alive && Array.isArray(value)) setSections(value)
-        })
+        if (alive && Array.isArray(result.sections)) {
+          setSections(mergeFieldUpdates(result.sections, [...earlyUpdates.current.values()]))
+        }
       } catch (cause) {
         if (alive) reportError(cause, 'file-info')
       } finally {
@@ -114,14 +148,14 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
       ),
     )
     try {
-      const result = await call<InfoSection[]>('file_info_compute', {
+      const result = await call<InfoFieldDelta>('file_info_compute', {
         sessionId: activeSession,
         providerId: section.providerId,
         fields: [{ sectionId: field.sectionId, fieldId: field.id }],
         taskId,
-        userInitiated: true,
       })
-      if (sessionId.current === activeSession && Array.isArray(result)) setSections(result)
+      if (sessionId.current === activeSession && result.sessionId === activeSession)
+        setSections((previous) => mergeFieldUpdates(previous, result.updates))
     } catch (cause) {
       if (sessionId.current === activeSession) {
         setSections((previous) =>

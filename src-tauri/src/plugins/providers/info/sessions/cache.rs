@@ -1,35 +1,41 @@
 use super::*;
+use serde_json::json;
 use std::sync::Condvar;
 
-pub(super) fn core_cache_key(
-    resource: &ResourceSnapshot,
-    provider_id: &str,
-    field: &InfoFieldKey,
-) -> Option<String> {
-    if !provider_id.starts_with("core.") || field.section_id == "directoryStats" {
+fn field_key(base: &str, provider_id: &str, field: &InfoFieldKey) -> Option<String> {
+    if field.section_id == "directoryStats" {
         return None;
     }
+    Some(format!(
+        "{base}:{provider_id}:{}:{}",
+        field.section_id, field.field_id
+    ))
+}
+
+fn cache_base(resource: &ResourceSnapshot) -> Option<String> {
     let access = crate::core::fs::provider_registry::resource_access(&resource.display).ok()?;
     if access != crate::core::fs::provider_registry::ResourceAccess::HostPath {
         return None;
     }
-    crate::plugins::cache::key("info.field", &resource.local).map(|key| {
-        format!(
-            "{key}:{provider_id}:{}:{}",
-            field.section_id, field.field_id
-        )
-    })
+    crate::plugins::cache::key("info.field", &resource.local)
 }
 
 pub fn read_core_cache(
     resource: &ResourceSnapshot,
     provider_id: &str,
     fields: &[InfoFieldKey],
+    allow_plugin_cache: bool,
 ) -> Vec<InfoFieldResult> {
+    if provider_id.starts_with("plugin:") && !allow_plugin_cache {
+        return Vec::new();
+    }
+    let Some(base) = cache_base(resource) else {
+        return Vec::new();
+    };
     fields
         .iter()
         .filter_map(|field| {
-            let key = core_cache_key(resource, provider_id, field)?;
+            let key = field_key(&base, provider_id, field)?;
             let value = crate::plugins::cache::get(&key)?;
             let unavailable = value
                 .get("unavailable")
@@ -54,10 +60,17 @@ pub fn cache_core_results(
     provider_id: &str,
     requested: &[InfoFieldKey],
     results: &[InfoFieldResult],
+    allow_plugin_cache: bool,
 ) {
+    if provider_id.starts_with("plugin:") && !allow_plugin_cache {
+        return;
+    }
+    let Some(base) = cache_base(resource) else {
+        return;
+    };
     for field in requested {
         if let (Some(key), Some(result)) = (
-            core_cache_key(resource, provider_id, field),
+            field_key(&base, provider_id, field),
             results.iter().find(|value| {
                 value.section_id == field.section_id && value.field_id == field.field_id
             }),

@@ -30,7 +30,7 @@ Core 负责 Resolve，SDK 负责 Provide：
 
 | 功能        | Core                                              | SDK                             |
 | ----------- | ------------------------------------------------- | ------------------------------- |
-| Info        | `InfoProvider` registry + `IpcInfo`               | `InfoProvider`                  |
+| Info        | 静态 Manifest 字段注册 + `IpcInfo`                | `InfoProvider`                  |
 | Preview     | `PreviewProvider` registry + `IpcPreview`         | `PreviewProvider`               |
 | 右键菜单    | `ContextMenuProvider` registry + `IpcContextMenu` | `ContextMenuProvider`           |
 | 连接菜单    | `ConnectionContextMenuProvider` registry + IPC    | `ConnectionContextMenuProvider` |
@@ -75,7 +75,7 @@ Manifest 声明（这个包最多能申请什么）
 
 ## 事件合同
 
-- 标准事件：`info.describe / info.compute`、`preview.open`、`decorations.resolve`。
+- 标准事件：`info.compute`、`preview.open`、`decorations.resolve`。Info 字段在 Manifest 中静态注册；打开面板时 Core 立即展示字段，并只请求 `onOpen` 字段。
 - 系统交互事件：`contextMenu.resolve/execute`。
 - 自定义插件业务 RPC：通过单独授权的 `plugin.invoke` 保留，不与系统事件混用。
 - 导航：`connection.open/create` 只返回 `vfs` 或 `pluginView`。

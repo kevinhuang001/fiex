@@ -87,4 +87,45 @@ mod tests {
             .unwrap();
         assert!(basic.fields.iter().any(|field| field.id == "size"));
     }
+
+    #[test]
+    fn directory_statistics_compute_requested_fields_from_one_walk() {
+        use std::sync::{atomic::AtomicBool, Arc};
+
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("top.txt"), b"abc").unwrap();
+        std::fs::create_dir(root.path().join("nested")).unwrap();
+        std::fs::write(root.path().join("nested/inner.txt"), b"de").unwrap();
+        let input = InfoMetadataInput {
+            display: root.path().to_string_lossy().into_owned(),
+            local: root.path().to_path_buf(),
+            stat: Some(std::fs::metadata(root.path()).unwrap()),
+            metadata: Some(ResourceMetadata {
+                name: "root".into(),
+                kind: "directory".into(),
+                ..Default::default()
+            }),
+            is_local: true,
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+        let fields = [
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "directFiles".into(),
+            },
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "recursiveFiles".into(),
+            },
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "recursiveSize".into(),
+            },
+        ];
+        let values = compute_metadata_fields(&input, &fields, &localization()).unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].value.as_deref(), Some("1"));
+        assert_eq!(values[1].value.as_deref(), Some("2"));
+        assert_eq!(values[2].value.as_deref(), Some("5 B (5 bytes)"));
+    }
 }

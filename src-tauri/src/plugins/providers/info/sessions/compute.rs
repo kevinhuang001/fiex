@@ -1,19 +1,27 @@
+use super::super::{native, proxy::ScopedInfoProxy};
 use super::*;
+use fiex_provider_contracts::InfoProvider;
 use std::collections::HashSet;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ComputeTrigger {
+    OnOpen,
+    OnDemand,
+}
 
 pub fn compute_session(
     session_id: String,
     provider_id: String,
     fields: Vec<InfoFieldKey>,
     task_id: String,
-    user_initiated: bool,
-) -> Result<Vec<InfoSectionView>, String> {
-    if task_id.is_empty() || task_id.len() > 128 || fields.is_empty() || fields.len() > FIELD_LIMIT
-    {
-        return Err("invalid Info compute request".into());
-    }
-    compute_fields(&session_id, &provider_id, &fields, &task_id, user_initiated)?;
-    read_sections(&session_id)
+) -> Result<InfoFieldDelta, String> {
+    compute_fields(
+        &session_id,
+        &provider_id,
+        &fields,
+        &task_id,
+        ComputeTrigger::OnDemand,
+    )
 }
 
 pub fn compute_fields(
@@ -21,8 +29,12 @@ pub fn compute_fields(
     provider_id: &str,
     fields: &[InfoFieldKey],
     task_id: &str,
-    user_initiated: bool,
-) -> Result<(), String> {
+    trigger: ComputeTrigger,
+) -> Result<InfoFieldDelta, String> {
+    if task_id.is_empty() || task_id.len() > 128 || fields.is_empty() || fields.len() > FIELD_LIMIT
+    {
+        return Err("invalid Info compute request".into());
+    }
     let (resource, version_before, provider_state, cancelled) = {
         let mut store = sessions()
             .lock()
@@ -43,18 +55,19 @@ pub fn compute_fields(
                 .find(|section| section.id == field.section_id)
                 .and_then(|section| section.fields.iter().find(|item| item.id == field.field_id))
                 .ok_or("Info field is not declared by this provider")?;
-            if declaration.compute == InfoCompute::OnDemand && !user_initiated {
-                return Err("on-demand Info fields require a user action".into());
+            let expected = match trigger {
+                ComputeTrigger::OnOpen => InfoCompute::OnOpen,
+                ComputeTrigger::OnDemand => InfoCompute::OnDemand,
+            };
+            if declaration.compute != expected {
+                return Err("Info field does not match the Core compute trigger".into());
             }
         }
-        let cancelled = Arc::new(AtomicBool::new(false));
-        if session
-            .tasks
-            .insert(task_id.into(), cancelled.clone())
-            .is_some()
-        {
+        if session.tasks.contains_key(task_id) {
             return Err("Info task id is already active".into());
         }
+        let cancelled = Arc::new(AtomicBool::new(false));
+        session.tasks.insert(task_id.into(), cancelled.clone());
         (
             session.resource.clone(),
             session.version.clone(),
@@ -62,58 +75,55 @@ pub fn compute_fields(
             cancelled,
         )
     };
-    let result = compute_provider(
+
+    let user_action = trigger == ComputeTrigger::OnDemand;
+    let mut result = compute_provider(
         &provider_state.resolver,
         &resource,
         fields,
         cancelled.clone(),
-        user_initiated,
+        user_action,
     );
-    let mut store = sessions()
-        .lock()
-        .map_err(|_| "Info session store unavailable")?;
-    let session = store.get_mut(session_id).ok_or("Info session expired")?;
-    session.tasks.remove(task_id);
+    if result.is_ok() {
+        let latest = crate::plugins::resource::resource_context::resolve_from_directory_snapshot(
+            &resource.display,
+        );
+        result = match latest {
+            Ok(latest) if version(&latest) == version_before => result,
+            Ok(_) => Err("Info resource changed during calculation".into()),
+            Err(error) => Err(error),
+        };
+    }
     if cancelled.load(Ordering::Acquire) {
-        return Err("Info calculation cancelled".into());
+        result = Err("Info calculation cancelled".into());
     }
-    if session.version != version_before || version(&session.resource) != version_before {
-        return Err("Info resource changed during calculation".into());
-    }
-    let latest = crate::plugins::resource::resource_context::resolve_from_directory_snapshot(
-        &resource.display,
-    )?;
-    if version(&latest) != version_before {
-        return Err("Info resource changed during calculation".into());
-    }
-    let results = result?;
-    validate_field_results(fields, &results)?;
-    cache_core_results(&resource, &provider_state.resolver.id, fields, &results);
-    for section in session
-        .sections
-        .iter_mut()
-        .filter(|section| section.provider_id == provider_id)
+
     {
-        for field in &mut section.fields {
-            if let Some(request) = fields.iter().find(|request| {
-                request.section_id == field.section_id && request.field_id == field.id
-            }) {
-                if let Some(value) = results.iter().find(|result| {
-                    result.section_id == request.section_id && result.field_id == request.field_id
-                }) {
-                    field.status = if value.unavailable {
-                        "unavailable"
-                    } else {
-                        "ready"
-                    }
-                    .into();
-                    field.value = value.value.clone();
-                    field.error = None;
-                }
-            }
+        let mut store = sessions()
+            .lock()
+            .map_err(|_| "Info session store unavailable")?;
+        let session = store.get_mut(session_id).ok_or("Info session expired")?;
+        session.tasks.remove(task_id);
+        if session.version != version_before {
+            result = Err("Info resource changed during calculation".into());
         }
     }
-    Ok(())
+
+    match result {
+        Ok(results) => {
+            validate_field_results(fields, &results)?;
+            let allow_plugin_cache = plugin_cache_allowed(&provider_state.resolver);
+            cache_core_results(
+                &resource,
+                &provider_state.resolver.id,
+                fields,
+                &results,
+                allow_plugin_cache,
+            );
+            update_fields(session_id, provider_id, fields, &results, None)
+        }
+        Err(error) => mark_fields_error(session_id, provider_id, fields, &error),
+    }
 }
 
 fn compute_provider(
@@ -121,7 +131,7 @@ fn compute_provider(
     resource: &ResourceSnapshot,
     fields: &[InfoFieldKey],
     cancelled: Arc<AtomicBool>,
-    user_initiated: bool,
+    user_action: bool,
 ) -> Result<Vec<InfoFieldResult>, String> {
     if fields
         .iter()
@@ -138,17 +148,11 @@ fn compute_provider(
             crate::plugins::provider_registry::FsOperation::List,
         )?;
     }
-    let candidates = crate::plugins::provider_registry::candidates(
-        "info.compute",
-        &crate::plugins::events::matching::match_resources(std::slice::from_ref(resource)),
-        "",
-        native::candidates(resource),
-    );
-    let resolver = candidates
-        .into_iter()
-        .find(|candidate| candidate.id == resolver.id)
-        .ok_or("Info provider no longer matches this resource")?;
-    let cached = read_core_cache(resource, &resolver.id, fields);
+    if !provider_still_matches(resolver, resource) {
+        return Err("Info provider no longer matches this resource".into());
+    }
+    let allow_plugin_cache = plugin_cache_allowed(resolver);
+    let cached = read_core_cache(resource, &resolver.id, fields, allow_plugin_cache);
     if cached.len() == fields.len() {
         return Ok(cached);
     }
@@ -162,7 +166,7 @@ fn compute_provider(
         .cloned()
         .collect::<Vec<_>>();
     let _permit = ComputePermit::acquire(&cancelled)?;
-    let params = json!({"fields": missing});
+    let params = serde_json::json!({"fields": missing});
     let mut invocation = if resolver.plugin.is_none() {
         native::invocation_with_cancel(
             &resolver.id,
@@ -179,7 +183,7 @@ fn compute_provider(
             None,
         )
     };
-    if user_initiated {
+    if user_action {
         invocation = invocation.with_user_action_context(
             crate::core::fs::mapped_access::UserActionContext::from_core_event(),
         );
@@ -199,9 +203,47 @@ fn compute_provider(
         .compute(&invocation, &missing),
     }
     .map_err(|error| error.to_string())?;
+    if cancelled.load(Ordering::Acquire) {
+        return Err("Info calculation cancelled".into());
+    }
     let mut result = cached;
     result.extend(computed);
     Ok(result)
+}
+
+fn provider_still_matches(resolver: &Resolver, resource: &ResourceSnapshot) -> bool {
+    match resolver.plugin.as_deref() {
+        None => native::candidates(resource)
+            .iter()
+            .any(|candidate| candidate.id == resolver.id),
+        Some(plugin) => {
+            plugin.enabled
+                && plugin.approved
+                && plugin.backend_available
+                && crate::plugins::events::matching::matches_resources(
+                    "info.compute",
+                    &plugin.extensions,
+                    std::slice::from_ref(resource),
+                    None,
+                )
+        }
+    }
+}
+
+fn plugin_cache_allowed(resolver: &Resolver) -> bool {
+    let Some(plugin) = resolver.plugin.as_deref() else {
+        return true;
+    };
+    if !plugin
+        .declared_permissions
+        .iter()
+        .any(|permission| permission == "files.read")
+    {
+        return true;
+    }
+    let declared = plugin.declared_permissions.iter().cloned().collect();
+    crate::plugins::security::policy::PermissionPolicy::new(&plugin.id, &declared)
+        .allowed(crate::plugins::security::policy::Capability::FilesRead)
 }
 
 fn validate_field_results(

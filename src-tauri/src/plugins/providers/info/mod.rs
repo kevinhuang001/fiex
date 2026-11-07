@@ -10,8 +10,8 @@ mod native;
 mod proxy;
 mod sessions;
 pub(crate) use sessions::{
-    cancel_session_task, close_session, compute_session, describe_session, open_session,
-    InfoSectionView,
+    cancel_session_task, close_session, compute_fields, compute_session, initialize_session,
+    mark_fields_error, ComputeTrigger, InfoFieldDelta, InfoOpenResult,
 };
 
 pub(crate) fn register_native(

@@ -66,25 +66,37 @@ impl InfoModule {
             },
         ]
     }
+
+    /// Build Core-owned field descriptors from the already-resolved resource
+    /// snapshot. This path is synchronous and does not inspect file contents.
+    pub fn sections_for(
+        &self,
+        provider_id: &str,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
+        match provider_id {
+            "core.metadata" => {
+                let input = self.services.metadata_input(ctx)?;
+                Ok(metadata_descriptors(
+                    &input.display,
+                    input.is_local,
+                    input.stat.as_ref(),
+                    input.metadata.as_ref(),
+                    &self.services.localization(),
+                ))
+            }
+            "core.media" => {
+                let path = self.services.media_descriptor_path(ctx)?;
+                Ok(media_descriptors(&path, &self.services.localization()))
+            }
+            _ => Err(ProviderError::invalid_params("unknown Core Info provider")),
+        }
+    }
 }
 
 struct MetadataInfo(Arc<dyn InfoModuleServices>);
 
 impl InfoProvider for MetadataInfo {
-    fn describe(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
-        let input = self.0.metadata_input(ctx)?;
-        Ok(metadata_descriptors(
-            &input.display,
-            input.is_local,
-            input.stat.as_ref(),
-            input.metadata.as_ref(),
-            &self.0.localization(),
-        ))
-    }
-
     fn compute(
         &self,
         ctx: &dyn ProviderInvocation,
@@ -99,14 +111,6 @@ impl InfoProvider for MetadataInfo {
 struct MediaInfo(Arc<dyn InfoModuleServices>);
 
 impl InfoProvider for MediaInfo {
-    fn describe(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
-        let path = self.0.media_descriptor_path(ctx)?;
-        Ok(media_descriptors(&path, &self.0.localization()))
-    }
-
     fn compute(
         &self,
         ctx: &dyn ProviderInvocation,

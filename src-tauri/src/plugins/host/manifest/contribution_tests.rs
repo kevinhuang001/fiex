@@ -83,6 +83,9 @@ fn menu_registration_rejects_static_items_and_nested_syntax() {
 }
 #[test]
 fn match_predicates_are_scoped_by_extension_point() {
+    let info_sections = json!([{"id":"text","title":"Text","fields":[
+        {"id":"format","label":"Format","compute":"onOpen"}
+    ]}]);
     assert!(validate_extensions(&serde_json::json!({
         "decorations": {"match": {"contains": [".git"]}}
     }))
@@ -98,14 +101,14 @@ fn match_predicates_are_scoped_by_extension_point() {
     }))
     .is_ok());
     assert!(validate_extensions(&serde_json::json!({
-        "info": {"match": {"mimeTypes": ["text/*"]}}
+        "info": {"match": {"mimeTypes": ["text/*"]}, "sections": info_sections.clone()}
     }))
     .is_ok());
     for invalid in [
         serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
         serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
-        serde_json::json!({"info": {"match": {"exclude": {}}}}),
-        serde_json::json!({"info": {"match": {"contains": [".git"]}}}),
+        serde_json::json!({"info": {"match": {"exclude": {}}, "sections": info_sections.clone()}}),
+        serde_json::json!({"info": {"match": {"contains": [".git"]}, "sections": info_sections.clone()}}),
         serde_json::json!({"info": [{"id": "x"}]}),
         serde_json::json!({"info": {"title": "X"}}),
         serde_json::json!({"info": {"id": "x"}}),
@@ -113,6 +116,49 @@ fn match_predicates_are_scoped_by_extension_point() {
     ] {
         assert!(validate_extensions(&invalid).is_err(), "{invalid}");
     }
+}
+
+#[test]
+fn info_fields_are_static_strict_and_bounded() {
+    let field = json!({"id":"format","label":"Format","compute":"onDemand"});
+    let valid = json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[field]}]}});
+    assert!(validate_extensions(&valid).is_ok());
+
+    for invalid in [
+        json!({"info":{"match":{"extensions":["zip"]}}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format","compute":"onDemand","cost":"high"}
+        ]}]}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format","compute":"onDemand","valueType":"text"}
+        ]}]}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format","compute":"onDemand"}
+        ]}],"unknown":true}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format","compute":"onDemand"}
+        ]}],"priority":"high"}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format","compute":"onClick"}
+        ]}]}}),
+        json!({"info":{"sections":[{"id":"archive","title":"Archive","fields":[
+            {"id":"format","label":"Format"}
+        ]}]}}),
+        json!({"info":{"sections":[
+            {"id":"archive","title":"Archive","fields":[{"id":"format","label":"Format","compute":"onOpen"}]},
+            {"id":"archive","title":"Duplicate","fields":[{"id":"other","label":"Other","compute":"onOpen"}]}
+        ]}}),
+    ] {
+        assert!(validate_extensions(&invalid).is_err(), "{invalid}");
+    }
+
+    let too_many_fields = (0..65)
+        .map(|index| json!({"id":format!("field{index}"),"label":"Field","compute":"onDemand"}))
+        .collect::<Vec<_>>();
+    assert!(validate_extensions(&json!({"info":{"sections":[{
+        "id":"large","title":"Large","fields":too_many_fields
+    }]}}))
+    .is_err());
 }
 
 #[test]

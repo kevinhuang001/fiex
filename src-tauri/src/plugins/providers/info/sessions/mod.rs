@@ -1,20 +1,7 @@
-//! Core-owned Info sessions, descriptor validation, field caching and task cancellation.
-use super::{
-    native, proxy::ScopedInfoProxy, InfoCompute, InfoFieldKey, InfoFieldResult,
-    InfoSectionDescriptor,
-};
+//! Core-owned Info sessions, field caching and task cancellation.
+use super::{InfoCompute, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor};
 use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
-use fiex_provider_contracts::InfoProvider;
 use serde::Serialize;
-
-mod cache;
-mod compute;
-mod describe;
-pub(super) use cache::{cache_core_results, read_core_cache, ComputePermit};
-pub(super) use compute::compute_fields;
-pub(crate) use compute::compute_session;
-pub(crate) use describe::describe_session;
-use serde_json::json;
 use std::{
     collections::HashMap,
     sync::{
@@ -24,9 +11,16 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod cache;
+mod compute;
+mod initialize;
+pub(super) use cache::{cache_core_results, read_core_cache, ComputePermit};
+pub(crate) use compute::{compute_fields, compute_session, ComputeTrigger};
+pub(crate) use initialize::initialize_session;
+
 const SESSION_TTL: Duration = Duration::from_secs(900);
 const SESSION_LIMIT: usize = 128;
-const FIELD_LIMIT: usize = 64;
+pub(super) const FIELD_LIMIT: usize = 64;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,27 +51,56 @@ pub struct InfoSectionView {
     pub error: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InfoOpenResult {
+    pub session_id: String,
+    pub sections: Vec<InfoSectionView>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InfoFieldUpdate {
+    pub provider_id: String,
+    pub section_id: String,
+    pub field_id: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InfoFieldDelta {
+    pub session_id: String,
+    pub revision: u64,
+    pub updates: Vec<InfoFieldUpdate>,
+}
+
 #[derive(Clone)]
-struct ProviderState {
-    resolver: Resolver,
-    sections: Vec<InfoSectionDescriptor>,
+pub(super) struct ProviderState {
+    pub resolver: Resolver,
+    pub sections: Vec<InfoSectionDescriptor>,
 }
 
-struct Session {
-    resource: ResourceSnapshot,
-    version: String,
-    opened: Instant,
-    sections: Vec<InfoSectionView>,
-    providers: HashMap<String, ProviderState>,
-    tasks: HashMap<String, Arc<AtomicBool>>,
+pub(super) struct Session {
+    pub resource: ResourceSnapshot,
+    pub version: String,
+    pub opened: Instant,
+    pub sections: Vec<InfoSectionView>,
+    pub providers: HashMap<String, ProviderState>,
+    pub tasks: HashMap<String, Arc<AtomicBool>>,
+    pub revision: u64,
 }
 
-fn sessions() -> &'static Mutex<HashMap<String, Session>> {
+pub(super) fn sessions() -> &'static Mutex<HashMap<String, Session>> {
     static SESSIONS: OnceLock<Mutex<HashMap<String, Session>>> = OnceLock::new();
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn version(resource: &ResourceSnapshot) -> String {
+pub(super) fn version(resource: &ResourceSnapshot) -> String {
     let local = crate::plugins::cache::key("info.version", &resource.local);
     serde_json::to_string(&(
         &resource.reference,
@@ -88,7 +111,7 @@ fn version(resource: &ResourceSnapshot) -> String {
     .unwrap_or_default()
 }
 
-fn new_id(prefix: &str) -> String {
+pub(super) fn new_id(prefix: &str) -> String {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -128,88 +151,84 @@ fn expire_sessions(sessions: &mut HashMap<String, Session>) {
     }
 }
 
-pub fn open_session(path: String) -> Result<String, String> {
-    let resource =
-        crate::plugins::resource::resource_context::resolve_from_directory_snapshot(&path)?;
-    let _ = crate::core::fs::trusted_snapshot(&resource, "core:info")?;
-    let id = new_id("info");
-    let session = Session {
-        version: version(&resource),
-        resource,
-        opened: Instant::now(),
-        sections: Vec::new(),
-        providers: HashMap::new(),
-        tasks: HashMap::new(),
-    };
+pub(super) fn insert_session(id: String, session: Session) -> Result<(), String> {
     let mut store = sessions()
         .lock()
         .map_err(|_| "Info session store unavailable")?;
     expire_sessions(&mut store);
-    store.insert(id.clone(), session);
-    Ok(id)
+    store.insert(id, session);
+    Ok(())
 }
 
-fn read_sections(session_id: &str) -> Result<Vec<InfoSectionView>, String> {
-    let store = sessions()
-        .lock()
-        .map_err(|_| "Info session store unavailable")?;
-    store
-        .get(session_id)
-        .map(|session| session.sections.clone())
-        .ok_or_else(|| "Info session expired".into())
-}
-
-fn mark_fields_error(
-    session_id: &str,
-    provider_id: &str,
-    fields: &[InfoFieldKey],
-    error: &str,
-) -> Result<(), String> {
-    update_fields(session_id, provider_id, fields, &[], Some(error))
-}
-
-fn update_fields(
+pub(super) fn update_fields(
     session_id: &str,
     provider_id: &str,
     requested: &[InfoFieldKey],
     results: &[InfoFieldResult],
     error: Option<&str>,
-) -> Result<(), String> {
+) -> Result<InfoFieldDelta, String> {
     let mut store = sessions()
         .lock()
         .map_err(|_| "Info session store unavailable")?;
     let session = store.get_mut(session_id).ok_or("Info session expired")?;
+    let mut updates = Vec::new();
     for section in session
         .sections
         .iter_mut()
         .filter(|section| section.provider_id == provider_id)
     {
         for field in &mut section.fields {
-            if let Some(request) = requested.iter().find(|request| {
+            let Some(request) = requested.iter().find(|request| {
                 request.section_id == field.section_id && request.field_id == field.id
+            }) else {
+                continue;
+            };
+            if let Some(result) = results.iter().find(|result| {
+                result.section_id == request.section_id && result.field_id == request.field_id
             }) {
-                if let Some(result) = results.iter().find(|result| {
-                    result.section_id == request.section_id && result.field_id == request.field_id
-                }) {
-                    field.status = if result.unavailable {
-                        "unavailable"
-                    } else {
-                        "ready"
-                    }
-                    .into();
-                    field.value = result.value.clone();
-                    field.error = None;
-                } else if let Some(error) = error {
-                    field.status = "error".into();
-                    field.error = Some(crate::infrastructure::redact::clean(error, 1500));
+                field.status = if result.unavailable {
+                    "unavailable"
+                } else {
+                    "ready"
                 }
+                .into();
+                field.value = result.value.clone();
+                field.error = None;
+            } else if let Some(error) = error {
+                field.status = "error".into();
+                field.value = None;
+                field.error = Some(crate::infrastructure::redact::clean(error, 1500));
             }
+            updates.push(InfoFieldUpdate {
+                provider_id: provider_id.to_owned(),
+                section_id: field.section_id.clone(),
+                field_id: field.id.clone(),
+                status: field.status.clone(),
+                value: field.value.clone(),
+                error: field.error.clone(),
+            });
         }
     }
-    Ok(())
+    if !updates.is_empty() {
+        session.revision = session.revision.wrapping_add(1);
+    }
+    Ok(InfoFieldDelta {
+        session_id: session_id.to_owned(),
+        revision: session.revision,
+        updates,
+    })
 }
 
-pub fn cancel_session_task(session_id: &str, task_id: &str) {
+pub(crate) fn mark_fields_error(
+    session_id: &str,
+    provider_id: &str,
+    fields: &[InfoFieldKey],
+    error: &str,
+) -> Result<InfoFieldDelta, String> {
+    update_fields(session_id, provider_id, fields, &[], Some(error))
+}
+
+pub(crate) fn cancel_session_task(session_id: &str, task_id: &str) {
     if let Ok(store) = sessions().lock() {
         if let Some(cancelled) = store
             .get(session_id)
@@ -220,7 +239,7 @@ pub fn cancel_session_task(session_id: &str, task_id: &str) {
     }
 }
 
-pub fn close_session(session_id: &str) {
+pub(crate) fn close_session(session_id: &str) {
     if let Ok(mut store) = sessions().lock() {
         if let Some(session) = store.remove(session_id) {
             for cancelled in session.tasks.values() {
@@ -230,7 +249,7 @@ pub fn close_session(session_id: &str) {
     }
 }
 
-pub fn forget_plugin(plugin_id: &str) {
+pub(crate) fn forget_plugin(plugin_id: &str) {
     if let Ok(mut store) = sessions().lock() {
         for session in store.values_mut() {
             session

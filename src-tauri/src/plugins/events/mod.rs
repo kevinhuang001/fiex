@@ -47,6 +47,7 @@ pub fn is_protected_method(method: &str) -> bool {
             "fs.",
             "core.",
             "plugin.",
+            "info.",
             "contextMenu.",
             "connectionContextMenu.",
             "vfs.",

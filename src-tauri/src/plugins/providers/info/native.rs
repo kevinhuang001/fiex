@@ -6,7 +6,9 @@ use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
-use fiex_provider_contracts::{InfoProvider, ProviderError, ProviderInvocation, ProviderKind};
+use fiex_provider_contracts::{
+    InfoProvider, InfoSectionDescriptor, ProviderError, ProviderInvocation, ProviderKind,
+};
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
@@ -90,6 +92,21 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
 }
 
+pub(super) fn sections(
+    id: &str,
+    resource: &ResourceSnapshot,
+) -> Result<Vec<InfoSectionDescriptor>, String> {
+    let invocation = NativeProviderInvocation::new(
+        "info.compute",
+        serde_json::json!({}),
+        std::slice::from_ref(resource),
+        None,
+    );
+    fiex_info::InfoModule::new(Arc::new(NativeInfoServices))
+        .sections_for(id, &invocation)
+        .map_err(|error| error.to_string())
+}
+
 pub(super) fn invocation_with_cancel(
     id: &str,
     method: impl Into<String>,
@@ -125,16 +142,7 @@ mod tests {
         assert!(!candidates(&directory)
             .iter()
             .any(|provider| provider.id == "core.media"));
-        let invocation = NativeProviderInvocation::new(
-            "info.describe",
-            serde_json::json!({}),
-            std::slice::from_ref(&directory),
-            None,
-        );
-        let descriptions = provider("core.metadata")
-            .unwrap()
-            .describe(&invocation)
-            .unwrap();
+        let descriptions = sections("core.metadata", &directory).unwrap();
         assert!(descriptions.iter().any(|section| section.id == "basic"));
         assert!(descriptions
             .iter()

@@ -29,7 +29,7 @@ pub(crate) fn matches(
     rules.matches_resources(targets, directory)
 }
 
-pub(super) fn matches_resources(
+pub(crate) fn matches_resources(
     method: &str,
     extensions: &Value,
     resources: &[ResourceSnapshot],
@@ -148,7 +148,7 @@ mod tests {
             &absent,
         );
         let result =
-            super::super::invoke_resources(&plugin, "info.describe", json!({}), &[resource], None);
+            super::super::invoke_resources(&plugin, "info.compute", json!({}), &[resource], None);
         assert_eq!(result.unwrap_err(), "provider does not match event targets");
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let txt = target("file", "txt", None);
         let zip = target("file", "zip", None);
         for (feature, method) in [
-            ("info", "info.describe"),
+            ("info", "info.compute"),
             ("preview", "preview.open"),
             ("decorations", "decorations.resolve"),
             ("contextMenus", "contextMenu.resolve"),

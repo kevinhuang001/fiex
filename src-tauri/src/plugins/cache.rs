@@ -1,5 +1,5 @@
-//! Small, revision-keyed cache for Core-generated presentation data.
-//! Plugin responses and permission-scoped sessions must always be resolved anew.
+//! Small, revision-keyed cache for Core presentation data and eligible Info fields.
+//! Raw plugin responses and permission-scoped sessions are never cached.
 use serde_json::Value;
 use std::{
     collections::HashMap,

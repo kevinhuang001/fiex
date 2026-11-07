@@ -1,26 +1,41 @@
 use super::*;
 
 #[tauri::command]
-pub(crate) async fn file_info_session_open(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::providers::info::open_session(path)
+pub(crate) async fn file_info_open(
+    path: String,
+    on_update: tauri::ipc::Channel<crate::plugins::providers::info::InfoFieldDelta>,
+) -> Result<crate::plugins::providers::info::InfoOpenResult, String> {
+    let opened = tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::providers::info::initialize_session(path)
     })
     .await
-    .map_err(|error| error.to_string())?
-}
-
-#[tauri::command]
-pub(crate) async fn file_info_describe(
-    session_id: String,
-    on_partial: tauri::ipc::Channel<Vec<crate::plugins::providers::info::InfoSectionView>>,
-) -> Result<Vec<crate::plugins::providers::info::InfoSectionView>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::providers::info::describe_session(&session_id, |sections| {
-            let _ = on_partial.send(sections);
-        })
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())??;
+    let updates = std::sync::Arc::new(on_update);
+    for work in opened.on_open {
+        let updates = updates.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let delta = match crate::plugins::providers::info::compute_fields(
+                &work.session_id,
+                &work.provider_id,
+                &work.fields,
+                &work.task_id,
+                crate::plugins::providers::info::ComputeTrigger::OnOpen,
+            ) {
+                Ok(delta) => Some(delta),
+                Err(error) => crate::plugins::providers::info::mark_fields_error(
+                    &work.session_id,
+                    &work.provider_id,
+                    &work.fields,
+                    &error,
+                )
+                .ok(),
+            };
+            if let Some(delta) = delta {
+                let _ = updates.send(delta);
+            }
+        });
+    }
+    Ok(opened.result)
 }
 
 #[tauri::command]
@@ -29,16 +44,9 @@ pub(crate) async fn file_info_compute(
     provider_id: String,
     fields: Vec<crate::plugins::contracts::InfoFieldKey>,
     task_id: String,
-    user_initiated: bool,
-) -> Result<Vec<crate::plugins::providers::info::InfoSectionView>, String> {
+) -> Result<crate::plugins::providers::info::InfoFieldDelta, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::providers::info::compute_session(
-            session_id,
-            provider_id,
-            fields,
-            task_id,
-            user_initiated,
-        )
+        crate::plugins::providers::info::compute_session(session_id, provider_id, fields, task_id)
     })
     .await
     .map_err(|error| error.to_string())?

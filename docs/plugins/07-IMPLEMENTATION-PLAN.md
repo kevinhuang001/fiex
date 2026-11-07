@@ -12,7 +12,7 @@
 - 每扩展点每插件最多一个贡献；
 - 扩展贡献 id 已删除，身份为插件 id；
 - `connections`、`vfs`、`toolbar`、`search`、`hooks`、`info`、`preview`、`themes` 单对象；
-- 固定方法：`info.describe / info.compute`、`preview.open`、`search.query`、`hooks.invoke`、`toolbar.invoke`、`connection.validate/open/create`、`decorations.resolve`、`contextMenu.resolve/execute`；
+- 固定方法：`info.compute`、`preview.open`、`search.query`、`hooks.invoke`、`toolbar.invoke`、`connection.validate/open/create`、`decorations.resolve`、`contextMenu.resolve/execute`；Info 字段在 Manifest 静态注册；
 - `settings` 保留字段数组，字段 id 是存储 key。
 
 ### 权限

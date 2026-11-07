@@ -19,36 +19,6 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
             .ok_or_else(|| format!("invalid {key} result"))
     };
     match method {
-        "info.describe" => {
-            let sections = array("sections", 64)?;
-            let decoded = serde_json::from_value::<
-                Vec<fiex_provider_contracts::InfoSectionDescriptor>,
-            >(Value::Array(sections.clone()))
-            .map_err(|error| format!("invalid Info descriptor: {error}"))?;
-            let mut section_ids = std::collections::HashSet::new();
-            for section in decoded {
-                if !valid_info_id(&section.id)
-                    || section.id.len() > 128
-                    || section.title.is_empty()
-                    || section.title.len() > 1024
-                    || !section_ids.insert(section.id.clone())
-                    || section.fields.len() > 256
-                {
-                    return Err("invalid or duplicate Info section".into());
-                }
-                let mut field_ids = std::collections::HashSet::new();
-                for field in section.fields {
-                    if !valid_info_id(&field.id)
-                        || field.id.len() > 128
-                        || field.label.is_empty()
-                        || field.label.len() > 1024
-                        || !field_ids.insert(field.id)
-                    {
-                        return Err("invalid or duplicate Info field".into());
-                    }
-                }
-            }
-        }
         "info.compute" => {
             let fields = array("fields", 64)?;
             let decoded = serde_json::from_value::<Vec<fiex_provider_contracts::InfoFieldResult>>(
