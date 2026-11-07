@@ -33,7 +33,7 @@ JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同�
 
 各事件独有参数（查询词、菜单项 ID、连接配置等）与 targets 并列，使用 `ctx.params()` 获取；`ctx.targets()` 提供统一目标集合，`ctx.metadata(ref)` 只访问本次已投影的属性。
 
-读取目标使用 `ctx.files().open_read(&target.reference)`。名称是展示信息，不是读取能力。`ScopedRead`、`read.resourceId` 和全局读取令牌注册表已删除。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、EventContext 以及 InfoSection/InfoRow、PreviewView 的定义；没有 InfoContext、PreviewContext、InfoSectionView 或 InfoResponse 转换链。
+Info 采用两阶段字段协议：`info.describe` 只返回分组、字段标签和 `onOpen`/`onDemand` 计算时机；Core 按字段发出 `info.compute`，并持有会话、结果缓存、授权范围和取消状态。描述符不携带值、缓存策略、成本或快照字段。`onDemand` 只在用户点击计算时执行；需要内容读取的插件仍通过 Core 的声明权限和 ResourceRef 文件服务读取内容。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、Info 描述符/字段结果和 PreviewView 定义。
 
 ## 资源与授权
 
@@ -47,7 +47,7 @@ JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同�
 
 | 事件                       | 策略                                                                                                                          |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Info                       | 按优先级合并所有合法 Sections；Core 补充来源和插件命名空间；失败独立显示错误 Section                                          |
+| Info                       | 按优先级合并字段描述；Core 逐字段计算、缓存和取消；Provider 失败独立呈现，不影响其它 Section                                  |
 | Decorations                | 合并可见资源的装饰、去重徽标；高优先级覆盖冲突字段；限制字段、颜色和 package 图标来源                                         |
 | ContextMenu                | Core 匹配并汇集各 Provider 的独立菜单会话；UI 只调用一次；子菜单按需向同一会话解析                                            |
 | Preview                    | 首选 Provider 在前，其余按优先级或用户允许顺序尝试；调用失败、校验失败或 unsupported 继续下一个；最终使用不读取内容的内置兜底 |

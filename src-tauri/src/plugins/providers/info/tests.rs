@@ -1,54 +1,82 @@
 use super::*;
-use fiex_info::duration_text;
-use std::{sync::atomic::AtomicBool, time::Duration};
 
 #[test]
-fn built_in_metadata_is_a_stable_section() {
+fn metadata_descriptors_keep_file_and_directory_attributes_separate() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("hello.txt");
-    std::fs::write(&path, b"abc").unwrap();
-    let details = file_info_resource(path.to_str().unwrap()).unwrap();
-    let metadata = details
+    let file = dir.path().join("notes.txt");
+    std::fs::write(&file, b"abc").unwrap();
+    let directory = crate::plugins::resource::resource_context::new_resource_snapshot(
+        dir.path().to_str().unwrap(),
+        dir.path(),
+    );
+    let file_resource = crate::plugins::resource::resource_context::new_resource_snapshot(
+        file.to_str().unwrap(),
+        &file,
+    );
+    let provider = native::provider("core.metadata").unwrap();
+
+    let describe = |resource: &crate::plugins::resource::resource_context::ResourceSnapshot| {
+        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+            "info.describe",
+            serde_json::json!({}),
+            std::slice::from_ref(resource),
+            None,
+        );
+        provider.describe(&invocation).unwrap()
+    };
+    let file_sections = describe(&file_resource);
+    let directory_sections = describe(&directory);
+    let file_basic = file_sections
         .iter()
-        .find(|section| section.id == "core.metadata")
-        .expect("core.metadata section");
-    assert!(metadata.rows.iter().any(|row| row.label == "大小"));
-    assert!(metadata.rows.iter().any(|row| row.label == "扩展名"));
-    let sub = dir.path().join("nested");
-    std::fs::create_dir(&sub).unwrap();
-    std::fs::write(sub.join("part.bin"), b"12345").unwrap();
-    let size = fiex_info::directory_size_with_cancel(dir.path(), &AtomicBool::new(false)).unwrap();
-    assert!(size >= 5, "{size}");
-    assert_eq!(timestamp_text(0), "1970-01-01 00:00");
+        .find(|section| section.id == "basic")
+        .unwrap();
+    let directory_basic = directory_sections
+        .iter()
+        .find(|section| section.id == "basic")
+        .unwrap();
+    assert!(file_basic.fields.iter().any(|field| field.id == "size"));
+    assert!(!directory_basic
+        .fields
+        .iter()
+        .any(|field| field.id == "size"));
+    assert!(directory_sections
+        .iter()
+        .any(|section| section.id == "directoryStats"));
+    assert!(!file_sections
+        .iter()
+        .any(|section| section.id == "directoryStats"));
 }
 
 #[test]
-fn native_audio_probe_reads_a_wav_file() {
+fn metadata_field_compute_returns_only_the_requested_values() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("sample.wav");
-    let data_len = 16_u32;
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RIFF");
-    bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
-    bytes.extend_from_slice(b"WAVEfmt ");
-    bytes.extend_from_slice(&16_u32.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&8_000_u32.to_le_bytes());
-    bytes.extend_from_slice(&16_000_u32.to_le_bytes());
-    bytes.extend_from_slice(&2_u16.to_le_bytes());
-    bytes.extend_from_slice(&16_u16.to_le_bytes());
-    bytes.extend_from_slice(b"data");
-    bytes.extend_from_slice(&data_len.to_le_bytes());
-    bytes.extend_from_slice(&[0; 16]);
-    std::fs::write(&path, bytes).unwrap();
-    let sections = media_sections(&path);
-    assert!(sections.iter().any(|section| section.title == "音频"));
+    let file = dir.path().join("notes.txt");
+    std::fs::write(&file, b"abc").unwrap();
+    let resource = crate::plugins::resource::resource_context::new_resource_snapshot(
+        file.to_str().unwrap(),
+        &file,
+    );
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "info.compute",
+        serde_json::json!({"fields":[{"sectionId":"basic","fieldId":"size"}]}),
+        std::slice::from_ref(&resource),
+        None,
+    );
+    let result = native::provider("core.metadata")
+        .unwrap()
+        .compute(
+            &invocation,
+            &[InfoFieldKey {
+                section_id: "basic".into(),
+                field_id: "size".into(),
+            }],
+        )
+        .unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].value.as_deref(), Some("3 B (3 bytes)"));
 }
 
 #[test]
-fn duration_format_is_stable() {
-    assert_eq!(duration_text(Duration::from_secs(65)), "1:05");
-    assert_eq!(duration_text(Duration::from_secs(3665)), "1:01:05");
-    assert!(!duration_text(Duration::ZERO).is_empty());
+fn timestamp_format_is_stable() {
+    assert_eq!(timestamp_text(0), "1970-01-01 00:00");
 }

@@ -12,7 +12,7 @@
 - 每扩展点每插件最多一个贡献；
 - 扩展贡献 id 已删除，身份为插件 id；
 - `connections`、`vfs`、`toolbar`、`search`、`hooks`、`info`、`preview`、`themes` 单对象；
-- 固定方法：`info.resolve`、`preview.open`、`search.query`、`hooks.invoke`、`toolbar.invoke`、`connection.validate/open/create`、`decorations.resolve`、`contextMenu.resolve/execute`；
+- 固定方法：`info.describe / info.compute`、`preview.open`、`search.query`、`hooks.invoke`、`toolbar.invoke`、`connection.validate/open/create`、`decorations.resolve`、`contextMenu.resolve/execute`；
 - `settings` 保留字段数组，字段 id 是存储 key。
 
 ### 权限
@@ -48,7 +48,7 @@
 - Core terminal bridge + xterm.js；
 - 本地 sshd 集成测试已加入 CI。
 
-### 统一文件系统（protocol 6）
+### 统一文件系统（protocol 7）
 
 - 连接与独立视图共用 `vfs.list/stat/search/openRead/readStream/closeRead/beginWrite/writeStream/commit/abort/mkdir/rename/remove`；
 - SDK 的 `VfsProvider::operations()` 显式声明能力上限，普通 SDK 分发器调用方法，`discover(ctx)` 按服务器权限收窄能力；

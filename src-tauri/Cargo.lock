@@ -1897,6 +1897,7 @@ dependencies = [
 name = "fiex-info"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "fiex-provider-contracts",
  "lofty",
  "matroska",

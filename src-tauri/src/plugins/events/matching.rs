@@ -148,7 +148,7 @@ mod tests {
             &absent,
         );
         let result =
-            super::super::invoke_resources(&plugin, "info.resolve", json!({}), &[resource], None);
+            super::super::invoke_resources(&plugin, "info.describe", json!({}), &[resource], None);
         assert_eq!(result.unwrap_err(), "provider does not match event targets");
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let txt = target("file", "txt", None);
         let zip = target("file", "zip", None);
         for (feature, method) in [
-            ("info", "info.resolve"),
+            ("info", "info.describe"),
             ("preview", "preview.open"),
             ("decorations", "decorations.resolve"),
             ("contextMenus", "contextMenu.resolve"),

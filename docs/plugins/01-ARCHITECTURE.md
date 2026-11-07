@@ -75,7 +75,7 @@ Manifest 声明（这个包最多能申请什么）
 
 ## 事件合同
 
-- 标准事件：`info.resolve`、`preview.open`、`decorations.resolve`。
+- 标准事件：`info.describe / info.compute`、`preview.open`、`decorations.resolve`。
 - 系统交互事件：`contextMenu.resolve/execute`。
 - 自定义插件业务 RPC：通过单独授权的 `plugin.invoke` 保留，不与系统事件混用。
 - 导航：`connection.open/create` 只返回 `vfs` 或 `pluginView`。

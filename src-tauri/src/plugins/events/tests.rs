@@ -12,13 +12,13 @@ fn merged_providers_run_concurrently_but_collect_in_priority_order() {
         })
         .collect();
     let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
-        "info.resolve",
+        "info.describe",
         json!({}),
         &[],
         None,
     );
     let results = EventRouter::resolve_merge_parallel(
-        "info.resolve",
+        "info.describe",
         providers,
         &invocation,
         |_, value, _| {
@@ -163,12 +163,12 @@ fn explicit_open_actions_may_create_results_next_to_the_selection() {
 #[test]
 fn info_rejects_duplicate_sections_and_non_string_rows() {
     assert!(validate_result(
-        "info.resolve",
+        "info.describe",
         &json!({"sections":[{"id":"x","title":"X","rows":[{"label":"Size","value":3}]}]})
     )
     .is_err());
     assert!(validate_result(
-        "info.resolve",
+        "info.describe",
         &json!({"sections":[{"id":"x","title":"X","rows":[]},{"id":"x","title":"Other","rows":[]}]})
     )
     .is_err());
@@ -188,7 +188,7 @@ fn connection_validation_rejects_untyped_or_unknown_fields() {
 #[test]
 fn fixed_events_are_core_owned_custom_methods_remain_available() {
     for method in [
-        "info.resolve",
+        "info.describe",
         "preview.open",
         "contextMenu.resolve",
         "search.query",
@@ -265,13 +265,13 @@ fn typed_event_router_merges_provider_results_without_json_endpoints() {
     use std::sync::Arc;
 
     let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
-        "info.resolve",
+        "info.describe",
         json!({}),
         &[],
         None,
     );
     let outcomes = EventRouter::resolve_shared(
-        "info.resolve",
+        "info.describe",
         vec![
             Resolver::builtin("core.metadata", 100),
             Resolver::builtin("plugin:org.example:metadata", 50),

@@ -12,7 +12,7 @@
   "icon": "puzzle-piece",
   "author": { "name": "Example", "url": "https://example.com" },
   "runtime": {
-    "protocolVersion": "6.0",
+    "protocolVersion": "7.0",
     "entrypoints": {
       "linux-x86_64": "fiex-plugin-example",
       "macos-aarch64": "fiex-plugin-example",
@@ -37,7 +37,7 @@
 | `contextMenus`           | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute`                     |
 | `connectionContextMenus` | `true` 或 `{priority}`                             | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
 | `decorations`            | `{match?, priority?}`                              | `decorations.resolve`                                             |
-| `info`                   | `{match?, priority?}`                              | `info.resolve`                                                    |
+| `info`                   | `{match?, priority?}`                              | `info.describe / info.compute`                                    |
 | `preview`                | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                                    |
 | `connections`            | `{title, fields}`                                  | `connection.validate/open/create`                                 |
 | `vfs`                    | `{title}`                                          | `vfs.list/stat/read…`                                             |

@@ -130,7 +130,10 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             return Err("extensions.info.id is not used; remove it".into());
         }
         if key == "info" && object.contains_key("command") {
-            return Err("extensions.info.command is removed; info.resolve is fixed".into());
+            return Err(
+                "extensions.info.command is removed; info.describe and info.compute are fixed"
+                    .into(),
+            );
         }
         crate::plugins::match_rules::validate(object.get("match"), false, false)?;
         if key == "preview" {

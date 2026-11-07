@@ -18,6 +18,7 @@ pub(crate) struct NativeProviderInvocation {
     local_data: Option<Arc<dyn Any + Send + Sync>>,
     registration: Option<NativeProviderServices>,
     user_action: Option<UserActionContext>,
+    cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 struct NativeProviderServices {
@@ -57,6 +58,7 @@ impl NativeProviderInvocation {
             local_data: None,
             registration: None,
             user_action: None,
+            cancellation: None,
         }
     }
 
@@ -83,6 +85,23 @@ impl NativeProviderInvocation {
     pub(crate) fn with_user_action_context(mut self, user_action: UserActionContext) -> Self {
         self.user_action = Some(user_action);
         self
+    }
+
+    pub(crate) fn with_cancellation(
+        mut self,
+        cancellation: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        self.cancellation = Some(cancellation);
+        self
+    }
+
+    pub(crate) fn cancellation(
+        invocation: &dyn ProviderInvocation,
+    ) -> Option<Arc<std::sync::atomic::AtomicBool>> {
+        invocation
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<Self>())
+            .and_then(|native| native.cancellation.clone())
     }
 
     pub(crate) fn with_registry_binding(mut self, provider_id: &str, owner: CoreOwnerKey) -> Self {

@@ -257,6 +257,24 @@ test('settings creates tags and the file dialog only applies them', async ({ pag
   await page.getByRole('menuitem', { name: '显示简介' }).click()
   await expect(page.getByRole('dialog')).toContainText('验收')
 })
+test('Info computes only the on-demand field the user selects', async ({ page }) => {
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '显示简介' }).click()
+
+  const dialog = page.getByRole('dialog', { name: '显示简介' })
+  await expect(dialog).toContainText('Notes.md')
+  const sha256 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-256' })
+  const sha512 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-512' })
+  await expect(sha256).toContainText('尚未计算')
+  await expect(sha512).toContainText('尚未计算')
+
+  await sha256.getByRole('button', { name: '计算', exact: true }).click()
+  await expect(sha256).toContainText(
+    'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  )
+  await expect(sha512).toContainText('尚未计算')
+  await expect(sha512.getByRole('button', { name: '计算', exact: true })).toBeVisible()
+})
 test('Applications entry and search control', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
   await expect(

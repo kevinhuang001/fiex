@@ -1,8 +1,9 @@
 //! Persistent InfoProvider IPC identity with invocation-scoped resources.
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    InfoProvider, InfoSection, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    InfoFieldKey, InfoFieldResult, InfoProvider, InfoSectionDescriptor, ProviderDescriptor,
+    ProviderError, ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule,
+    ProviderRequestContext,
 };
 use std::{
     any::Any,
@@ -12,6 +13,7 @@ use std::{
 struct InfoServices {
     plugin: PluginInfo,
     resource: ResourceSnapshot,
+    user_initiated: bool,
 }
 
 struct CoreInfoInvocation {
@@ -34,7 +36,13 @@ impl CoreInfoInvocation {
         request.input_error = None;
         Ok(Self {
             request,
-            services: InfoServices { plugin, resource },
+            services: InfoServices {
+                plugin,
+                resource,
+                user_initiated:
+                    crate::plugins::native_invocation::NativeProviderInvocation::user_action(ctx)
+                        .is_ok(),
+            },
         })
     }
 }
@@ -43,7 +51,6 @@ impl ProviderInvocation for CoreInfoInvocation {
     fn request(&self) -> &ProviderRequestContext {
         &self.request
     }
-
     fn local_service_handle(&self) -> Option<&dyn Any> {
         Some(&self.services)
     }
@@ -53,18 +60,32 @@ struct IpcInfo {
     plugin_id: String,
 }
 
-impl InfoProvider for IpcInfo {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+impl IpcInfo {
+    fn services<'a>(
+        &self,
+        ctx: &'a dyn ProviderInvocation,
+        method: &str,
+    ) -> Result<&'a InfoServices, ProviderError> {
         let services = ctx
             .local_service_handle()
             .and_then(|value| value.downcast_ref::<InfoServices>())
             .ok_or_else(|| ProviderError::internal("InfoProvider requires a Core invocation"))?;
-        if services.plugin.id != self.plugin_id || ctx.method() != "info.resolve" {
+        if services.plugin.id != self.plugin_id || ctx.method() != method {
             return Err(ProviderError::invalid_params(
                 "InfoProvider identity or event mismatch",
             ));
         }
-        let response = crate::plugins::events::invoke_resources(
+        Ok(services)
+    }
+}
+
+impl InfoProvider for IpcInfo {
+    fn describe(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
+        let services = self.services(ctx, "info.describe")?;
+        let response = crate::plugins::events::invoke_resources_with_context(
             &services.plugin,
             ctx.method(),
             ctx.input()?
@@ -72,9 +93,32 @@ impl InfoProvider for IpcInfo {
                 .map_err(ProviderError::invalid_params)?,
             std::slice::from_ref(&services.resource),
             None,
+            false,
         )
         .map_err(ProviderError::internal)?;
         serde_json::from_value(response["sections"].clone())
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
+    }
+
+    fn compute(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        _fields: &[InfoFieldKey],
+    ) -> Result<Vec<InfoFieldResult>, ProviderError> {
+        let services = self.services(ctx, "info.compute")?;
+        let user_initiated = services.user_initiated;
+        let response = crate::plugins::events::invoke_resources_with_context(
+            &services.plugin,
+            ctx.method(),
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
+            std::slice::from_ref(&services.resource),
+            None,
+            user_initiated,
+        )
+        .map_err(ProviderError::internal)?;
+        serde_json::from_value(response["fields"].clone())
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
@@ -140,8 +184,11 @@ impl ScopedInfoProxy {
 }
 
 impl InfoProvider for ScopedInfoProxy {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
-        if ctx.method() != "info.resolve" {
+    fn describe(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
+        if ctx.method() != "info.describe" {
             return Err(ProviderError::invalid_params(
                 "InfoProvider method mismatch",
             ));
@@ -152,14 +199,31 @@ impl InfoProvider for ScopedInfoProxy {
             self.resource.as_ref().clone(),
             &self.provider_id,
         )?;
-        self.handler.resolve(&invocation)
+        self.handler.describe(&invocation)
+    }
+    fn compute(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        fields: &[InfoFieldKey],
+    ) -> Result<Vec<InfoFieldResult>, ProviderError> {
+        if ctx.method() != "info.compute" {
+            return Err(ProviderError::invalid_params(
+                "InfoProvider method mismatch",
+            ));
+        }
+        let invocation = CoreInfoInvocation::new(
+            ctx,
+            self.plugin.clone(),
+            self.resource.as_ref().clone(),
+            &self.provider_id,
+        )?;
+        self.handler.compute(&invocation, fields)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn info_proxies_reuse_identities_without_retaining_resources_or_grants() {
         let a = proxy("org.example.info").unwrap();

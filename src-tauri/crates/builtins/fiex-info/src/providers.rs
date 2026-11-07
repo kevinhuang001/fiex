@@ -1,14 +1,22 @@
-use crate::{media_sections, metadata_section, InfoSection, Localization};
+use crate::{
+    compute_media_fields, compute_metadata_fields, media_descriptors, metadata_descriptors,
+    InfoFieldKey, InfoFieldResult, InfoSectionDescriptor, Localization,
+};
 use fiex_provider_contracts::{
     InfoProvider, ProviderError, ProviderInvocation, ProviderMatchRule, ResourceMetadata,
 };
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub struct InfoMetadataInput {
     pub display: String,
     pub local: PathBuf,
     pub stat: Option<std::fs::Metadata>,
     pub metadata: Option<ResourceMetadata>,
+    pub is_local: bool,
+    pub cancelled: Arc<AtomicBool>,
 }
 
 pub trait InfoModuleServices: Send + Sync {
@@ -16,6 +24,8 @@ pub trait InfoModuleServices: Send + Sync {
         &self,
         ctx: &dyn ProviderInvocation,
     ) -> Result<InfoMetadataInput, ProviderError>;
+    fn media_descriptor_path(&self, ctx: &dyn ProviderInvocation)
+        -> Result<PathBuf, ProviderError>;
     fn media_path(&self, ctx: &dyn ProviderInvocation) -> Result<PathBuf, ProviderError>;
     fn localization(&self) -> Localization;
 }
@@ -61,23 +71,48 @@ impl InfoModule {
 struct MetadataInfo(Arc<dyn InfoModuleServices>);
 
 impl InfoProvider for MetadataInfo {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+    fn describe(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
         let input = self.0.metadata_input(ctx)?;
-        Ok(vec![metadata_section(
+        Ok(metadata_descriptors(
             &input.display,
-            &input.local,
+            input.is_local,
             input.stat.as_ref(),
             input.metadata.as_ref(),
             &self.0.localization(),
-        )])
+        ))
+    }
+
+    fn compute(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        fields: &[InfoFieldKey],
+    ) -> Result<Vec<InfoFieldResult>, ProviderError> {
+        let input = self.0.metadata_input(ctx)?;
+        compute_metadata_fields(&input, fields, &self.0.localization())
+            .map_err(ProviderError::internal)
     }
 }
 
 struct MediaInfo(Arc<dyn InfoModuleServices>);
 
 impl InfoProvider for MediaInfo {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+    fn describe(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
+        let path = self.0.media_descriptor_path(ctx)?;
+        Ok(media_descriptors(&path, &self.0.localization()))
+    }
+
+    fn compute(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        fields: &[InfoFieldKey],
+    ) -> Result<Vec<InfoFieldResult>, ProviderError> {
         let path = self.0.media_path(ctx)?;
-        Ok(media_sections(&path, &self.0.localization()))
+        Ok(compute_media_fields(&path, fields, &self.0.localization()))
     }
 }

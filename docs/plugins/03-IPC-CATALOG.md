@@ -19,7 +19,8 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 | `plugin.ping` / `plugin.shutdown`                                 | 空                                                    | `alive` / `null`                                          |
 | `connection.validate`                                             | `connection`                                          | `valid`                                                   |
 | `connection.open` / `connection.create`                           | `connectionId/factoryId/connection…`                  | `NavigationTarget`                                        |
-| `info.resolve`                                                    | `ProviderInvocation.targets`                          | `{ sections: [...] }`                                     |
+| `info.describe`                                                   | `ProviderInvocation.targets`                          | `{ sections: [InfoSectionDescriptor] }`                   |
+| `info.compute`                                                    | `providerId, fields: [{sectionId,fieldId}]`           | `{ fields: [InfoFieldResult] }`                           |
 | `preview.open`                                                    | `ProviderInvocation.targets`                          | `PreviewView`                                             |
 | `decorations.resolve`                                             | `ProviderInvocation.targets`                          | `{decorations:[...]}`                                     |
 | `contextMenu.resolve`                                             | `menuSessionId,targets,parentId?`                     | `{items:[...]}`                                           |

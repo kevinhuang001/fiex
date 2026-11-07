@@ -1,4 +1,12 @@
 use serde_json::Value;
+
+fn valid_info_id(value: &str) -> bool {
+    value.is_ascii()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':'))
+}
+
 pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
     if serde_json::to_vec(value).map_err(|e| e.to_string())?.len() > 4 * 1024 * 1024 {
         return Err("provider result exceeds limit".into());
@@ -11,33 +19,57 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
             .ok_or_else(|| format!("invalid {key} result"))
     };
     match method {
-        "info.resolve" => {
+        "info.describe" => {
             let sections = array("sections", 64)?;
+            let decoded = serde_json::from_value::<
+                Vec<fiex_provider_contracts::InfoSectionDescriptor>,
+            >(Value::Array(sections.clone()))
+            .map_err(|error| format!("invalid Info descriptor: {error}"))?;
+            let mut section_ids = std::collections::HashSet::new();
+            for section in decoded {
+                if !valid_info_id(&section.id)
+                    || section.id.len() > 128
+                    || section.title.is_empty()
+                    || section.title.len() > 1024
+                    || !section_ids.insert(section.id.clone())
+                    || section.fields.len() > 256
+                {
+                    return Err("invalid or duplicate Info section".into());
+                }
+                let mut field_ids = std::collections::HashSet::new();
+                for field in section.fields {
+                    if !valid_info_id(&field.id)
+                        || field.id.len() > 128
+                        || field.label.is_empty()
+                        || field.label.len() > 1024
+                        || !field_ids.insert(field.id)
+                    {
+                        return Err("invalid or duplicate Info field".into());
+                    }
+                }
+            }
+        }
+        "info.compute" => {
+            let fields = array("fields", 64)?;
+            let decoded = serde_json::from_value::<Vec<fiex_provider_contracts::InfoFieldResult>>(
+                Value::Array(fields.clone()),
+            )
+            .map_err(|error| format!("invalid Info field results: {error}"))?;
             let mut ids = std::collections::HashSet::new();
-            for s in sections {
-                for key in ["id", "title"] {
-                    if s[key]
-                        .as_str()
-                        .filter(|s| !s.is_empty() && s.len() <= 1024)
-                        .is_none()
-                    {
-                        return Err("invalid info section".into());
-                    }
-                }
-                if !ids.insert(s["id"].as_str().unwrap()) {
-                    return Err("duplicate info section id".into());
-                }
-                let rows = s["rows"]
-                    .as_array()
-                    .filter(|a| a.len() <= 256)
-                    .ok_or("invalid info rows")?;
-                for r in rows {
-                    if r["label"].as_str().filter(|s| s.len() <= 16384).is_none()
-                        || r["value"].as_str().filter(|s| s.len() <= 16384).is_none()
-                        || r.get("copyable").is_some_and(|v| !v.is_boolean())
-                    {
-                        return Err("invalid info row".into());
-                    }
+            for field in decoded {
+                if !valid_info_id(&field.section_id)
+                    || field.section_id.len() > 128
+                    || !valid_info_id(&field.field_id)
+                    || field.field_id.len() > 128
+                    || !ids.insert((field.section_id, field.field_id))
+                    || field
+                        .value
+                        .as_ref()
+                        .is_some_and(|value| value.len() > 16_384)
+                    || field.unavailable && field.value.is_some()
+                    || !field.unavailable && field.value.is_none()
+                {
+                    return Err("invalid or duplicate Info field result".into());
                 }
             }
         }
