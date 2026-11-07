@@ -5,6 +5,7 @@ sdk/docs/
 sdk/rust/fixtures/
 sdk/**/target
 sdk/**/dist
+/sdk/README.md
 src-tauri/gen
 src-tauri/icons
 package-lock.json
