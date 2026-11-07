@@ -151,7 +151,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("manifest.json"),
-            serde_json::to_vec(&manifest("6")).unwrap(),
+            serde_json::to_vec(&manifest("7")).unwrap(),
         )
         .unwrap();
         assert!(read_manifest(dir.path()).is_ok());
