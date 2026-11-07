@@ -148,7 +148,7 @@ fn is_hidden(path: &Path, stat: Option<&fs::Metadata>) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
-        return stat.is_some_and(|metadata| metadata.file_attributes() & 0x2 != 0);
+        stat.is_some_and(|metadata| metadata.file_attributes() & 0x2 != 0)
     }
     #[cfg(not(windows))]
     {
@@ -208,6 +208,7 @@ fn directory_stat_values(
     let mut recursive_directories = 0_u64;
     let mut symbolic_links = 0_u64;
     let mut recursive_size = 0_u64;
+    #[cfg(unix)]
     let mut allocated_size = 0_u64;
     let mut stack = vec![(PathBuf::from(path), true)];
     while let Some((directory, root)) = stack.pop() {
