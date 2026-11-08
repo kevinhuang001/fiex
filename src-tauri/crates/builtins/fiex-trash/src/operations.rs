@@ -222,24 +222,27 @@ fn macos_put_back(trashed: &Path) -> Option<String> {
 fn macos_put_back_path(location: &str, original_name: &str) -> Option<String> {
     if location.is_empty()
         || original_name.is_empty()
-        || Path::new(original_name)
-            .file_name()
-            .and_then(|name| name.to_str())
-            != Some(original_name)
+        || original_name == "."
+        || original_name == ".."
+        || original_name.contains('/')
+        || original_name.contains('\0')
     {
         return None;
     }
 
+    // Finder paths always use POSIX separators. Keep this conversion lexical
+    // so the macOS metadata can also be tested on Windows and Linux runners.
     let location = location.strip_prefix('/').unwrap_or(location);
     let location = location
         .strip_prefix("System/Volumes/Data/")
-        .or_else(|| location.strip_prefix("System/Volumes/Data"))
-        .unwrap_or(location);
-    let location = Path::new("/").join(location.strip_prefix('/').unwrap_or(location));
-    if !location.is_absolute() {
-        return None;
+        .or_else(|| (location == "System/Volumes/Data").then_some(""))
+        .unwrap_or(location)
+        .trim_end_matches('/');
+    if location.is_empty() {
+        Some(format!("/{original_name}"))
+    } else {
+        Some(format!("/{location}/{original_name}"))
     }
-    Some(location.join(original_name).to_string_lossy().into_owned())
 }
 
 #[cfg(target_os = "linux")]
