@@ -23,6 +23,7 @@ export default defineConfig({
             { text: '安装与首次启动', link: '/user-guide/start' },
             { text: '浏览、视图与导航', link: '/user-guide/navigation' },
             { text: '文件操作与拖放', link: '/user-guide/file-operations' },
+            { text: '文件信息与按需计算', link: '/user-guide/file-info' },
             { text: '搜索与预览', link: '/user-guide/search-preview' },
             { text: '常用位置、设备与废纸篓', link: '/user-guide/built-in-locations' },
             { text: '插件与远程连接', link: '/user-guide/plugins-and-connections' },

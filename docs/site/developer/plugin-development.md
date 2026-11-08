@@ -2,9 +2,39 @@
 
 ## 先检查版本
 
-当前 Core 的插件 manifest 使用 schemaVersion 2，Native SDK 握手使用 protocolVersion 6.0。Core 会在插件初始化时核对协议版本；不能只改 manifest 字符串来绕过 SDK 不兼容。
+当前 Core 的插件 manifest 使用 `schemaVersion: 2`，Native SDK 握手使用 `protocolVersion: 7.0`。Core 会在插件初始化时核对协议版本；不能只改 manifest 字符串来绕过 SDK 不兼容。
 
 项目有独立的 Rust SDK 和 UI SDK。Native 后端通过 Rust SDK 访问 Core 提供的能力；插件面板/预览界面通过 UI SDK 与受控的 Bridge 通信。插件可以只有 Native 后端，也可以同时包含 UI。
+
+## Info 字段与按需计算
+
+Info 字段写在 manifest 的 `extensions.info.sections` 中。每个 section 提供稳定的 `id`、标题和字段列表；每个字段提供 `id`、标签和 `compute` 策略。字段声明由 Core 在安装或启用插件时建立索引，打开“显示简介”时不需要启动插件来询问它有哪些字段。
+
+`compute` 目前支持 `onOpen` 与 `onDemand`：前者在面板打开后自动请求；后者先显示为“尚未计算”，用户点击“计算”后才请求该字段。SDK 的 `InfoProvider` 只实现 `compute(ctx, fields)`，并返回与请求字段对应的文本结果。Core 负责字段校验、缓存、会话、取消和权限检查。旧版一次性 Info 行结果与旧 RPC 格式不属于 protocol 7.0。
+
+示例 manifest：
+
+```json
+{
+  "extensions": {
+    "info": {
+      "priority": 80,
+      "match": { "extensions": ["txt"], "kinds": ["file"] },
+      "sections": [
+        {
+          "id": "integrity",
+          "title": "完整性",
+          "fields": [
+            { "id": "sha256", "label": "SHA-256", "compute": "onDemand" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+只有字段计算确实需要文件内容时，才声明并请求相应的读取权限；声明字段本身不等于读取文件。
 
 ## 从真实示例开始
 
@@ -39,7 +69,7 @@ Rust SDK 的 Providers builder 可以注册标准 provider trait：
 | ------------------- | ---------------------------------------- |
 | ConnectionProvider  | 连接校验、打开和创建生命周期             |
 | VfsProvider         | 虚拟目录发现、列出、查询、读写和文件操作 |
-| InfoProvider        | 文件信息 sections                        |
+| InfoProvider        | 计算 Core 精确请求的 Info 字段（`info.compute`） |
 | PreviewProvider     | 文件预览视图                             |
 | DecorationProvider  | 文件行和列的装饰                         |
 | ContextMenuProvider | 右键菜单项及执行                         |

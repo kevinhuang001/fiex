@@ -13,6 +13,7 @@ Fiex 是面向 macOS、Windows 与 Linux 的桌面文件管理器。这个站点
 | ------------------------ | ----------------------------------------------------- |
 | 下载并启动 Fiex          | [安装与首次启动](/user-guide/start)                   |
 | 管理本地文件、搜索和预览 | [用户指南](/user-guide/navigation)                    |
+| 查看文件与文件夹的元数据 | [文件信息与按需计算](/user-guide/file-info)          |
 | 配置插件或远程连接       | [插件与远程连接](/user-guide/plugins-and-connections) |
 | 构建 Fiex 或了解模块职责 | [开发者文档](/developer/overview)                     |
 | 开始开发插件             | [插件开发](/developer/plugin-development)             |
