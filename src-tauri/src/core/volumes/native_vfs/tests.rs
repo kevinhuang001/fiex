@@ -13,7 +13,10 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
         Some("core:applications")
     );
     assert_eq!(provider_id(trash_vfs::URI), Some("core:trash"));
-    assert_eq!(provider_id("recyclebin://item"), Some("core:trash"));
+    assert_eq!(
+        provider_id("recyclebin://Item?id=opaque-id"),
+        Some("core:trash")
+    );
     assert!(provider_id("unknown://item").is_none());
     assert!(provider_id("fiex://mount/not-a-native-view").is_none());
     assert!(!opaque("unknown://item"));
@@ -63,12 +66,12 @@ fn native_resource_identity_is_declared_by_each_registered_provider() {
 fn invocation_metadata_kind_comes_from_the_registered_provider() {
     for (path, expected) in [
         (RECENT_URI, "directory"),
-        ("recent://opaque-alias", "file"),
+        ("recent://Recent%20file.txt?id=opaque-id", "file"),
         (APPLICATIONS_URI, "directory"),
-        ("applications://folder_opaque-id", "directory"),
-        ("applications://app_opaque-id", "file"),
+        ("applications://Opaque%20folder", "file"),
+        ("applications://Opaque%20app", "file"),
         (trash_vfs::URI, "directory"),
-        ("trash://opaque-item/", "directory"),
+        ("trash://opaque-item", "file"),
     ] {
         let invocation = target_invocation(path, "core:test", "vfs.discover", json!({}));
         let resource = &NativeProviderInvocation::resources(&invocation).unwrap()[0];

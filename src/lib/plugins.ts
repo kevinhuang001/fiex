@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useSyncExternalStore } from 'react'
-import { call, demo, native } from '@/lib/api'
+import { call, native } from '@/lib/api'
 
 export interface PluginField {
   id: string
@@ -177,7 +177,7 @@ export function isNewerVersion(candidate: string, installed: string): boolean {
   return false
 }
 async function pluginCatalog(): Promise<PluginInfo[]> {
-  if (!native && !demo) return []
+  if (!native) return []
   return call<PluginInfo[]>('plugins_list')
 }
 let catalogSnapshot: PluginInfo[] = []

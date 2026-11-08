@@ -25,6 +25,5 @@ export interface PluginLoadingPage {
   pluginId: string
   /** Bridge-only session for the loading document; Core has no preview session yet. */
   sessionId: string
-  html?: string
-  src?: string
+  src: string
 }

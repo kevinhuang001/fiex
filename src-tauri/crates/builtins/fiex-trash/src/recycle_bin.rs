@@ -75,7 +75,11 @@ impl RecycleBin {
         let encoded = encoded_identity(uri)?;
         let (expected, _) = self.resolve_item(encoded)?;
         let metadata = RecycleBinItemMetadata::from(expected);
-        Ok(entry(&metadata).with_revision(metadata.deleted_unix.to_string()))
+        let resolved = entry(&metadata);
+        if resolved.node_id != uri {
+            return Err("StaleRef: Recycle Bin item identity changed".into());
+        }
+        Ok(resolved.with_revision(metadata.deleted_unix.to_string()))
     }
 
     #[cfg(not(windows))]
@@ -84,24 +88,26 @@ impl RecycleBin {
     }
 
     #[cfg(windows)]
-    pub fn restore(&self, encoded: &str) -> Result<(), String> {
+    pub fn restore(&self, uri: &str) -> Result<(), String> {
+        let encoded = encoded_identity(uri)?;
         let (_, item) = self.resolve_item(encoded)?;
         item.restore()
     }
 
     #[cfg(not(windows))]
-    pub fn restore(&self, _encoded: &str) -> Result<(), String> {
+    pub fn restore(&self, _uri: &str) -> Result<(), String> {
         Err("Unsupported: Recycle Bin item is unavailable".into())
     }
 
     #[cfg(windows)]
-    pub fn purge(&self, encoded: &str) -> Result<(), String> {
+    pub fn purge(&self, uri: &str) -> Result<(), String> {
+        let encoded = encoded_identity(uri)?;
         let (_, item) = self.resolve_item(encoded)?;
         item.purge()
     }
 
     #[cfg(not(windows))]
-    pub fn purge(&self, _encoded: &str) -> Result<(), String> {
+    pub fn purge(&self, _uri: &str) -> Result<(), String> {
         Err("Unsupported: Recycle Bin item is unavailable".into())
     }
 
@@ -145,7 +151,10 @@ fn entry(item: &RecycleBinItemMetadata) -> FsEntry {
     let identity = ItemIdentity::from(item);
     let encoded = encode(&identity);
     FsEntry {
-        node_id: format!("{RECYCLE_BIN_URI}{encoded}"),
+        node_id: format!(
+            "{RECYCLE_BIN_URI}{}?id={encoded}",
+            crate::encode_uri_segment(&item.name)
+        ),
         name: item.name.clone(),
         kind: if item.folder {
             FsKind::Directory
@@ -162,9 +171,24 @@ fn entry(item: &RecycleBinItemMetadata) -> FsEntry {
 
 #[cfg(windows)]
 fn encoded_identity(uri: &str) -> Result<&str, String> {
-    uri.strip_prefix(RECYCLE_BIN_URI)
-        .filter(|encoded| !encoded.is_empty() && !encoded.contains('/'))
-        .ok_or_else(|| "InvalidVfsUri: invalid Recycle Bin item".into())
+    let (name, query) = uri
+        .strip_prefix(RECYCLE_BIN_URI)
+        .and_then(|value| value.split_once('?'))
+        .ok_or_else(|| "InvalidVfsUri: invalid Recycle Bin item".to_owned())?;
+    let encoded = query
+        .strip_prefix("id=")
+        .filter(|encoded| {
+            !encoded.is_empty()
+                && !encoded.contains('&')
+                && !encoded.contains('/')
+                && !encoded.contains('?')
+        })
+        .ok_or_else(|| "InvalidVfsUri: invalid Recycle Bin item".to_owned())?;
+    let identity = decode(encoded)?;
+    if name.is_empty() || name.contains('/') || crate::encode_uri_segment(&identity.name) != name {
+        return Err("InvalidVfsUri: invalid Recycle Bin item".into());
+    }
+    Ok(encoded)
 }
 
 fn encode(identity: &ItemIdentity) -> String {
@@ -194,14 +218,10 @@ mod tests {
             folder: false,
         };
         let entry = entry(&item);
-        assert!(entry.node_id.starts_with(RECYCLE_BIN_URI));
+        assert!(entry.node_id.starts_with("recyclebin://notes.txt?id="));
         assert!(!entry.node_id.contains(&item.id));
-        assert_eq!(
-            decode(entry.node_id.trim_start_matches(RECYCLE_BIN_URI))
-                .unwrap()
-                .id,
-            item.id
-        );
+        let encoded = entry.node_id.split_once("?id=").unwrap().1;
+        assert_eq!(decode(encoded).unwrap().id, item.id);
         assert_eq!(entry.link_target.as_deref(), Some(item.original.as_str()));
     }
 

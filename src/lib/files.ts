@@ -14,29 +14,6 @@ const VIRTUAL_LABELS: Record<string, VirtualRoot> = {
   废纸篓: 'trash://',
   回收站: 'recyclebin://',
 }
-function encodeBase64Url(value: string): string {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-function decodeBase64Url(value: string): string | null {
-  try {
-    const base = value.replace(/-/g, '+').replace(/_/g, '/')
-    const binary = atob(base + '='.repeat((4 - (base.length % 4)) % 4))
-    return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))
-  } catch {
-    return null
-  }
-}
-/** Decoded value of an opaque payload, or null when the text is a literal
- *  (Chinese or otherwise) user-entered path that should be encoded. */
-function opaquePayload(value: string): string | null {
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null
-  const decoded = decodeBase64Url(value)
-  if (!decoded || decoded.includes('\uFFFD') || /[\u0000-\u001f\u007f]/.test(decoded)) return null
-  return decoded
-}
 /** Recognize the Core-owned virtual views without treating Windows drives or
  *  `fiex://mount/...` identities as virtual application paths. */
 export function virtualPath(path: string): VirtualAddress | null {
@@ -48,6 +25,22 @@ export function virtualPath(path: string): VirtualAddress | null {
 function virtualHref(root: VirtualRoot, payload: string): string {
   return root + payload
 }
+function encodeVirtualSegment(segment: string): string {
+  let decoded = segment
+  try {
+    decoded = decodeURIComponent(segment)
+  } catch {
+    // Treat a malformed percent sequence as a literal name entered by the user.
+  }
+  return encodeURIComponent(decoded)
+}
+function decodeVirtualSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
 function virtualRootName(root: VirtualRoot): string {
   if (root === 'recent://') return t('最近使用')
   if (root === 'applications://') return t('应用程序')
@@ -55,7 +48,7 @@ function virtualRootName(root: VirtualRoot): string {
   return t('回收站')
 }
 /** Address-bar input accepts view roots, localized names and Windows/Unix
- *  paths. Applications retain their hierarchy; Trash records stay opaque. */
+ *  paths. Core VFS paths keep the same hierarchy as their browser views. */
 export function normalizeAddress(input: string): string {
   const text = input.trim()
   if (!text) return text
@@ -68,10 +61,16 @@ export function normalizeAddress(input: string): string {
   if (!match) return text
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
   let payload = match[2].replace(/^[\\/]+/, '')
-  if (root === 'applications://') return virtualHref(root, payload.replace(/\\/g, '/'))
-  if (root === 'trash://') {
-    if (payload && !opaquePayload(payload)) payload = encodeBase64Url(payload.replace(/\\/g, '/'))
-    return virtualHref(root, payload)
+  if (root === 'applications://' || root === 'trash://')
+    return virtualHref(
+      root,
+      payload.replace(/\\/g, '/').split('/').filter(Boolean).map(encodeVirtualSegment).join('/'),
+    )
+  if ((root === 'recent://' || root === 'recyclebin://') && payload) {
+    const queryIndex = payload.indexOf('?')
+    const name = queryIndex < 0 ? payload : payload.slice(0, queryIndex)
+    const query = queryIndex < 0 ? '' : payload.slice(queryIndex)
+    return virtualHref(root, `${encodeVirtualSegment(name)}${query}`)
   }
   return virtualHref(root, payload)
 }
@@ -80,9 +79,15 @@ export function displayAddress(path: string): string {
   const virtual = virtualPath(path)
   if (!virtual) return path
   if (!virtual.payload) return virtual.root
-  if (virtual.root === 'trash://') {
-    const relative = decodeBase64Url(virtual.payload)
-    if (relative) return virtual.root + relative
+  if (virtual.root === 'trash://' || virtual.root === 'applications://') {
+    return (
+      virtual.root + virtual.payload.split('/').filter(Boolean).map(decodeVirtualSegment).join('/')
+    )
+  }
+  if (virtual.root === 'recent://' || virtual.root === 'recyclebin://') {
+    const queryIndex = virtual.payload.indexOf('?')
+    const name = queryIndex < 0 ? virtual.payload : virtual.payload.slice(0, queryIndex)
+    return virtual.root + decodeVirtualSegment(name)
   }
   return path
 }
@@ -113,16 +118,13 @@ export function parent(path: string): string {
   if (core) return core.root + core.parts.slice(0, -1).map(encodeURIComponent).join('/')
   const virtual = virtualPath(path)
   if (virtual) {
-    if (!virtual.payload || virtual.root === 'recent://' || virtual.root === 'recyclebin://')
+    if (!virtual.payload || virtual.root === 'recyclebin://' || virtual.root === 'recent://')
       return virtual.root
-    if (virtual.root === 'applications://') {
+    if (virtual.root === 'applications://' || virtual.root === 'trash://') {
       const segments = virtual.payload.split('/').filter(Boolean)
       segments.pop()
       return segments.length ? virtualHref(virtual.root, segments.join('/')) : virtual.root
     }
-    const relative = decodeBase64Url(virtual.payload)
-    if (!relative || !relative.includes('/')) return virtual.root
-    return virtualHref(virtual.root, encodeBase64Url(relative.slice(0, relative.lastIndexOf('/'))))
   }
   const p = path.replace(/[\\/]+$/, '')
   const sep = p.includes('\\') ? '\\' : '/'
@@ -140,10 +142,13 @@ export function join(path: string, name: string): string {
     return result
   }
   const virtual = virtualPath(path)
-  if (virtual && virtual.root === 'trash://') {
-    const relative = virtual.payload ? decodeBase64Url(virtual.payload) : ''
-    if (relative !== null)
-      return virtualHref(virtual.root, encodeBase64Url(relative ? `${relative}/${name}` : name))
+  if (virtual && (virtual.root === 'applications://' || virtual.root === 'trash://')) {
+    return virtualHref(
+      virtual.root,
+      virtual.payload
+        ? `${virtual.payload.replace(/\\/g, '/')}/${encodeVirtualSegment(name)}`
+        : encodeVirtualSegment(name),
+    )
   }
   return path.replace(/[\\/]+$/, '') + (path.includes('\\') ? '\\' : '/') + name
 }
@@ -170,9 +175,10 @@ export function pathCrumbs(
   if (virtual) {
     const root = virtual.root
     const crumbs: Crumb[] = [{ name: displayName(root) || virtualRootName(root), path: root }]
-    // Recycle-bin identities are opaque records, not navigable folders.
-    if (virtual.payload && root !== 'recyclebin://') {
-      if (root === 'applications://') {
+    // Recent and Windows Recycle Bin are flat views. Trash and Applications
+    // expose their browsed folder hierarchy directly in URI path segments.
+    if (virtual.payload) {
+      if (root === 'applications://' || root === 'trash://') {
         let prefix = ''
         for (const part of virtual.payload.split('/').filter(Boolean)) {
           prefix = prefix ? `${prefix}/${part}` : part
@@ -181,19 +187,11 @@ export function pathCrumbs(
         }
         return crumbs
       }
-      const relative = opaquePayload(virtual.payload)
-      if (relative) {
-        let prefix = ''
-        for (const part of relative.split('/').filter(Boolean)) {
-          prefix = prefix ? `${prefix}/${part}` : part
-          crumbs.push({
-            name: part,
-            path: virtualHref(root, encodeBase64Url(prefix)),
-          })
-        }
-      } else {
+      if (root === 'recent://' || root === 'recyclebin://') {
+        const segment = virtual.payload.split('?')[0]
         const child = virtualHref(root, virtual.payload)
-        crumbs.push({ name: displayName(child) || basename(child), path: child })
+        crumbs.push({ name: displayName(child) || decodeVirtualSegment(segment), path: child })
+        return crumbs
       }
     }
     return crumbs
@@ -222,13 +220,12 @@ export function basename(path: string): string {
   const virtual = virtualPath(path)
   if (virtual) {
     if (!virtual.payload) return virtualRootName(virtual.root)
-    if (virtual.root === 'trash://') {
-      const relative = decodeBase64Url(virtual.payload)
-      if (relative) return relative.split('/').pop() || virtualRootName(virtual.root)
-    }
-    if (virtual.root === 'applications://') {
+    if (virtual.root === 'trash://' || virtual.root === 'applications://') {
       const segment = virtual.payload.split('/').at(-1) || ''
-      return segment.replace(/^(?:folder|app)_/, '') || virtualRootName(virtual.root)
+      return decodeVirtualSegment(segment) || virtualRootName(virtual.root)
+    }
+    if (virtual.root === 'recent://' || virtual.root === 'recyclebin://') {
+      return decodeVirtualSegment(virtual.payload.split('?')[0]) || virtualRootName(virtual.root)
     }
     return virtual.payload
   }

@@ -35,26 +35,10 @@ pub(crate) async fn preview_candidates(path: String) -> Result<Vec<serde_json::V
     .map_err(|error| error.to_string())?
 }
 
-/// Optional package-local loading document for a plugin preview. It contains
-/// no preview session and grants no resource access; the frontend renders it in
-/// the same sandboxed Core-owned iframe while `preview.open` runs.
-#[tauri::command]
-pub(crate) async fn preview_loading(plugin_id: String) -> Result<Option<String>, String> {
-    // Resolving a package document scans installed plugins and reads the file.
-    // Keep that I/O off the event loop so the loading page can paint immediately.
-    let id = plugin_id.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::plugins::host::preview_loading(&id))
-        .await
-        .map_err(|error| error.to_string())?
-        .inspect_err(|error| {
-            record_plugin_error(&plugin_id, "preview", &format!("loading: {error}"))
-        })
-}
-
 #[tauri::command]
 pub(crate) async fn preview_loading_asset(plugin_id: String) -> Result<Option<String>, String> {
-    // Same bounded disk work as `preview_loading`; the document never starts the
-    // plugin process, so the prefetched page is available before `preview.open`.
+    // The document never starts the plugin process, so the prefetched page is
+    // available before `preview.open`.
     let id = plugin_id.clone();
     tauri::async_runtime::spawn_blocking(move || crate::plugins::host::preview_loading_asset(&id))
         .await

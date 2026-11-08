@@ -30,20 +30,16 @@ import { MemoryCache } from '@/lib/cache'
 const PdfPreview = lazy(() => import('./PdfPreview'))
 // Candidate discovery depends on the installed/enabled plugins; keep it brief.
 const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
-/** Package-local loading document (Core-owned asset path or inline HTML). */
-type LoadingDocument = { html?: string; src?: string }
+/** Package-local loading document served from the Core-owned asset path. */
+type LoadingDocument = { src: string }
 // A loading document belongs to the plugin package, not to the file being
 // previewed. Cache it so provider switches and repeated opens can paint it
 // immediately instead of waiting for another IPC round-trip.
 const loadingDocumentCache = new MemoryCache<LoadingDocument | null>(16, 5 * 60_000)
 function loadingDocument(pluginId: string): Promise<LoadingDocument | null> {
   return loadingDocumentCache.get(pluginId, async () => {
-    if (native) {
-      const path = await call<string | null>('preview_loading_asset', { pluginId })
-      return path ? { src: asset(path) } : null
-    }
-    const html = await call<string | null>('preview_loading', { pluginId })
-    return html ? { html } : null
+    const path = await call<string | null>('preview_loading_asset', { pluginId })
+    return path ? { src: asset(path) } : null
   })
 }
 
@@ -195,9 +191,8 @@ export function Preview({
       if ('error' in outcome) throw outcome.error
       const value = outcome.value
       if (!active) return
-      // Packaged builds must load plugin HTML from the asset origin: a srcDoc
-      // document inherits the app shell CSP and blocks the plugin's inline
-      // bundle. Browser/demo builds keep the inline fallback.
+      // Load packaged plugin HTML from its asset origin: a srcDoc document
+      // inherits the app shell CSP and blocks the plugin's inline bundle.
       if (native && value.view?.kind === 'html' && value.view.pluginId && value.view.entry) {
         try {
           const path = await call<string>('plugin_view_asset', {
@@ -337,11 +332,8 @@ export function Preview({
                 key={`loading:${entry.path}:${providerId}:${loadingPage.sessionId}`}
                 pluginId={loadingPage.pluginId}
                 contributionId={loadingPage.pluginId}
-                html={loadingPage.html}
                 src={loadingPage.src}
                 sessionId={loadingPage.sessionId}
-                name={entry.name}
-                extension={entry.extension}
                 loading
               />
             ) : view?.kind === 'html' && view.html ? (
@@ -358,8 +350,6 @@ export function Preview({
                     context={view.context}
                     sessionId={view.sessionId || ''}
                     timeoutMs={view.timeoutMs}
-                    name={entry.name}
-                    extension={entry.extension}
                     onPreviewReady={() => setPreviewReady(true)}
                   />
                   {loadingPage && !previewReady && (
@@ -368,11 +358,8 @@ export function Preview({
                         key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
                         pluginId={loadingPage.pluginId}
                         contributionId={loadingPage.pluginId}
-                        html={loadingPage.html}
                         src={loadingPage.src}
                         sessionId={loadingPage.sessionId}
-                        name={entry.name}
-                        extension={entry.extension}
                         loading
                       />
                     </div>

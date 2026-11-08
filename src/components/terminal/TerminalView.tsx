@@ -7,12 +7,11 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { LoaderCircle, RotateCw } from 'lucide-react'
-import { call, native } from '@/lib/api'
+import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import { themeSnapshot } from '@/lib/themes'
 
 import { terminalEvents, type TerminalEvent, type SessionStatus } from './sessionEvents'
-import { attachDemoShell } from './terminalDemoShell'
 
 function withAlpha(color: string, alpha: number) {
   const value = color.trim()
@@ -191,19 +190,6 @@ export function TerminalView({
       return true
     })
     setStatus('connecting')
-    if (!native) {
-      setStatus('demo')
-      const disposeShell = attachDemoShell(terminal, cwd)
-      return () => {
-        disposed = true
-        observer.disconnect()
-        window.removeEventListener('fiex:theme-changed', applyTheme)
-        disposeShell()
-        terminalRef.current = null
-        resizeRef.current = null
-        terminal.dispose()
-      }
-    }
     channel = new Channel<TerminalEvent>()
     const events = terminalEvents(
       (data) => terminal.write(data),

@@ -160,8 +160,8 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
         ...(info.linkTarget ? [{ label: t('链接到'), value: info.linkTarget }] : []),
       ]
     : []
-  // Core's metadata provider owns the basic attributes. Only use the local
-  // Entry fallback for old responses or paths Core could not stat.
+  // Core's metadata provider owns the basic attributes. Keep the Entry
+  // fallback for resources without a resolved Core metadata section.
   const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
   const groups: Array<{ title: string; from?: string; rows: InfoRow[] }> = info
     ? [

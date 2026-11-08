@@ -545,13 +545,6 @@ html.dark .app.has-background .workspace-bar {
   white-space: nowrap;
   opacity: 0.7;
 }
-.demo-note {
-  font-size: 9px;
-  color: var(--muted);
-  text-align: right;
-  padding: 4px 24px;
-  background: var(--surface);
-}
 .file-area {
   flex: 1;
   overflow: auto;
@@ -1193,10 +1186,6 @@ body.col-resizing {
   padding: 6px 30px;
   white-space: pre-wrap;
 }
-.fiex-menu[data-slot='dropdown-menu-content'] {
-  /* Radix portals menus to the body; follow the browser-demo UI scale. */
-  zoom: var(--ui-scale, 1);
-}
 .fiex-menu {
   font-size: 11px !important;
   border-radius: var(--radius-menu) !important;
@@ -1616,7 +1605,7 @@ body.resizing-terminal {
   right: 0;
   bottom: 28px;
   z-index: 30;
-  max-height: calc(var(--ui-vh, 100vh) - 80px);
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
   display: grid;
   width: 240px;

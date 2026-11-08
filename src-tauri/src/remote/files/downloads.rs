@@ -59,7 +59,6 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     };
     // The listing already contains content length. Forward it through the
     // generic openRead contract; WebDAV then avoids another PROPFIND request.
-    // A zero-sized cached entry may mean "unknown" in legacy metadata.
     fetch_remote_with_size(
         &conn,
         node,

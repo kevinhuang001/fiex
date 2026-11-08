@@ -6,7 +6,6 @@ import { TerminalView } from '@/components/terminal/TerminalView'
 import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
-import { uiScale } from '@/lib/uiScale'
 
 interface TerminalTab {
   id: string
@@ -120,12 +119,11 @@ export function TerminalPanel({
   if (!tabs.length) return null
   const resizeStart = (event: React.MouseEvent) => {
     event.preventDefault()
-    const scale = uiScale()
     const bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
-    const limit = Math.max(140, (window.innerHeight / scale) * 0.72)
+    const limit = Math.max(140, window.innerHeight * 0.72)
     let next = height
     const move = (moveEvent: MouseEvent) => {
-      next = Math.min(limit, Math.max(120, (bottom - moveEvent.clientY) / scale))
+      next = Math.min(limit, Math.max(120, bottom - moveEvent.clientY))
       // Write the height directly while dragging: rerendering the tab strip and
       // every terminal view on each pointer event makes the resize feel sticky.
       if (panel.current) panel.current.style.height = `${next}px`

@@ -53,11 +53,11 @@
   top: auto;
   bottom: 0;
   z-index: 50;
-  max-height: calc(var(--ui-vh, 100vh) - 20px);
+  max-height: calc(100vh - 20px);
   overflow-y: auto;
   /* Nested menus stay compact even when a plugin supplies a long label. */
   width: 112px;
-  max-width: min(180px, calc(var(--ui-vw, 100vw) - 16px));
+  max-width: min(180px, calc(100vw - 16px));
   padding: 5px;
   border: 1px solid var(--menu-line);
   border-radius: var(--radius-submenu);
@@ -106,8 +106,8 @@
   z-index: 51;
   background: var(--surface);
   width: 420px;
-  max-width: calc(var(--ui-vw, 100vw) - 24px);
-  max-height: calc(var(--ui-vh, 100vh) - 24px);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--line) 60%, white);
   box-shadow: var(--shadow);
@@ -237,16 +237,16 @@
   .modal {
     padding: 16px;
     border-radius: 14px;
-    max-width: calc(var(--ui-vw, 100vw) - 20px);
-    max-height: calc(var(--ui-vh, 100vh) - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
   }
   .settings-modal,
   .plugin-manager-modal,
   .plugin-store-modal {
-    width: calc(var(--ui-vw, 100vw) - 20px);
-    max-width: calc(var(--ui-vw, 100vw) - 20px);
-    height: calc(var(--ui-vh, 100vh) - 20px);
-    max-height: calc(var(--ui-vh, 100vh) - 20px);
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
   }
   .plugin-store-modal .plugin-store-grid {
     grid-template-columns: 1fr;

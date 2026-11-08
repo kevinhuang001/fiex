@@ -1,35 +1,35 @@
 import { handleProviders } from './providers'
 import { handlePluginInstaller } from './pluginInstaller'
-import { demoBuiltinMenus, executeDemoBuiltin } from '../presentation/menus'
-import { demoDecorations } from '../presentation/decorations'
+import { fixtureBuiltinMenus, executeFixtureBuiltin } from '../presentation/menus'
+import { fixtureDecorations } from '../presentation/decorations'
 import type { Entry, EntryDecoration } from '@/lib/types'
-import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
-import { demoPlugins, officialMode, query } from '../plugins'
+import { fixtureGitEntries, fixtureGpgKeys, fixtureHistory } from '../data'
+import { fixturePlugins, officialMode, query } from '../plugins'
 import { notHandled, state } from './shared'
-import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
-import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
+import { applyFixturePermissionResponse, requestFixturePermission } from '../permission'
+import { createFixtureGpgKey, deleteFixtureGpgKey } from '../gpgKeys'
 
 const pluginSettings = new Map<string, unknown>()
-interface DemoMenuItem {
+interface FixtureMenuItem {
   id: string
   title: string
   kind: string
   parentId?: string
 }
-const demoMenuSessions = new Map<
+const fixtureMenuSessions = new Map<
   string,
   {
     pluginId: string
     actions: Set<string>
     submenus: Set<string>
-    items: DemoMenuItem[]
+    items: FixtureMenuItem[]
     created: number
   }
 >()
 
-function resolveDemoMenu(a: Record<string, unknown>) {
+function resolveFixtureMenu(a: Record<string, unknown>) {
   const pluginId = String(a.pluginId || '')
-  const plugin = demoPlugins.find((p) => p.id === pluginId)
+  const plugin = fixturePlugins.find((p) => p.id === pluginId)
   if (!plugin?.enabled || !plugin.extensions?.contextMenus) {
     throw new Error('Context menu provider is not active')
   }
@@ -76,7 +76,7 @@ function resolveDemoMenu(a: Record<string, unknown>) {
       : []),
   ]
   const menuSessionId = crypto.randomUUID()
-  demoMenuSessions.set(menuSessionId, {
+  fixtureMenuSessions.set(menuSessionId, {
     pluginId,
     actions: new Set(
       entries
@@ -94,9 +94,9 @@ function resolveDemoMenu(a: Record<string, unknown>) {
   return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
 }
 
-const demoPreviewNames = new Map<string, string>()
+const fixturePreviewNames = new Map<string, string>()
 
-async function resolveDemoPreview(a: Record<string, unknown>) {
+async function resolveFixturePreview(a: Record<string, unknown>) {
   const path = String(a.path || '')
   const name = path.split(/[\\/]/).pop() || ''
   const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : ''
@@ -117,7 +117,7 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
     if (!response.ok) throw new Error(await response.text())
     const html = await response.text()
     const sessionId = crypto.randomUUID()
-    demoPreviewNames.set(sessionId, name)
+    fixturePreviewNames.set(sessionId, name)
     // `?slowPreview` keeps the loading page visible long enough to inspect it.
     if (new URLSearchParams(location.search).has('slowPreview')) {
       await new Promise((resolve) => setTimeout(resolve, 900))
@@ -183,7 +183,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
   if (installed !== notHandled) return installed
   switch (command) {
     case 'plugins_list':
-      return structuredClone(demoPlugins)
+      return structuredClone(fixturePlugins)
     case 'plugin_logs':
       return { entries: [], cursor: Number(a.after) || 0, hasMore: false }
     case 'plugin_logs_clear':
@@ -226,22 +226,22 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       // waits for plugin IPC; "all" keeps the one-batch contract for callers
       // that still ask for it.
       const source = String(a.source || 'all')
-      const plugins = demoPlugins
+      const plugins = fixturePlugins
         .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
         .flatMap((plugin) => {
           try {
-            return [{ ...resolveDemoMenu({ ...a, pluginId: plugin.id }), kind: 'plugin' }]
+            return [{ ...resolveFixtureMenu({ ...a, pluginId: plugin.id }), kind: 'plugin' }]
           } catch {
             return []
           }
         })
       if (source === 'plugins') return plugins
-      const builtins = demoBuiltinMenus(a)
+      const builtins = fixtureBuiltinMenus(a)
       if (source === 'core') return builtins
       return [...builtins, ...plugins]
     }
     case 'plugin_context_menu_children': {
-      const session = demoMenuSessions.get(String(a.menuSessionId || ''))
+      const session = fixtureMenuSessions.get(String(a.menuSessionId || ''))
       const parentId = String(a.parentId || '')
       if (!session || Date.now() - session.created >= 90000 || !session.submenus.has(parentId))
         throw new Error('Invalid menu session or submenu')
@@ -263,11 +263,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           path: paths[0] || '',
         }
       }
-      const builtin = await executeDemoBuiltin(a)
+      const builtin = await executeFixtureBuiltin(a)
       if (builtin) return builtin
       const menuSessionId = String(a.menuSessionId || '')
-      const session = demoMenuSessions.get(menuSessionId)
-      demoMenuSessions.delete(menuSessionId)
+      const session = fixtureMenuSessions.get(menuSessionId)
+      fixtureMenuSessions.delete(menuSessionId)
       const itemId = String(a.itemId || '')
       if (!session || Date.now() - session.created >= 90000 || !session.actions.has(itemId)) {
         throw new Error('Invalid or already used menu session')
@@ -276,9 +276,9 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       // revoked files.read, the action waits for the Core-owned prompt before
       // it can continue. This is the "during plugin use" re-authorization case.
       if (itemId === 'checksum.calculate') {
-        const plugin = demoPlugins.find((entry) => entry.id === session.pluginId)
+        const plugin = fixturePlugins.find((entry) => entry.id === session.pluginId)
         if (plugin && !plugin.grantedPermissions.includes('files.read')) {
-          const allow = await requestDemoPermission({
+          const allow = await requestFixturePermission({
             pluginId: plugin.id,
             pluginName: plugin.name,
             permission: 'files.read',
@@ -320,7 +320,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const method = String(a.method || '')
       const params = { ...((a.params || {}) as Record<string, unknown>) }
       if (!params.path && a.previewSessionId) {
-        const name = demoPreviewNames.get(String(a.previewSessionId))
+        const name = fixturePreviewNames.get(String(a.previewSessionId))
         if (name) params.path = name
       }
       if (officialMode) {
@@ -508,20 +508,20 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return {
             root: '/Users/kevin/Documents',
             branch: 'main',
-            entries: { ...demoGitEntries },
+            entries: { ...fixtureGitEntries },
           }
         if (method === 'git.refs')
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
-        if (method === 'git.history') return demoHistory
+        if (method === 'git.history') return fixtureHistory
         if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
-        if (method === 'gpg.createKey') return createDemoGpgKey(params)
-        if (method === 'gpg.deleteKey') return deleteDemoGpgKey(params)
-        if (method === 'gpg.keys') return demoGpgKeys
+        if (method === 'gpg.createKey') return createFixtureGpgKey(params)
+        if (method === 'gpg.deleteKey') return deleteFixtureGpgKey(params)
+        if (method === 'gpg.keys') return fixtureGpgKeys
         if (method === 'gpg.verify')
           return {
             valid: true,
-            signer: demoGpgKeys[0].name,
-            fingerprint: demoGpgKeys[0].fingerprint,
+            signer: fixtureGpgKeys[0].name,
+            fingerprint: fixtureGpgKeys[0].fingerprint,
           }
         if (method === 'gpg.import') return { imported: 1, status: 'demo' }
         if (method.startsWith('gpg.')) return { ok: true, status: 'demo' }
@@ -599,7 +599,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
                 ]
               return []
             })
-      return demoDecorations(entries, plugins)
+      return fixtureDecorations(entries, plugins)
     }
     case 'plugin_file_dialog': {
       const extensions = Array.isArray(a.extensions) ? a.extensions : []
@@ -611,7 +611,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return '/Users/kevin/Documents'
     }
     case 'plugin_activate': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       const consent = a.consent as {
         permissions?: string[]
         networkAll?: boolean
@@ -645,12 +645,12 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     }
     case 'plugin_set_enabled': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       if (plugin) plugin.enabled = Boolean(a.enabled)
       return null
     }
     case 'plugin_set_permission': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         const permission = String(a.permission)
         // Mirrors Core: revoking one capability does not deactivate the plugin;
@@ -662,10 +662,10 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     }
     case 'plugin_permission_respond':
-      applyDemoPermissionResponse(String(a.requestId || ''), Boolean(a.allow), demoPlugins)
+      applyFixturePermissionResponse(String(a.requestId || ''), Boolean(a.allow), fixturePlugins)
       return null
     case 'plugin_set_command': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.allowedCommands = a.granted
           ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
@@ -674,13 +674,13 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     }
     case 'plugin_set_network_all': {
-      const plugin = demoPlugins.find((entry) => entry.id === String(a.pluginId || ''))
+      const plugin = fixturePlugins.find((entry) => entry.id === String(a.pluginId || ''))
       if (!plugin) throw new Error('plugin not found')
       plugin.allowedNetworkAll = Boolean(a.all)
       return null
     }
     case 'plugin_set_network_domain': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         const domain = String(a.domain)
         plugin.allowedNetworkDomains = a.granted
@@ -690,7 +690,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     }
     case 'plugin_approve_install': {
-      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const plugin = fixturePlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.approved = true
         plugin.enabled = false
@@ -757,7 +757,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         values.push({ id: 'builtin:pdf', provider: 'Fiex', priority: 40 })
       if (values.length === 0)
         values.push({ id: 'builtin:fallback', provider: 'Fiex', priority: 0 })
-      for (const plugin of demoPlugins) {
+      for (const plugin of fixturePlugins) {
         if (!plugin.enabled) continue
         const contribution = plugin.extensions?.preview as
           { extensions?: string[]; priority?: number; loading?: unknown } | undefined
@@ -799,7 +799,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       )
       for (const id of order) {
         try {
-          return await resolveDemoPreview({ ...a, providerId: id })
+          return await resolveFixturePreview({ ...a, providerId: id })
         } catch {}
       }
       return {

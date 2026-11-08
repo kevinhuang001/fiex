@@ -24,7 +24,7 @@ impl ApplicationCatalog {
             .unwrap_or_default();
         uris.iter()
             .filter_map(|uri| {
-                let id = app_id(uri)?;
+                let id = app_id(&tree, uri)?;
                 let node = tree.apps.get(&id)?;
                 if app_uri_in(&tree, &id).as_deref() != Some(uri) {
                     return None;
@@ -34,9 +34,7 @@ impl ApplicationCatalog {
                         true,
                         cached
                             .iter()
-                            .find(|application| {
-                                app_id(&application.uri).as_deref() == Some(id.as_str())
-                            })
+                            .find(|application| application.id == id)
                             .and_then(|application| application.icon_source.clone()),
                     ),
                     ApplicationSource::Imported {

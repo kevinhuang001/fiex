@@ -175,12 +175,12 @@ fn info_rejects_duplicate_sections_and_non_string_rows() {
 }
 
 #[test]
-fn connection_validation_rejects_untyped_or_legacy_fields() {
+fn connection_validation_rejects_untyped_or_unknown_fields() {
     assert!(validate_result("connection.validate", &json!({"valid": true})).is_ok());
     assert!(validate_result("connection.validate", &json!({"valid": "true"})).is_err());
     assert!(validate_result(
         "connection.validate",
-        &json!({"valid": true, "credentials": {}, "legacy": true})
+        &json!({"valid": true, "credentials": {}, "unexpected": true})
     )
     .is_err());
 }

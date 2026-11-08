@@ -9,7 +9,6 @@ use super::events::Resolver;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
-    path::PathBuf,
     sync::{Mutex, OnceLock},
 };
 
@@ -34,38 +33,14 @@ struct Store {
     features: BTreeMap<String, ProviderPreference>,
 }
 
-fn file() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".fiex").join("provider-preferences.json"))
-}
-
 fn cache() -> &'static Mutex<Store> {
     static STORE: OnceLock<Mutex<Store>> = OnceLock::new();
     STORE.get_or_init(|| {
-        let saved = crate::infrastructure::state::get("providers", "ordering")
+        let store = crate::infrastructure::state::get("providers", "ordering")
             .ok()
             .flatten()
-            .and_then(|value| serde_json::from_value::<Store>(value).ok());
-        let store = if let Some(saved) = saved {
-            saved
-        } else {
-            let old: Store = file()
-                .and_then(|path| std::fs::read(path).ok())
-                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-                .unwrap_or_default();
-            let migrated = !old.features.is_empty()
-                && crate::infrastructure::state::put(
-                    "providers",
-                    "ordering",
-                    serde_json::to_value(&old).unwrap_or_default(),
-                )
-                .is_ok();
-            if migrated {
-                // Keep the Rust 2021 edition compatible; a let-chain here
-                // cannot be parsed by the project's rustfmt toolchain.
-                let _ = file().map(std::fs::remove_file);
-            }
-            old
-        };
+            .and_then(|value| serde_json::from_value::<Store>(value).ok())
+            .unwrap_or_default();
         Mutex::new(store)
     })
 }

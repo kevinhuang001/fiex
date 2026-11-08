@@ -1,4 +1,4 @@
-//! Credential backend selection, migration and cached OS vault access.
+//! Credential backend selection, explicit vault transfer and cached OS vault access.
 use super::storage::validate;
 use serde_json::Value;
 use std::{

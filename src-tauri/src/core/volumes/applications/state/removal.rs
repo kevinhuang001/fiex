@@ -56,8 +56,8 @@ fn save_journal(path: &Path, journal: &RemovalJournal) -> Result<(), String> {
 }
 
 pub(super) fn remove(uri: &str) -> Result<(), String> {
-    let id = app_id(uri).ok_or("not an Applications app node")?;
     let app = source(uri)?;
+    let id = app.id.clone();
     let ApplicationSource::Imported {
         asset_id,
         extension,

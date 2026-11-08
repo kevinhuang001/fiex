@@ -2,7 +2,7 @@ use super::*;
 use crate::core::files::Entry;
 
 pub fn folder_entry(folder: &VirtualFolder, state: &ApplicationsState) -> Entry {
-    let uri = folder_uri_in(state, &folder.id).unwrap_or_else(|| folder_uri(&folder.id));
+    let uri = folder_uri_in(state, &folder.id).expect("folder is part of the validated tree");
     // Remove is a supported operation for virtual folders. Whether a folder
     // is empty is checked by the Provider's remove preflight at execution.
     let operations = [
@@ -18,7 +18,7 @@ pub fn app_entry(app: &ApplicationNode, state: &ApplicationsState) -> Entry {
     };
     let mut entry = application_entry(
         app.display_name.clone(),
-        app_uri_in(state, &app.id).unwrap_or_else(|| app_uri(&app.id)),
+        app_uri_in(state, &app.id).expect("application is part of the validated tree"),
         false,
         operations,
     );
@@ -59,8 +59,12 @@ fn application_entry(name: String, path: String, is_dir: bool, operations: &[&st
 }
 
 pub fn folder_children(uri: &str) -> Result<Vec<Entry>, String> {
-    let parent = folder_id_or_root(uri)?;
     let state = snapshot()?;
+    let parent = if uri == super::super::URI {
+        None
+    } else {
+        Some(folder_id(&state, uri).ok_or("invalid Applications folder URI")?)
+    };
     if !parent_uri_matches(&state, uri) {
         return Err("StaleRef: Applications folder moved".into());
     }
@@ -96,7 +100,7 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         return Ok(item);
     }
     let state = snapshot()?;
-    if let Some(id) = folder_id(uri) {
+    if let Some(id) = folder_id(&state, uri) {
         let entry = state
             .folders
             .get(&id)
@@ -107,7 +111,7 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         }
         return Ok(entry);
     }
-    if let Some(id) = app_id(uri) {
+    if let Some(id) = app_id(&state, uri) {
         let entry = state
             .apps
             .get(&id)
@@ -122,8 +126,8 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
 }
 
 pub fn source(uri: &str) -> Result<ApplicationNode, String> {
-    let id = app_id(uri).ok_or("not an Applications app node")?;
     let state = snapshot()?;
+    let id = app_id(&state, uri).ok_or("not an Applications app node")?;
     if app_uri_in(&state, &id).as_deref() != Some(uri) {
         return Err("StaleRef: Applications entry moved".into());
     }

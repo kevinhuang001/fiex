@@ -68,7 +68,7 @@ fn cut_keeps_the_existing_read_and_remove_requirements() {
 
 #[test]
 fn generic_open_does_not_require_read_and_preview_keeps_its_read_rule() {
-    let path = "applications://app_system-app-test";
+    let path = "applications://System%20App";
     let mut application = mount_entry(path, false);
     application.link_target = Some("stable-system-locator".into());
     let ctx = super::builtin::Context::for_test_caps(
@@ -173,7 +173,7 @@ fn trash_view_reuses_generic_remove_and_recent_never_inherits_source_delete() {
     );
     assert!(action_items(&trash, "builtin:move-to-trash").is_empty());
 
-    let recent_path = "recent://opaque-alias";
+    let recent_path = "recent://Recent%20file.txt?id=opaque-id";
     let recent = super::builtin::Context::for_test_caps(
         "recent://",
         vec![recent_path.into()],

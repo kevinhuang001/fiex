@@ -1,4 +1,4 @@
-export interface DemoPlugin {
+export interface FixturePlugin {
   id: string
   name: string
   version: string

@@ -54,8 +54,11 @@ fn restore_is_single_selection_and_empty_trash_is_root_only() {
             .is_empty()
     );
     assert!(providers("recent://", &[]).is_empty());
-    let recent_single = vec!["recent://one".into()];
-    let recent_multiple = vec!["recent://one".into(), "recent://two".into()];
+    let recent_single = vec!["recent://one.txt?id=one".into()];
+    let recent_multiple = vec![
+        "recent://one.txt?id=one".into(),
+        "recent://two.txt?id=two".into(),
+    ];
     for recent in [&recent_single, &recent_multiple] {
         assert!(providers("recent://", recent)
             .iter()

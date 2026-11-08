@@ -2,8 +2,6 @@
 #[cfg(windows)]
 use crate::system_recycle_bin;
 use crate::{RECYCLE_BIN_URI, TRASH_URI};
-#[cfg(not(windows))]
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use fiex_provider_contracts::{FsEntry, FsListing, FsOperation};
 use std::path::PathBuf;
 
@@ -69,6 +67,25 @@ impl TrashDirectory {
         }
     }
 
+    pub fn parent_uri(&self, uri: &str) -> Result<String, String> {
+        #[cfg(not(windows))]
+        {
+            let relative = relative(uri)?;
+            let parent = relative
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty());
+            Ok(match parent {
+                Some(parent) => format!("{TRASH_URI}{}", uri_for_relative(parent)),
+                None => TRASH_URI.to_owned(),
+            })
+        }
+        #[cfg(windows)]
+        {
+            let _ = uri;
+            Err("Unsupported: Trash paths are unavailable".into())
+        }
+    }
+
     pub fn list(&self, uri: &str) -> Result<FsListing, String> {
         self.check_access()?;
         #[cfg(windows)]
@@ -99,10 +116,7 @@ impl TrashDirectory {
                     let relative = physical
                         .strip_prefix(&root)
                         .map_err(|_| "ScopeDenied: Trash listing escaped its root")?;
-                    let node_id = format!(
-                        "{TRASH_URI}{}",
-                        URL_SAFE_NO_PAD.encode(relative.to_string_lossy().as_bytes())
-                    );
+                    let node_id = format!("{TRASH_URI}{}", uri_for_relative(relative));
                     entry_for_path(&physical, node_id)
                 })
                 .collect::<Result<Vec<_>, String>>()?;
@@ -200,4 +214,4 @@ mod path_helpers;
 #[path = "tests.rs"]
 mod tests;
 #[cfg(not(windows))]
-use path_helpers::{confined, entry_for_path, io_error, relative, trash_path};
+use path_helpers::{confined, entry_for_path, io_error, relative, trash_path, uri_for_relative};

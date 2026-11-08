@@ -1,7 +1,6 @@
 import { getLocale, normalizeLocale, setLocale } from '@/i18n'
 import { call } from '@/lib/api'
 import { applyTheme, installedThemes } from '@/lib/themes'
-import { demo } from '@/lib/api'
 import { defaultDisplayIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
@@ -59,9 +58,7 @@ function load(input?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored =
-      input ??
-      (JSON.parse(localStorage.getItem('fiex:preferences') || '{}') as Partial<Preferences>)
+    const stored = input ?? {}
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -84,24 +81,11 @@ function load(input?: Partial<Preferences>): Preferences {
           )
       }
     }
-    // The isolated demo fixture is a folder tree under Documents; always open
-    // it there instead of the empty Recent page a fresh profile would show.
-    const startPage = demo
-      ? 'documents'
-      : stored.startPage === 'home' ||
-          stored.startPage === 'documents' ||
-          stored.startPage === 'last'
+    const startPage =
+      stored.startPage === 'home' || stored.startPage === 'documents' || stored.startPage === 'last'
         ? stored.startPage
         : 'recent'
     const tags = normalizeTags(stored.tags) ?? fallback.tags
-    // In the plain Vite dev URL, show the built-in dog once as a demo. An
-    // explicit backgroundImage (including "") in stored preferences wins.
-    const demoDog =
-      demo &&
-      !new URLSearchParams(location.search).has('demo') &&
-      !localStorage.getItem('fiex:background-removed')
-        ? '/demo/dog.svg'
-        : ''
     return {
       ...fallback,
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
@@ -112,10 +96,7 @@ function load(input?: Partial<Preferences>): Preferences {
       fontSize,
       terminalFont,
       terminalFontSize,
-      backgroundImage:
-        typeof stored.backgroundImage === 'string' && stored.backgroundImage
-          ? stored.backgroundImage
-          : demoDog,
+      backgroundImage: typeof stored.backgroundImage === 'string' ? stored.backgroundImage : '',
       backgroundOpacity,
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore
@@ -132,9 +113,7 @@ function load(input?: Partial<Preferences>): Preferences {
             const saved = stored.sidebarOrder.filter((section): section is SidebarSection =>
               known.includes(section),
             )
-            // Older preferences predate the connections section; append it so
-            // the new group appears without disturbing the saved order.
-            return [...saved, ...known.filter((section) => !saved.includes(section))]
+            return saved
           })()
         : fallback.sidebarOrder,
       hiddenPlaces: Array.isArray(stored.hiddenPlaces)
@@ -171,18 +150,14 @@ function load(input?: Partial<Preferences>): Preferences {
 
 export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(load)
-  const [stateReady, setStateReady] = useState(demo)
+  const [stateReady, setStateReady] = useState(false)
   useEffect(() => {
     setLocale(prefs.locale)
     void call('locale_set', { locale: prefs.locale })
       .catch(() => {})
       .then(() => window.dispatchEvent(new Event('fiex:plugins-changed')))
   }, [prefs.locale])
-  // One-time migration: Core StateStore becomes the only durable settings
-  // writer. The legacy localStorage value is read solely for first-paint and
-  // imported only if the Core store is empty.
   useEffect(() => {
-    if (demo) return
     let active = true
     void (async () => {
       try {
@@ -193,22 +168,11 @@ export function usePreferences() {
         if (!active) return
         if (saved) {
           setPrefs(load(saved))
-        } else {
-          const legacy = localStorage.getItem('fiex:preferences')
-          if (legacy) {
-            await call('state_put', {
-              namespace: 'explorer',
-              key: 'preferences',
-              value: JSON.parse(legacy),
-            })
-          }
         }
         if (active) {
-          localStorage.removeItem('fiex:preferences')
           setStateReady(true)
         }
       } catch {
-        // Keep legacy preferences in place if Core is not available.
         if (active) setStateReady(false)
       }
     })()
@@ -217,19 +181,12 @@ export function usePreferences() {
     }
   }, [])
   useEffect(() => {
-    if (demo) {
-      localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
-      return
-    }
     if (!stateReady) return
     void call('state_put', {
       namespace: 'explorer',
       key: 'preferences',
       value: prefs,
-    }).catch(() => {
-      // Preserve edits until Core persistence recovers rather than lose them.
-      localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
-    })
+    }).catch(() => {})
   }, [prefs, stateReady])
   useEffect(() => {
     // The desktop scheduler owns the timer; keep it in step with settings.

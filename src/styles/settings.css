@@ -1,6 +1,6 @@
 .settings-modal {
   width: 760px;
-  height: min(680px, calc(var(--ui-vh, 100vh) - 48px));
+  height: min(680px, calc(100vh - 48px));
   padding: 0;
   overflow: hidden;
 }
@@ -360,7 +360,7 @@
 }
 @media (max-width: 760px) {
   .settings-modal {
-    width: calc(var(--ui-vw, 100vw) - 32px);
+    width: calc(100vw - 32px);
   }
   .settings-sidebar {
     width: 190px;
@@ -483,8 +483,8 @@
   font-size: 11px;
 }
 .file-info-modal {
-  width: min(760px, calc(var(--ui-vw, 100vw) - 32px));
-  max-height: min(760px, calc(var(--ui-vh, 100vh) - 40px));
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 40px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1337,7 +1337,7 @@ body.dragging-file * {
 }
 
 .conflict-modal {
-  width: min(680px, calc(var(--ui-vw, 100vw) - 48px));
+  width: min(680px, calc(100vw - 48px));
 }
 .conflict-summary {
   display: flex;
@@ -1596,8 +1596,8 @@ body.dragging-file * {
 
 .batch-rename-modal {
   display: flex;
-  width: min(1080px, calc(var(--ui-vw, 100vw) - 32px));
-  max-height: calc(var(--ui-vh, 100vh) - 48px);
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   flex-direction: column;
   overflow: hidden;
 }
@@ -1605,7 +1605,7 @@ body.dragging-file * {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 16px;
-  height: min(620px, calc(var(--ui-vh, 100vh) - 190px));
+  height: min(620px, calc(100vh - 190px));
   min-height: 320px;
 }
 .batch-rename-side {

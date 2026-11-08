@@ -1,6 +1,6 @@
 // Native menu DTO fixtures for browser tests. Never imported by desktop code.
 import { t } from '@/i18n'
-import { demoRemoteEntries, demoRemoteRoot } from '../data'
+import { fixtureRemoteEntries, fixtureRemoteRoot } from '../data'
 import { state } from '../handlers/shared'
 import { handleFiles } from '../handlers/files'
 import type { CoreMenu, CoreMenuItem } from '@/components/explorer/context-menu/useContextMenu'
@@ -10,14 +10,14 @@ const sessions = new Map<
   string,
   { paths: string[]; directory: string; actions: Set<string>; created: number }
 >()
-export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
+export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const paths = a.paths as string[]
   const directory = String(a.directory)
   const recentView = directory === 'recent://' || directory === 'recent:'
   const trashView = directory === 'trash://' || directory === 'recyclebin://'
-  const allEntries = [...state.entries, ...demoRemoteEntries]
+  const allEntries = [...state.entries, ...fixtureRemoteEntries]
   const entries = paths.map((path) => allEntries.find((entry) => entry.path === path))
-  const remote = paths.length > 0 && paths.every((path) => path.startsWith(demoRemoteRoot))
+  const remote = paths.length > 0 && paths.every((path) => path.startsWith(fixtureRemoteRoot))
   const selectedOps = entries.map((entry) => entry?.allowedOps || [])
   const appOps = paths.map((path) =>
     path.startsWith('applications://')
@@ -177,7 +177,7 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   }
   return menus
 }
-export async function executeDemoBuiltin(a: Record<string, unknown>) {
+export async function executeFixtureBuiltin(a: Record<string, unknown>) {
   const id = String(a.menuSessionId || '')
   if (!id.startsWith('builtin-demo-')) return undefined
   const session = sessions.get(id)
@@ -195,7 +195,7 @@ export async function executeDemoBuiltin(a: Record<string, unknown>) {
     }
   if (command === 'remote.cache')
     await handleFiles('remote_cache', { paths: session.paths, onProgress: a.onProgress })
-  for (const entry of demoRemoteEntries.filter((entry) => session.paths.includes(entry.path))) {
+  for (const entry of fixtureRemoteEntries.filter((entry) => session.paths.includes(entry.path))) {
     if (command === 'remote.cache') {
       entry.hasCache = true
       entry.sync = 'synced'

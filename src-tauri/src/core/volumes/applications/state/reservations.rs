@@ -19,8 +19,12 @@ fn pending_reservations() -> &'static Mutex<HashMap<String, PendingReservation>>
 
 pub fn reserve_child(parent_uri: &str, name: &str, kind: PendingKind) -> Result<String, String> {
     crate::core::files::validate_name(name)?;
-    let parent = folder_id_or_root(parent_uri)?;
     let state = snapshot()?;
+    let parent = if parent_uri == super::super::URI {
+        None
+    } else {
+        Some(folder_id(&state, parent_uri).ok_or("invalid Applications parent URI")?)
+    };
     if !parent_uri_matches(&state, parent_uri) {
         return Err("StaleRef: Applications parent moved".into());
     }
@@ -65,12 +69,10 @@ pub fn reserve_child(parent_uri: &str, name: &str, kind: PendingKind) -> Result<
         return Err("invalid application file extension".into());
     }
     let target = PendingTarget {
-        uri: match kind {
-            PendingKind::Folder => child_uri(parent_uri, &format!("{FOLDER_SEGMENT}{id}")),
-            PendingKind::Application => child_uri(parent_uri, &format!("{APP_SEGMENT}{id}")),
-        },
+        uri: child_uri(parent_uri, name),
         parent_uri: parent_uri.to_owned(),
         name: name.to_owned(),
+        id: id.clone(),
         asset_id: (kind == PendingKind::Application)
             .then(random_id)
             .transpose()?,
@@ -122,7 +124,7 @@ pub fn commit_reserved_folder(uri: &str) -> Result<Entry, String> {
     if target.kind != PendingKind::Folder {
         return Err("InvalidVfsUri: reserved target is not a folder".into());
     }
-    let id = folder_id(uri).ok_or("invalid reserved folder URI")?;
+    let id = target.id.clone();
     let parent = folder_id_or_root(&target.parent_uri)?;
     let state = update(|state| {
         require_parent(state, parent.as_deref())?;
@@ -157,7 +159,7 @@ pub fn commit_reserved_application(uri: &str) -> Result<Entry, String> {
     if target.kind != PendingKind::Application {
         return Err("InvalidVfsUri: reserved target is not an application".into());
     }
-    let id = app_id(uri).ok_or("invalid reserved application URI")?;
+    let id = target.id.clone();
     let asset_id = target
         .asset_id
         .clone()

@@ -1,10 +1,10 @@
-import type { Listing, OperationProgress } from '../../types'
-import { basename, join, parent } from '../../files'
+import type { Listing, OperationProgress } from '@/lib/types'
+import { basename, join, parent } from '@/lib/files'
 import {
-  demoChanges,
-  demoRemoteEntries,
-  demoRemoteRoot,
-  demoRemoteWarnings,
+  fixtureChanges,
+  fixtureRemoteEntries,
+  fixtureRemoteRoot,
+  fixtureRemoteWarnings,
   ignored,
   item,
   root,
@@ -84,12 +84,12 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           warnings: [],
         }
       }
-      if ((a.path as string).startsWith(demoRemoteRoot)) {
+      if ((a.path as string).startsWith(fixtureRemoteRoot)) {
         return {
           path: a.path,
           allowedOps: ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove'],
-          entries: demoRemoteEntries,
-          warnings: demoRemoteWarnings,
+          entries: fixtureRemoteEntries,
+          warnings: fixtureRemoteWarnings,
         }
       }
 
@@ -237,9 +237,9 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         e.path === a.path ? { ...e, path, name: a.name as string } : e,
       )
       const previous = String(a.path)
-      if (demoChanges[previous]) {
-        demoChanges[path] = demoChanges[previous]
-        delete demoChanges[previous]
+      if (fixtureChanges[previous]) {
+        fixtureChanges[path] = fixtureChanges[previous]
+        delete fixtureChanges[previous]
       }
       return path
     }
