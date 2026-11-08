@@ -45,6 +45,78 @@
   margin-left: auto;
   color: var(--muted);
 }
+
+.open-with-picker {
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 32px));
+}
+.open-with-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+}
+.open-with-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+}
+.open-with-list {
+  position: relative;
+  height: min(440px, calc(100vh - 190px));
+  max-height: min(440px, calc(100vh - 190px));
+  overflow: auto;
+}
+.open-with-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.open-with-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+.open-with-list button:hover,
+.open-with-list button:focus-visible {
+  outline: 0;
+  background: var(--accent);
+}
+.open-with-list button img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  object-fit: contain;
+}
+.open-with-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.open-with-empty {
+  padding: 28px 12px;
+  color: var(--muted-foreground);
+  text-align: center;
+}
 .context-submenu {
   position: absolute;
   /* Exactly clear the parent's 6px padding + 1px border: level borders touch

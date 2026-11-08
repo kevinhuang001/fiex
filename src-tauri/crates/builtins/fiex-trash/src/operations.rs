@@ -204,14 +204,45 @@ fn macos_put_back(trashed: &Path) -> Option<String> {
     let bytes = std::fs::read(trashed.parent()?.join(".DS_Store")).ok()?;
     let store = ds_store::DsStore::new(&bytes).ok()?;
     let records = store.contents().get(&name)?;
-    for key in ["ptbL", "ptbN"] {
-        if let Some(ds_store::RecordValue::String(value)) = records.get(key) {
-            if !value.is_empty() && Path::new(value).is_absolute() {
-                return Some(value.clone());
-            }
-        }
+    let location = match records.get("ptbL")? {
+        ds_store::RecordValue::String(value) => value,
+        _ => return None,
+    };
+    let original_name = match records.get("ptbN")? {
+        ds_store::RecordValue::String(value) => value,
+        _ => return None,
+    };
+    macos_put_back_path(location, original_name)
+}
+
+/// Finder stores the original parent in `ptbL` and the original leaf name in
+/// `ptbN`. On APFS, `ptbL` can use the Data-volume firmlink spelling, which
+/// must be converted back to the user-visible path before joining the name.
+#[cfg(any(target_os = "macos", test))]
+fn macos_put_back_path(location: &str, original_name: &str) -> Option<String> {
+    if location.is_empty()
+        || original_name.is_empty()
+        || original_name == "."
+        || original_name == ".."
+        || original_name.contains('/')
+        || original_name.contains('\0')
+    {
+        return None;
     }
-    None
+
+    // Finder paths always use POSIX separators. Keep this conversion lexical
+    // so the macOS metadata can also be tested on Windows and Linux runners.
+    let location = location.strip_prefix('/').unwrap_or(location);
+    let location = location
+        .strip_prefix("System/Volumes/Data/")
+        .or_else(|| (location == "System/Volumes/Data").then_some(""))
+        .unwrap_or(location)
+        .trim_end_matches('/');
+    if location.is_empty() {
+        Some(format!("/{original_name}"))
+    } else {
+        Some(format!("/{location}/{original_name}"))
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -237,3 +268,31 @@ fn remove_trash_metadata(source: &Path) {
 
 #[cfg(not(target_os = "linux"))]
 fn remove_trash_metadata(_: &Path) {}
+
+#[cfg(test)]
+mod tests {
+    use super::macos_put_back_path;
+
+    #[test]
+    fn reconstructs_finder_put_back_path_from_parent_and_original_name() {
+        assert_eq!(
+            macos_put_back_path("/Users/kevin/Downloads/", "Report.pdf").as_deref(),
+            Some("/Users/kevin/Downloads/Report.pdf")
+        );
+    }
+
+    #[test]
+    fn normalizes_apfs_data_volume_firmlink_before_restoring() {
+        assert_eq!(
+            macos_put_back_path("System/Volumes/Data/Users/kevin/Desktop", "桌面文件.txt")
+                .as_deref(),
+            Some("/Users/kevin/Desktop/桌面文件.txt")
+        );
+    }
+
+    #[test]
+    fn rejects_put_back_names_that_are_not_single_path_components() {
+        assert!(macos_put_back_path("/Users/kevin", "../outside.txt").is_none());
+        assert!(macos_put_back_path("/Users/kevin", "/outside.txt").is_none());
+    }
+}

@@ -1,6 +1,10 @@
 import { handleProviders } from './providers'
 import { handlePluginInstaller } from './pluginInstaller'
-import { fixtureBuiltinMenus, executeFixtureBuiltin } from '../presentation/menus'
+import {
+  fixtureBuiltinChildren,
+  fixtureBuiltinMenus,
+  executeFixtureBuiltin,
+} from '../presentation/menus'
 import { fixtureDecorations } from '../presentation/decorations'
 import type { Entry, EntryDecoration } from '@/lib/types'
 import { fixtureGitEntries, fixtureGpgKeys, fixtureHistory } from '../data'
@@ -241,6 +245,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return [...builtins, ...plugins]
     }
     case 'plugin_context_menu_children': {
+      const builtin = fixtureBuiltinChildren(a)
+      if (builtin) return builtin
       const session = fixtureMenuSessions.get(String(a.menuSessionId || ''))
       const parentId = String(a.parentId || '')
       if (!session || Date.now() - session.created >= 90000 || !session.submenus.has(parentId))

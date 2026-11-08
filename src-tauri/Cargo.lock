@@ -1897,6 +1897,7 @@ dependencies = [
 name = "fiex-info"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "fiex-provider-contracts",
  "lofty",
  "matroska",
@@ -1917,8 +1918,13 @@ dependencies = [
 name = "fiex-platform"
 version = "0.1.0"
 dependencies = [
+ "dirs 6.0.0",
  "dunce",
  "fiex-provider-contracts",
+ "gio 0.22.10",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "reqwest 0.12.28",
  "serde",
  "trash",

@@ -1,6 +1,22 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+
+async function openDocuments(page: Page) {
+  await page.getByRole('button', { name: '文稿', exact: true }).click()
+  await expect(page.getByRole('tab').last()).toContainText('Documents')
+}
+
+async function chooseFixturePluginPackage(page: Page) {
+  const picker = page.getByRole('dialog', { name: '打开文件' })
+  await picker.getByRole('option', { name: /^Downloads/ }).dblclick()
+  await picker.getByRole('option', { name: /^Example\.fiexplugin/ }).click()
+  await picker.getByRole('button', { name: '打开', exact: true }).click()
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/?fixture&pluginFixture')
+  // The product now starts in Recent. Most explorer fixtures use Documents,
+  // so choose that directory explicitly instead of relying on defaults.
+  await openDocuments(page)
 })
 test('four views, grouping, and keyboard preview', async ({ page }) => {
   await page.getByRole('grid', { name: '文件' }).click({ position: { x: 400, y: 400 } })
@@ -38,6 +54,7 @@ test('folder navigation, tabs and fast search', async ({ page }) => {
   await expect(page.getByRole('tab')).toHaveCount(2)
   await page.getByRole('button', { name: '关闭标签页', exact: true }).last().click()
   await expect(page.getByRole('tab')).toHaveCount(1)
+  await openDocuments(page)
   await page.getByRole('textbox', { name: '搜索文件' }).fill('insb')
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
   await expect(page.getByText('Notes.md', { exact: true }).first()).toHaveCount(0)
@@ -49,7 +66,7 @@ test('closing the last tab reopens the configured start page', async ({ page }) 
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(1)
-  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByRole('tab')).toContainText('最近使用')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
 })
 test('closing the last tab collapses the split pane', async ({ page }) => {
@@ -57,7 +74,7 @@ test('closing the last tab collapses the split pane', async ({ page }) => {
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toBeVisible()
   await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(1)
-  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByRole('tab')).toContainText('最近使用')
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toHaveCount(0)
 })
 test('plugin search providers add results to the same query', async ({ page }) => {
@@ -240,6 +257,24 @@ test('settings creates tags and the file dialog only applies them', async ({ pag
   await page.getByRole('menuitem', { name: '显示简介' }).click()
   await expect(page.getByRole('dialog')).toContainText('验收')
 })
+test('Info computes only the on-demand field the user selects', async ({ page }) => {
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '显示简介' }).click()
+
+  const dialog = page.getByRole('dialog', { name: '显示简介' })
+  await expect(dialog).toContainText('Notes.md')
+  const sha256 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-256' })
+  const sha512 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-512' })
+  await expect(sha256).toContainText('尚未计算')
+  await expect(sha512).toContainText('尚未计算')
+
+  await sha256.getByRole('button', { name: '计算', exact: true }).click()
+  await expect(sha256).toContainText(
+    'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  )
+  await expect(sha512).toContainText('尚未计算')
+  await expect(sha512.getByRole('button', { name: '计算', exact: true })).toBeVisible()
+})
 test('Applications entry and search control', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
   await expect(
@@ -249,12 +284,14 @@ test('Applications entry and search control', async ({ page }) => {
 })
 test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.evaluate(() => {
-    const key = 'fiex:preferences'
+    const key = 'fiex:e2e-state:explorer:preferences'
     const prefs = JSON.parse(localStorage.getItem(key) || '{}')
     localStorage.setItem(key, JSON.stringify({ ...prefs, terminal: 'builtin' }))
   })
   await page.reload()
+  await openDocuments(page)
   const contentHeight = await page.locator('.pane-main').evaluate((element) => element.clientHeight)
   await page.getByRole('button', { name: 'Open in Terminal' }).click()
   await expect(page.locator('.terminal-panel')).toBeVisible()
@@ -262,7 +299,7 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
     contentHeight,
   )
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
-  await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
+  await expect(page.locator('.terminal-panel-tab')).toContainText('zsh')
   const resizer = await page.locator('.terminal-panel-resizer').boundingBox()
   if (!resizer) throw new Error('terminal resizer is missing')
   await page.mouse.move(resizer.x + 20, resizer.y + 3)
@@ -319,14 +356,22 @@ test('connection plugin opens a full-height view', async ({ page }) => {
 test('connection sessions can autostart and appear in the add menu', async ({ page }) => {
   await page.locator('.device-row').filter({ hasText: '生产服务器' }).click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '保存 Session' })).toBeVisible()
-  const context = await page.locator('.connection-session-menu.floating').boundingBox()
-  expect(context && context.y + context.height).toBeLessThanOrEqual(780)
+  await expect
+    .poll(async () => {
+      const context = await page.locator('.connection-session-menu.floating').boundingBox()
+      return Boolean(context && context.y + context.height <= 780)
+    })
+    .toBe(true)
   await page.getByRole('menuitem', { name: '设置为自启动' }).click()
   await expect(page.locator('.connection-autostart')).toHaveAttribute('title', '开机自启动')
   await page.getByRole('button', { name: '添加连接' }).click()
   await expect(page.getByRole('menuitem', { name: '生产服务器' })).toBeVisible()
-  const plus = await page.locator('.connection-session-menu.plus').boundingBox()
-  expect(plus && plus.y + plus.height).toBeLessThanOrEqual(780)
+  await expect
+    .poll(async () => {
+      const plus = await page.locator('.connection-session-menu.plus').boundingBox()
+      return Boolean(plus && plus.y + plus.height <= 780)
+    })
+    .toBe(true)
 })
 
 test('opens the Trash inside Fiex', async ({ page }) => {
@@ -349,6 +394,11 @@ test('batch rename previews and applies a pattern', async ({ page }) => {
 test('appearance can set and remove a background image', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '选择图片…' }).click()
+  const picker = page.getByRole('dialog', { name: '打开文件' })
+  await picker.getByRole('option', { name: /^Documents/ }).dblclick()
+  await picker.getByRole('option', { name: /^Projects/ }).dblclick()
+  await picker.getByRole('option', { name: /^logo\.png/ }).click()
+  await picker.getByRole('button', { name: '打开', exact: true }).click()
   await expect(page.locator('.app-background')).toHaveCount(0)
   await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(page.locator('.app.has-background')).toHaveCount(1)
@@ -434,6 +484,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.getByRole('button', { name: '添加连接' }).click()
   await page.getByRole('menuitem', { name: '新建连接…' }).click()
   const dialog = page.getByRole('dialog')
@@ -490,6 +541,7 @@ test('ten thousand icons stay virtualized and support end selection and rename',
   page,
 }) => {
   await page.goto('/?fixture&count=10000')
+  await openDocuments(page)
   await expect(page.locator('.statusbar')).toContainText('10,015')
   await page.getByRole('button', { name: '图标视图', exact: true }).click()
   await expect(page.locator('.virtual-file-grid')).toBeVisible()
@@ -560,6 +612,7 @@ test('copy conflicts offer compare and keep both, ordinary pastes need no confir
 
 test('optional archive and checksum features are not preinstalled', async ({ page }) => {
   await page.goto('/?fixture')
+  await openDocuments(page)
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
@@ -587,6 +640,7 @@ test('local import shows identity and signature only', async ({ page }) => {
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
+  await chooseFixturePluginPackage(page)
   const dialog = page.getByRole('dialog', { name: '导入插件' })
   await expect(dialog).toContainText('本地示例插件')
   await expect(dialog).toContainText('Example Author')
@@ -649,6 +703,7 @@ test('installed plugin rows expose permissions and settings', async ({ page }) =
 
 test('tab dragging preserves the active folder', async ({ page }) => {
   await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  await openDocuments(page)
   await page.getByText('Research', { exact: true }).dblclick()
   const tabs = page.getByRole('tab')
   const from = await tabs.nth(1).boundingBox()
@@ -701,6 +756,7 @@ test('caption buttons stay clear of tabs and the sidebar starts below the tab st
   page,
 }) => {
   await page.goto('/?fixture&platform=windows')
+  await openDocuments(page)
   await expect(page.getByText('Fiex — 产品设计.pdf', { exact: true })).toBeVisible()
   for (let i = 0; i < 12; i += 1)
     await page.getByRole('button', { name: '新建标签页', exact: true }).click()
@@ -770,6 +826,32 @@ test('nested plugin menus meet their parent without gap or overlap', async ({ pa
     ) <= 1
   expect(flush(plugin, root)).toBe(true)
   expect(flush(nested, plugin)).toBe(true)
+})
+
+test('Core Open With submenu loads lazily and opens the application picker', async ({ page }) => {
+  // Open With must work for Recent entries too, where the original regression
+  // surfaced.
+  await page.getByRole('button', { name: '最近使用', exact: true }).click()
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  const trigger = page.getByRole('menuitem', { name: '打开方式', exact: true })
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+  await trigger.hover()
+  const submenu = page.getByRole('menu', { name: '打开方式' })
+  await expect(submenu.getByRole('menuitem', { name: 'Markdown Viewer' })).toBeVisible()
+  await expect(submenu.getByRole('menuitem', { name: 'Plain Text Editor' })).toBeVisible()
+  await submenu.getByRole('menuitem', { name: 'Markdown Viewer' }).click()
+  await expect(page.getByRole('menu', { name: '文件操作' })).toHaveCount(0)
+
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '打开方式', exact: true }).hover()
+  const reopened = page.getByRole('menu', { name: '打开方式' })
+  await reopened.getByRole('menuitem', { name: '选择其他应用…' }).click()
+
+  const picker = page.getByRole('dialog', { name: '选择应用打开文件' })
+  await expect(picker).toBeVisible()
+  await picker.getByRole('textbox', { name: '搜索应用' }).fill('Plain')
+  await picker.getByRole('option', { name: 'Plain Text Editor' }).click()
+  await expect(picker).toHaveCount(0)
 })
 
 test('activation reviews grouped permissions and grants nothing when cancelled', async ({
@@ -852,6 +934,7 @@ test('using a plugin asks again after its read capability was revoked', async ({
   await details.getByRole('button', { name: '关闭', exact: true }).click()
   await manager.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(manager).toBeHidden()
+  await openDocuments(page)
 
   // Normal use: the checksum action reads the selected file, so Core asks
   // again even though the plugin itself is still running.
@@ -922,6 +1005,7 @@ test('confirming a local import immediately opens activation consent', async ({ 
   await page.getByRole('button', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
+  await chooseFixturePluginPackage(page)
   await page
     .getByRole('dialog', { name: '导入插件' })
     .getByRole('button', { name: '导入插件', exact: true })

@@ -5,6 +5,19 @@ use crate::{core::tags, core::terminals};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::Manager;
 
+static DESKTOP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub(crate) fn set_desktop_handle(handle: tauri::AppHandle) {
+    let _ = DESKTOP_HANDLE.set(handle);
+}
+
+pub(crate) fn emit_applications_changed() {
+    use tauri::Emitter;
+    if let Some(handle) = DESKTOP_HANDLE.get() {
+        let _ = handle.emit("applications-changed", ());
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct WindowPaths(pub(crate) Mutex<HashMap<String, String>>);
 #[tauri::command]
@@ -111,6 +124,31 @@ pub(crate) async fn detect_ides() -> Result<Vec<terminals::Ide>, String> {
         .await
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub(crate) async fn open_with_picker_candidates(
+    path: String,
+) -> Result<crate::plugins::providers::context_menu::PickerResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::providers::context_menu::picker_candidates(path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn open_with_picker_execute(
+    path: String,
+    session_id: String,
+    item_id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::providers::context_menu::open_picker_choice(path, session_id, item_id)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub(crate) async fn open_in_ide(path: String, id: String) -> Result<(), String> {
     crate::plugins::mounts::reject_local(&path)?;

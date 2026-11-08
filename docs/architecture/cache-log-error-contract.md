@@ -94,7 +94,9 @@ initiating UI, avoiding automatic backend-plus-frontend double presentation.
 The public writer accepting a caller-provided plugin identity has been removed.
 UI frame diagnostics use `ui_error_report`, whose source is derived from the
 calling WebView. Runtime plugin logs/errors continue through authenticated Host
-RPC. A log at error level alone never opens a modal. `file_info_details` now
+RPC. A log at error level alone never opens a modal. Info descriptors and
+field values now use a Core-owned session and shared metadata cache; the old
+`file_info_details` command has been removed.
 returns a real failure rather than an empty success. Error notifications have a
 linked diagnostic ID; no retry/elevation action is inferred from message text.
 

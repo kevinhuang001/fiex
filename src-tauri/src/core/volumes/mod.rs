@@ -13,6 +13,8 @@ pub mod recycle;
 mod roots;
 pub mod trash_vfs;
 #[cfg(target_os = "windows")]
+pub(crate) mod windows_native;
+#[cfg(target_os = "windows")]
 pub(crate) mod windows_shell;
 
 use serde::Serialize;

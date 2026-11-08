@@ -6,6 +6,7 @@ rust-version = "1.90"
 publish = false
 
 [dependencies]
+chrono = "0.4"
 fiex-provider-contracts = { path = "../../../../sdk/rust/contracts" }
 lofty = "0.25"
 mp4 = "0.14"

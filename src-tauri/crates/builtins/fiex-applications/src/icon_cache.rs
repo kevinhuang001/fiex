@@ -33,10 +33,10 @@ pub fn cached_icon_with(
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp" | "ico") {
-        if image_icon(source, &target).is_ok() {
-            return Some(target.to_string_lossy().into_owned());
-        }
+    if matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp" | "ico")
+        && image_icon(source, &target).is_ok()
+    {
+        return Some(target.to_string_lossy().into_owned());
     }
     if shell_icon(source, &target).is_ok() {
         return Some(target.to_string_lossy().into_owned());

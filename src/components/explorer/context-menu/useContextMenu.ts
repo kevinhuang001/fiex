@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
 import type { ShortcutAction } from '@/lib/shortcuts'
 import { call } from '@/lib/api'
@@ -7,9 +7,10 @@ import type { ContextMenuProps } from './types'
 
 export interface CoreMenuItem {
   id: string
-  kind: 'action'
+  kind: 'action' | 'submenu' | 'separator'
   title: string
-  icon: string
+  parentId?: string
+  icon?: string
   shortcut?: ShortcutAction
   disabled?: boolean
   danger?: boolean
@@ -60,6 +61,11 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
   const [failure, setFailure] = useState<MenuFailure>()
   const [pluginFailure, setPluginFailure] = useState<MenuFailure>()
   const [pluginRetry, setPluginRetry] = useState(0)
+  const requestedCoreChildren = useRef(new Set<string>())
+
+  useEffect(() => {
+    requestedCoreChildren.current.clear()
+  }, [key])
 
   useEffect(() => {
     if (!menu) return
@@ -124,6 +130,32 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
       ? pluginFailure.error
       : ''
 
+  const resolveCoreChildren = async (group: CoreMenu, parentId: string) => {
+    const requestKey = group.menuSessionId + ':' + parentId
+    if (requestedCoreChildren.current.has(requestKey)) return
+    requestedCoreChildren.current.add(requestKey)
+    try {
+      const response = await call<{ items: unknown }>('plugin_context_menu_children', {
+        menuSessionId: group.menuSessionId,
+        parentId,
+      })
+      const children = response.items
+      if (!Array.isArray(children)) throw new Error('Invalid Core submenu response')
+      setSnapshot((previous) => {
+        if (!previous || previous.key !== key || previous.menu !== menu) return previous
+        const updated = previous.menus.map((candidate) => {
+          if (candidate.menuSessionId !== group.menuSessionId) return candidate
+          const items = [...candidate.items, ...children]
+          return validPluginMenuItems(items) ? { ...candidate, items } : candidate
+        })
+        return { ...previous, menus: updated }
+      })
+    } catch (error) {
+      requestedCoreChildren.current.delete(requestKey)
+      throw error
+    }
+  }
+
   return {
     paths,
     menus: current?.menus ?? [],
@@ -131,6 +163,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     pluginLoading: Boolean(menu) && !currentPlugins && !currentPluginFailure,
     pluginError: currentPluginFailure,
     retryPlugins: () => setPluginRetry((value) => value + 1),
+    resolveCoreChildren,
     ready: Boolean(current || currentFailure),
     error: currentFailure,
   }

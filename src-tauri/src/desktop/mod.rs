@@ -109,9 +109,10 @@ pub fn run() {
             system_fonts,
             plugins_list,
             plugin_settings,
-            file_info_details,
-            file_info_directory_size,
-            file_info_directory_size_cancel,
+            file_info_open,
+            file_info_compute,
+            file_info_cancel,
+            file_info_session_close,
             plugin_logs,
             ui_error_report,
             plugin_logs_clear,
@@ -188,6 +189,8 @@ pub fn run() {
             reset_provider_preference,
             detect_terminals,
             detect_ides,
+            open_with_picker_candidates,
+            open_with_picker_execute,
             open_in_ide,
             open_terminal,
             open_external_url,
@@ -248,6 +251,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            system::set_desktop_handle(app.handle().clone());
             scheduler::spawn(app.handle().clone());
             {
                 use tauri::Emitter;

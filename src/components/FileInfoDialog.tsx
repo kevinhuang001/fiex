@@ -3,26 +3,59 @@ import { Check, Copy } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
 import { FileIcon } from './FileIcon'
-import { date, displayAddress, isVirtualResource, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import type { Entry } from '@/lib/types'
 import { Channel } from '@tauri-apps/api/core'
 
-interface InfoRow {
-  label: string
-  value: string
-  copyable?: boolean
-  action?: string
-}
-interface InfoSection {
+type InfoField = {
   id: string
-  source: 'core' | 'plugin'
+  sectionId: string
+  label: string
+  compute: 'onOpen' | 'onDemand'
+  status: 'idle' | 'pending' | 'ready' | 'unavailable' | 'error'
+  value?: string
+  error?: string
+}
+type InfoSection = {
+  id: string
   title: string
-  pluginId?: string
+  providerId: string
   provider: string
-  rows: InfoRow[]
+  source: 'core' | 'plugin'
+  pluginId?: string
+  fields: InfoField[]
+  error?: string
+}
+type InfoFieldUpdate = {
+  providerId: string
+  sectionId: string
+  fieldId: string
+  status: InfoField['status']
+  value?: string
+  error?: string
+}
+type InfoFieldDelta = { sessionId: string; revision: number; updates: InfoFieldUpdate[] }
+type InfoOpenResult = { sessionId: string; sections: InfoSection[] }
+
+function mergeFieldUpdates(sections: InfoSection[], updates: InfoFieldUpdate[]) {
+  if (!updates.length) return sections
+  const byKey = new Map(
+    updates.map((update) => [
+      `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
+      update,
+    ]),
+  )
+  return sections.map((section) => ({
+    ...section,
+    fields: section.fields.map((field) => {
+      const update = byKey.get(`${section.providerId}\u0000${field.sectionId}\u0000${field.id}`)
+      return update
+        ? { ...field, status: update.status, value: update.value, error: update.error }
+        : field
+    }),
+  }))
 }
 
 export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose: () => void }) {
@@ -30,13 +63,9 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState('')
   const copiedTimer = useRef<number | null>(null)
-  const [folderSize, setFolderSize] = useState<{
-    path: string
-    value?: number
-    loading: boolean
-  }>()
-  const folderSizeRequest = useRef<{ path: string; id: string } | null>(null)
-  const allowedOpsKey = info?.allowedOps?.join('\0') ?? ''
+  const sessionId = useRef<string | null>(null)
+  const tasks = useRef(new Set<string>())
+  const earlyUpdates = useRef(new Map<string, InfoFieldUpdate>())
 
   useEffect(
     () => () => {
@@ -48,92 +77,104 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   useEffect(() => {
     if (!info) return
     let alive = true
+    let activeSession: string | null = null
     setSections([])
     setLoading(true)
-    const onPartial = native ? new Channel<InfoSection[]>() : undefined
-    if (onPartial) {
-      onPartial.onmessage = (partial) => {
-        if (!alive || !Array.isArray(partial)) return
-        setSections((previous) => {
-          const sections = new Map(previous.map((section) => [section.id, section]))
-          for (const section of partial) sections.set(section.id, section)
-          return [...sections.values()]
+    earlyUpdates.current.clear()
+    const onUpdate = native ? new Channel<InfoFieldDelta>() : undefined
+    if (onUpdate)
+      onUpdate.onmessage = (delta) => {
+        if (!alive || !Array.isArray(delta?.updates)) return
+        for (const update of delta.updates) {
+          earlyUpdates.current.set(
+            `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
+            update,
+          )
+        }
+        setSections((previous) => mergeFieldUpdates(previous, delta.updates))
+      }
+    const open = async () => {
+      try {
+        const result = await call<InfoOpenResult>('file_info_open', {
+          path: info.path,
+          ...(onUpdate ? { onUpdate } : {}),
         })
+        activeSession = result.sessionId
+        if (!alive) {
+          await call('file_info_session_close', { sessionId: activeSession }).catch(() => {})
+          return
+        }
+        sessionId.current = activeSession
+        if (alive && Array.isArray(result.sections)) {
+          setSections(mergeFieldUpdates(result.sections, [...earlyUpdates.current.values()]))
+        }
+      } catch (cause) {
+        if (alive) reportError(cause, 'file-info')
+      } finally {
+        if (alive) setLoading(false)
       }
     }
-    let timeoutId: number | undefined
-    const timeout = new Promise<InfoSection[]>((_, reject) => {
-      timeoutId = window.setTimeout(
-        () => reject(new Error(t('读取插件信息超时，请检查插件是否正常运行。'))),
-        15_000,
-      )
-    })
-    void Promise.race([
-      call<InfoSection[]>('file_info_details', {
-        path: info.path,
-        ...(onPartial ? { onPartial } : {}),
-      }),
-      timeout,
-    ])
-      .then((value) => {
-        if (alive) setSections(Array.isArray(value) ? value : [])
-      })
-      .catch((cause) => {
-        if (alive) reportError(cause, 'file-info')
-      })
-      .finally(() => {
-        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-        if (alive) setLoading(false)
-      })
+    void open()
     return () => {
       alive = false
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-    }
-  }, [
-    info?.path,
-    info?.name,
-    info?.isDir,
-    info?.isSymlink,
-    info?.size,
-    info?.modified,
-    info?.mime,
-    allowedOpsKey,
-  ])
-
-  useEffect(() => {
-    setFolderSize(undefined)
-    return () => {
-      const request = folderSizeRequest.current
-      if (request && request.path === info?.path) {
-        folderSizeRequest.current = null
-        void call('file_info_directory_size_cancel', {
-          path: request.path,
-          requestId: request.id,
-        }).catch(() => {})
+      if (sessionId.current === activeSession) sessionId.current = null
+      for (const taskId of tasks.current) {
+        if (activeSession)
+          void call('file_info_cancel', { sessionId: activeSession, taskId }).catch(() => {})
       }
+      tasks.current.clear()
+      if (activeSession)
+        void call('file_info_session_close', { sessionId: activeSession }).catch(() => {})
     }
-  }, [info?.path])
+  }, [info?.path, info?.name, info?.isDir, info?.isSymlink, info?.size, info?.modified, info?.mime])
 
-  const calculateFolderSize = async () => {
-    if (!info?.isDir || info.isSymlink || isVirtualResource(info.path) || folderSizeRequest.current)
-      return
-    const request = { path: info.path, id: crypto.randomUUID() }
-    folderSizeRequest.current = request
-    setFolderSize({ path: request.path, loading: true })
+  const compute = async (section: InfoSection, field: InfoField) => {
+    const activeSession = sessionId.current
+    if (!activeSession || tasks.current.size > 3) return
+    const taskId = crypto.randomUUID()
+    tasks.current.add(taskId)
+    setSections((previous) =>
+      previous.map((item) =>
+        item.id !== section.id
+          ? item
+          : {
+              ...item,
+              fields: item.fields.map((candidate) =>
+                candidate.id === field.id && candidate.sectionId === field.sectionId
+                  ? { ...candidate, status: 'pending', error: undefined }
+                  : candidate,
+              ),
+            },
+      ),
+    )
     try {
-      const value = await call<number>('file_info_directory_size', {
-        path: request.path,
-        requestId: request.id,
+      const result = await call<InfoFieldDelta>('file_info_compute', {
+        sessionId: activeSession,
+        providerId: section.providerId,
+        fields: [{ sectionId: field.sectionId, fieldId: field.id }],
+        taskId,
       })
-      if (folderSizeRequest.current?.id === request.id)
-        setFolderSize({ path: request.path, value, loading: false })
+      if (sessionId.current === activeSession && result.sessionId === activeSession)
+        setSections((previous) => mergeFieldUpdates(previous, result.updates))
     } catch (cause) {
-      if (folderSizeRequest.current?.id === request.id) {
-        setFolderSize({ path: request.path, loading: false })
-        reportError(cause, 'file-info:directory-size')
+      if (sessionId.current === activeSession) {
+        setSections((previous) =>
+          previous.map((item) =>
+            item.id !== section.id
+              ? item
+              : {
+                  ...item,
+                  fields: item.fields.map((candidate) =>
+                    candidate.id === field.id && candidate.sectionId === field.sectionId
+                      ? { ...candidate, status: 'error', error: String(cause) }
+                      : candidate,
+                  ),
+                },
+          ),
+        )
       }
     } finally {
-      if (folderSizeRequest.current?.id === request.id) folderSizeRequest.current = null
+      tasks.current.delete(taskId)
     }
   }
 
@@ -144,60 +185,9 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
       if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current)
       copiedTimer.current = window.setTimeout(() => setCopied(''), 1200)
     } catch {
-      // Clipboard access is best effort; the value stays selectable.
+      // Keep the value selectable when clipboard access is unavailable.
     }
   }
-
-  const currentFolderSize = info && folderSize?.path === info.path ? folderSize : undefined
-  const basicRows: InfoRow[] = info
-    ? [
-        { label: t('种类'), value: kind(info) },
-        { label: t('大小'), value: info.isDir ? t('文件夹') : size(info.size) },
-        { label: t('位置'), value: displayAddress(parent(info.path)) },
-        { label: t('创建时间'), value: date(info.created) },
-        { label: t('修改时间'), value: date(info.modified) },
-        { label: t('符号链接'), value: info.isSymlink ? t('是') : t('否') },
-        ...(info.linkTarget ? [{ label: t('链接到'), value: info.linkTarget }] : []),
-      ]
-    : []
-  // Core's metadata provider owns the basic attributes. Keep the Entry
-  // fallback for resources without a resolved Core metadata section.
-  const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
-  const groups: Array<{ title: string; from?: string; rows: InfoRow[] }> = info
-    ? [
-        ...(hasCoreMetadata ? [] : [{ title: t('文件'), rows: basicRows }]),
-        ...(info.isDir && !info.isSymlink && !isVirtualResource(info.path)
-          ? [
-              {
-                title: t('文件夹'),
-                rows: [
-                  {
-                    label: t('文件夹大小'),
-                    value:
-                      currentFolderSize?.value === undefined ? '—' : size(currentFolderSize.value),
-                    action:
-                      currentFolderSize?.value === undefined
-                        ? currentFolderSize?.loading
-                          ? t('正在计算…')
-                          : t('计算大小')
-                        : undefined,
-                  },
-                ],
-              },
-            ]
-          : []),
-        ...sections
-          .filter((section) => section.rows.length > 0)
-          .map((section) => ({
-            title: section.title,
-            from:
-              section.source === 'plugin' && section.provider
-                ? t('来自：{0}', section.provider)
-                : undefined,
-            rows: section.rows,
-          })),
-      ]
-    : []
 
   return (
     <Modal open={!!info} onClose={onClose} title={t('显示简介')} className="file-info-modal">
@@ -207,49 +197,72 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
           <h3>{info.name}</h3>
           <div className="file-info-scroll">
             <dl>
-              {groups.map((group, groupIndex) => (
-                <Fragment key={`${group.title}:${groupIndex}`}>
+              {sections.map((section, sectionIndex) => (
+                <Fragment key={section.id}>
                   <div className="file-info-group">
-                    <span>{group.title}</span>
-                    {group.from && <small>{group.from}</small>}
+                    <span>{section.title}</span>
+                    {section.source === 'plugin' && (
+                      <small>{t('来自：{0}', section.provider)}</small>
+                    )}
                   </div>
-                  {group.rows.map((row, rowIndex) => (
-                    <div className="file-info-row" key={`${row.label}:${rowIndex}`}>
-                      <dt>{row.label}</dt>
-                      <dd>
-                        <span>{row.value}</span>
-                        {row.copyable && (
-                          <button
-                            type="button"
-                            className="info-copy"
-                            title={copied === `${groupIndex}:${rowIndex}` ? t('已复制') : t('复制')}
-                            aria-label={t('复制')}
-                            onClick={() => void copy(row.value, `${groupIndex}:${rowIndex}`)}
-                          >
-                            {copied === `${groupIndex}:${rowIndex}` ? (
-                              <Check size={12} />
-                            ) : (
-                              <Copy size={12} />
-                            )}
-                          </button>
-                        )}
-                        {row.action && (
-                          <button
-                            type="button"
-                            className="file-info-action"
-                            disabled={currentFolderSize?.loading}
-                            onClick={() => void calculateFolderSize()}
-                          >
-                            {row.action}
-                          </button>
-                        )}
-                      </dd>
+                  {section.error && (
+                    <div className="file-info-row">
+                      <dt>{t('提供程序')}</dt>
+                      <dd>{section.error}</dd>
                     </div>
-                  ))}
+                  )}
+                  {section.fields.map((field, fieldIndex) => {
+                    const key = `${sectionIndex}:${fieldIndex}`
+                    const value =
+                      field.status === 'ready'
+                        ? field.value
+                        : field.status === 'unavailable'
+                          ? t('不可用')
+                          : field.status === 'error'
+                            ? field.error
+                            : field.compute === 'onDemand'
+                              ? t('尚未计算')
+                              : t('正在计算…')
+                    return (
+                      <div className="file-info-row" key={`${field.sectionId}:${field.id}`}>
+                        <dt>{field.label}</dt>
+                        <dd>
+                          <span>{value}</span>
+                          {field.status === 'ready' && field.value && (
+                            <button
+                              type="button"
+                              className="info-copy"
+                              title={copied === key ? t('已复制') : t('复制')}
+                              aria-label={t('复制')}
+                              onClick={() => void copy(field.value!, key)}
+                            >
+                              {copied === key ? <Check size={12} /> : <Copy size={12} />}
+                            </button>
+                          )}
+                          {field.compute === 'onDemand' &&
+                            ['idle', 'error'].includes(field.status) && (
+                              <button
+                                type="button"
+                                className="file-info-action"
+                                disabled={tasks.current.size > 3}
+                                onClick={() => void compute(section, field)}
+                              >
+                                {field.status === 'error' ? t('重试并授权') : t('计算')}
+                              </button>
+                            )}
+                          {field.compute === 'onDemand' && field.status === 'pending' && (
+                            <button type="button" className="file-info-action" disabled>
+                              {t('正在计算…')}
+                            </button>
+                          )}
+                        </dd>
+                      </div>
+                    )
+                  })}
                 </Fragment>
               ))}
             </dl>
-            {loading && <p className="file-info-status">{t('正在读取媒体与插件信息…')}</p>}
+            {loading && <p className="file-info-status">{t('正在读取信息…')}</p>}
             {info.tags.length > 0 && (
               <div className="file-info-tags">
                 {info.tags.map((tag) => (

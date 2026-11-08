@@ -37,6 +37,31 @@ let fixtureUsbMounted = true
 
 export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
+    case 'state_get': {
+      const namespace = String(a.namespace || '')
+      const key = String(a.key || '')
+      const storageKey = `fiex:e2e-state:${namespace}:${key}`
+      const stored =
+        localStorage.getItem(storageKey) ||
+        (namespace === 'explorer' && key === 'preferences'
+          ? localStorage.getItem('fiex:preferences')
+          : null)
+      if (!stored) return null
+      try {
+        return JSON.parse(stored)
+      } catch {
+        return null
+      }
+    }
+    case 'state_put': {
+      const namespace = String(a.namespace || '')
+      const key = String(a.key || '')
+      const serialized = JSON.stringify(a.value)
+      localStorage.setItem(`fiex:e2e-state:${namespace}:${key}`, serialized)
+      if (namespace === 'explorer' && key === 'preferences')
+        localStorage.setItem('fiex:preferences', serialized)
+      return null
+    }
     case 'platform': {
       // `?platform=windows|linux` lets the browser fixture preview the
       // frameless window chrome without rebuilding the desktop app.
@@ -129,6 +154,21 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       ]
     case 'native_icon':
       throw new Error('UI fixture')
+    case 'open_with_picker_candidates':
+      return {
+        sessionId: 'open-with-picker-fixture-session',
+        items: [
+          { id: 'openWith-fixture-markdown', name: 'Markdown Viewer' },
+          { id: 'openWith-fixture-text', name: 'Plain Text Editor' },
+        ],
+      }
+    case 'open_with_picker_execute':
+      if (
+        a.sessionId !== 'open-with-picker-fixture-session' ||
+        !['openWith-fixture-markdown', 'openWith-fixture-text'].includes(String(a.itemId))
+      )
+        throw new Error('Open With fixture session expired')
+      return null
     case 'trash_path':
       return 'trash://'
     case 'open_applications':

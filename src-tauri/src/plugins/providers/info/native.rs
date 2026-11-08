@@ -6,13 +6,12 @@ use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
-use fiex_provider_contracts::{InfoProvider, ProviderError, ProviderInvocation, ProviderKind};
+use fiex_provider_contracts::{
+    InfoProvider, InfoSectionDescriptor, ProviderError, ProviderInvocation, ProviderKind,
+};
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 use std::sync::Arc;
-
-#[cfg(test)]
-use super::InfoSection;
 
 struct NativeInfoServices;
 
@@ -27,7 +26,20 @@ impl fiex_info::InfoModuleServices for NativeInfoServices {
             local: resource.local.clone(),
             stat: resource.stat.clone(),
             metadata: resource.metadata().cloned(),
+            is_local: crate::core::fs::provider_registry::resource_access(&resource.display)
+                .is_ok_and(|access| {
+                    access == crate::core::fs::provider_registry::ResourceAccess::HostPath
+                }),
+            cancelled: NativeProviderInvocation::cancellation(ctx)
+                .unwrap_or_else(|| Arc::new(std::sync::atomic::AtomicBool::new(false))),
         })
+    }
+
+    fn media_descriptor_path(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<std::path::PathBuf, ProviderError> {
+        Ok(NativeProviderInvocation::resource(ctx, 0)?.local.clone())
     }
 
     fn media_path(
@@ -76,35 +88,35 @@ pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     registry().matched_candidates(&targets, None, 1)
 }
 
-#[cfg(test)]
-pub(super) fn invoke(
-    id: &str,
-    resource: &ResourceSnapshot,
-) -> Result<Vec<InfoSection>, ProviderError> {
-    let provider = registry()
-        .get(id)
-        .ok_or_else(|| ProviderError::method_not_found("info.resolve"))?;
-    let invocation = NativeProviderInvocation::new(
-        "info.resolve",
-        serde_json::json!({}),
-        std::slice::from_ref(resource),
-        None,
-    )
-    .with_user_action_context(crate::core::fs::mapped_access::UserActionContext::for_test());
-    provider.resolve(&invocation)
-}
-
 pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
 }
 
-pub(super) fn invocation(
+pub(super) fn sections(
+    id: &str,
+    resource: &ResourceSnapshot,
+) -> Result<Vec<InfoSectionDescriptor>, String> {
+    let invocation = NativeProviderInvocation::new(
+        "info.compute",
+        serde_json::json!({}),
+        std::slice::from_ref(resource),
+        None,
+    );
+    fiex_info::InfoModule::new(Arc::new(NativeInfoServices))
+        .sections_for(id, &invocation)
+        .map_err(|error| error.to_string())
+}
+
+pub(super) fn invocation_with_cancel(
     id: &str,
     method: impl Into<String>,
     params: serde_json::Value,
     resource: &ResourceSnapshot,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<NativeProviderInvocation, String> {
-    registry().invocation(id, method, params, std::slice::from_ref(resource), None)
+    Ok(registry()
+        .invocation(id, method, params, std::slice::from_ref(resource), None)?
+        .with_cancellation(cancelled))
 }
 
 #[cfg(test)]
@@ -130,8 +142,15 @@ mod tests {
         assert!(!candidates(&directory)
             .iter()
             .any(|provider| provider.id == "core.media"));
-        assert!(invoke("unknown", &directory).is_err());
-        assert_eq!(invoke("core.metadata", &directory).unwrap().len(), 1);
+        let descriptions = sections("core.metadata", &directory).unwrap();
+        assert!(descriptions.iter().any(|section| section.id == "basic"));
+        assert!(descriptions
+            .iter()
+            .any(|section| section.id == "directoryStats"));
+        assert!(!descriptions
+            .iter()
+            .flat_map(|section| &section.fields)
+            .any(|field| matches!(field.id.as_str(), "extension" | "mime" | "size")));
     }
 
     #[test]

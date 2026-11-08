@@ -8,7 +8,14 @@ import type { ShortcutAction } from '@/lib/shortcuts'
 
 const sessions = new Map<
   string,
-  { paths: string[]; directory: string; actions: Set<string>; created: number }
+  {
+    paths: string[]
+    directory: string
+    actions: Set<string>
+    submenus: Set<string>
+    children: Map<string, CoreMenuItem[]>
+    created: number
+  }
 >()
 export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const paths = a.paths as string[]
@@ -55,6 +62,19 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
               ? [
                   ...(permits('read') ? [item('preview', '快速查看', 'eye', 'quickLook')] : []),
                   item('info', '显示简介', 'info', 'info'),
+                  ...(permits('read') &&
+                  !entries[0]?.isDir &&
+                  !trashView &&
+                  !paths[0].startsWith('applications://')
+                    ? [
+                        {
+                          id: 'openWith',
+                          title: t('打开方式'),
+                          icon: 'application',
+                          kind: 'submenu' as const,
+                        },
+                      ]
+                    : []),
                 ]
               : []),
           ],
@@ -132,6 +152,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   const providerForAction: Record<string, string> = {
     open: 'builtin:open',
+    openWith: 'builtin:open-with',
     preview: 'builtin:preview',
     info: 'builtin:info',
     tags: 'builtin:tags',
@@ -155,10 +176,24 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const menus: CoreMenu[] = []
   const addMenu = (providerId: string, items: CoreMenuItem[]) => {
     const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
+    const submenus = new Set(items.filter((item) => item.kind === 'submenu').map((item) => item.id))
+    const children = new Map<string, CoreMenuItem[]>()
+    if (submenus.has('openWith')) {
+      children.set('openWith', [
+        { id: 'openWith-markdown', title: 'Markdown Viewer', kind: 'action' },
+        { id: 'openWith-plain-text', title: 'Plain Text Editor', kind: 'action' },
+        { id: 'openWith-separator', title: ' ', kind: 'separator' },
+        { id: 'openWith-choose', title: t('选择其他应用…'), kind: 'action' },
+      ])
+    }
     sessions.set(menuSessionId, {
       paths: [...paths],
       directory,
-      actions: new Set(items.filter((item) => !item.disabled).map((item) => item.id)),
+      actions: new Set(
+        items.filter((item) => item.kind === 'action' && !item.disabled).map((item) => item.id),
+      ),
+      submenus,
+      children,
       created: Date.now(),
     })
     menus.push({ kind: 'builtin', providerId, menuSessionId, items })
@@ -185,6 +220,15 @@ export async function executeFixtureBuiltin(a: Record<string, unknown>) {
   const command = String(a.itemId)
   if (!session || Date.now() - session.created >= 90000 || !session.actions.has(command))
     throw new Error('Invalid or already used menu session')
+  if (command === 'openWith-choose')
+    return {
+      kind: 'coreAction',
+      command: 'chooseOpenWith',
+      paths: session.paths,
+      path: session.paths[0],
+      directory: session.directory,
+    }
+  if (command.startsWith('openWith-')) return { handled: true }
   if (!command.startsWith('remote.'))
     return {
       kind: 'coreAction',
@@ -218,4 +262,19 @@ export async function executeFixtureBuiltin(a: Record<string, unknown>) {
       entry.sync = entry.pinned ? 'pinned' : 'synced'
   }
   return { handled: true }
+}
+
+export function fixtureBuiltinChildren(a: Record<string, unknown>) {
+  const sessionId = String(a.menuSessionId || '')
+  const parentId = String(a.parentId || '')
+  const session = sessions.get(sessionId)
+  if (!sessionId.startsWith('builtin-demo-')) return undefined
+  if (!session || Date.now() - session.created >= 90000 || !session.submenus.has(parentId))
+    throw new Error('Invalid Core menu session or submenu')
+  const items = session.children.get(parentId) || []
+  for (const item of items) {
+    if (item.kind === 'action') session.actions.add(item.id)
+    if (item.kind === 'submenu') session.submenus.add(item.id)
+  }
+  return { items: items.map((item) => ({ ...item, parentId })) }
 }

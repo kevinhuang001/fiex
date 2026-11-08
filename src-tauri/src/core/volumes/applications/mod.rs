@@ -3,7 +3,9 @@
 mod launch;
 mod platform;
 mod state;
+mod system;
 use crate::core::files::Entry;
+pub use system::{system_entries, system_entry};
 #[cfg(feature = "desktop")]
 pub fn cached_icon(source: &str) -> Option<String> {
     fiex_applications::cached_icon_with(
@@ -44,17 +46,20 @@ pub fn cached_icon(_source: &str) -> Option<String> {
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::{collections::HashMap, sync::OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 pub const URI: &str = fiex_applications::URI;
 
-fn catalog() -> &'static fiex_applications::ApplicationCatalog {
-    static CATALOG: OnceLock<fiex_applications::ApplicationCatalog> = OnceLock::new();
+fn catalog() -> &'static Arc<fiex_applications::ApplicationCatalog> {
+    static CATALOG: OnceLock<Arc<fiex_applications::ApplicationCatalog>> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        fiex_applications::ApplicationCatalog::new(
+        Arc::new(fiex_applications::ApplicationCatalog::new(
             fiex_applications::ApplicationsStore::new(state::storage()),
             platform::backend(),
-        )
+        ))
     })
 }
 
@@ -82,7 +87,6 @@ fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
 
 pub fn list() -> Result<Vec<Entry>, String> {
     state::ensure_ready()?;
-    catalog().refresh()?;
     list_at(URI)
 }
 
@@ -97,29 +101,10 @@ pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
     Ok(entries)
 }
 
-/// All installed applications, including those currently mapped into folders.
-pub fn system_entries() -> Result<Vec<Entry>, String> {
-    state::ensure_ready()?;
-    catalog()
-        .entries()
-        .map(|entries| entries.into_iter().map(catalog_entry).collect())
-}
-
 pub fn decoration_info(
     paths: &[String],
 ) -> HashMap<String, fiex_applications::ApplicationDecorationInfo> {
     catalog().decoration_info(paths)
-}
-
-fn catalog_entry(application: fiex_applications::CatalogApplication) -> Entry {
-    let mut item = entry(
-        application.display_name,
-        application.uri,
-        &application.extension,
-        application.modified,
-    );
-    item.link_target = application.icon_source;
-    item
 }
 
 pub fn is_system_app(path: &str) -> bool {
@@ -141,33 +126,6 @@ pub(crate) fn classify_host_application(path: &str, target: Option<&str>) -> boo
 
 pub fn validate_import_asset(path: &std::path::Path, display_name: &str) -> Result<(), String> {
     platform::backend().validate_import_asset(path, display_name)
-}
-
-pub fn system_entry(path: &str) -> Result<Entry, String> {
-    let node = state::source(path)?;
-    if !matches!(node.source, state::ApplicationSource::System { .. }) {
-        return Err("not a system application".into());
-    }
-    match system_entries() {
-        Ok(entries) => {
-            if let Some(entry) = entries.iter().find(|entry| entry.path == path) {
-                return Ok(entry.clone());
-            }
-            let tree = state::snapshot()?;
-            if entries
-                .iter()
-                .any(|entry| state::app_id(&tree, &entry.path).as_deref() == Some(node.id.as_str()))
-            {
-                return state::entry(path);
-            }
-        }
-        Err(error) if !node.unavailable => return Err(error),
-        Err(_) => {}
-    }
-    if node.unavailable {
-        return state::entry(path);
-    }
-    Err(crate::i18n::t("应用不存在").to_string())
 }
 
 pub fn is_user(path: &str) -> bool {

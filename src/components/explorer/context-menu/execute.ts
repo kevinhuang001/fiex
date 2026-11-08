@@ -16,7 +16,11 @@ export interface CoreAction {
 
 /** Fixed Core-owned UI command adapter. Availability and selection are decided
  * by the backend provider/session, not reconstructed from the current pane. */
-export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
+export function applyCoreAction(
+  effect: CoreAction,
+  props: ContextMenuProps,
+  chooseOpenWith?: (path: string) => void,
+) {
   const { x } = props
   const entry =
     props.menu?.entry?.path === effect.path
@@ -82,11 +86,19 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
       break
     case 'copyPath':
       return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))
+    case 'chooseOpenWith':
+      chooseOpenWith?.(effect.path)
+      break
     default:
       throw new Error('Unknown Core menu command')
   }
 }
-export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props: ContextMenuProps) {
+export async function executeCoreMenu(
+  menu: CoreMenu,
+  item: CoreMenuItem,
+  props: ContextMenuProps,
+  chooseOpenWith?: (path: string) => void,
+) {
   let onProgress: ReturnType<typeof progressChannel> | undefined = quietProgressChannel()
   const execute = async () => {
     const effect = await call<CoreAction | { handled: boolean }>('plugin_context_menu_execute', {
@@ -95,7 +107,7 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
       onProgress,
     })
     if ('kind' in effect && effect.kind === 'coreAction') {
-      await applyCoreAction(effect, props)
+      await applyCoreAction(effect, props, chooseOpenWith)
       return true
     }
     requestDirectoryRefresh([props.x.path])

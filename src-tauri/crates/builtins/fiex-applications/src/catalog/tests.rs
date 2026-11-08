@@ -2,6 +2,7 @@ use super::*;
 use crate::{app_id, ApplicationDecorationInfo};
 use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 struct TestBackend {
     calls: AtomicUsize,
@@ -75,6 +76,32 @@ fn catalog_caches_reads_and_preserves_stable_identity_across_refreshes() {
 }
 
 #[test]
+fn cache_first_entries_revalidate_in_background_and_notify_only_on_change() {
+    let store = store("applications-catalog-background-test");
+    store
+        .register_system_apps(&[("/system/Editor.app".into(), "Editor".into())])
+        .unwrap();
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor Renamed")]),
+    });
+    let catalog = Arc::new(ApplicationCatalog::new(store.clone(), backend.clone()));
+    let (changed, completed) = std::sync::mpsc::channel();
+
+    let initial = catalog
+        .entries_cache_first_background(move || changed.send(()).unwrap())
+        .unwrap();
+    assert_eq!(initial[0].display_name, "Editor");
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
+    completed.recv_timeout(Duration::from_secs(3)).unwrap();
+
+    let refreshed = catalog.entries().unwrap();
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(refreshed[0].display_name, "Editor Renamed");
+    assert_ne!(refreshed[0].uri, initial[0].uri);
+}
+
+#[test]
 fn missing_system_app_is_retained_as_unavailable_with_its_identity() {
     let store = store("applications-catalog-unavailable-test");
     let backend = Arc::new(TestBackend {
@@ -141,4 +168,39 @@ fn decoration_info_tracks_system_apps_after_they_move_into_virtual_folders() {
             icon_source: Some("/system/Editor.app".into()),
         })
     );
+}
+
+#[test]
+fn cached_system_catalog_entry_keeps_identity_after_its_virtual_uri_moves() {
+    let store = store("applications-catalog-move-cache-test");
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor")]),
+    });
+    let catalog = ApplicationCatalog::new(store.clone(), backend);
+    let cached = catalog.entries().unwrap();
+    let original_uri = cached[0].uri.clone();
+    let stable_id = cached[0].stable_id().to_owned();
+
+    let tree = store
+        .update(|tree| {
+            tree.folders.insert(
+                "tools".into(),
+                crate::VirtualFolder {
+                    id: "tools".into(),
+                    parent: None,
+                    name: "Tools".into(),
+                    order: 0,
+                },
+            );
+            tree.apps.get_mut(&stable_id).unwrap().parent = Some("tools".into());
+            Ok(())
+        })
+        .unwrap();
+    let moved_uri = app_uri_in(&tree, &stable_id).unwrap();
+    let still_cached = catalog.entries().unwrap();
+
+    assert_ne!(original_uri, moved_uri);
+    assert_eq!(still_cached[0].uri, original_uri);
+    assert_eq!(still_cached[0].stable_id(), stable_id);
 }

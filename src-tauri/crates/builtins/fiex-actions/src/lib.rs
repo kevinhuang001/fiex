@@ -12,6 +12,7 @@ pub const MODULE_ID: &str = "core:actions";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Open,
+    OpenWith,
     Preview,
     Info,
     Tags,
@@ -99,6 +100,9 @@ pub fn definitions() -> Vec<ActionDefinition> {
     info.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
     let mut copy_path = selection("nonzero");
     copy_path.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
+    let mut open_with = required("single", &[FsOperation::Read]);
+    open_with.kinds = vec!["file".into()];
+    open_with.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
     let mut tags = ProviderMatchRule {
         selection: Some("nonzero".into()),
         storage: Some(LocationMatch {
@@ -111,14 +115,15 @@ pub fn definitions() -> Vec<ActionDefinition> {
 
     [
         ("builtin:open", 120, selection("nonzero"), Action::Open),
+        ("builtin:open-with", 119, open_with, Action::OpenWith),
         (
             "builtin:preview",
-            119,
+            118,
             excluding_trash(required("single", &[FsOperation::Read])),
             Action::Preview,
         ),
-        ("builtin:info", 118, info, Action::Info),
-        ("builtin:tags", 117, tags, Action::Tags),
+        ("builtin:info", 117, info, Action::Info),
+        ("builtin:tags", 116, tags, Action::Tags),
         ("builtin:new-folder", 110, new_folder, Action::NewFolder),
         ("builtin:new-file", 109, new_file, Action::NewFile),
         (
@@ -209,7 +214,7 @@ mod tests {
             .map(|value| value.id)
             .collect::<HashSet<_>>();
         assert_eq!(ids.len(), definitions.len());
-        assert_eq!(definitions.len(), 19);
+        assert_eq!(definitions.len(), 20);
         assert!(definitions.iter().any(
             |value| value.id == "builtin:move-to-trash" && value.action == Action::MoveToTrash
         ));

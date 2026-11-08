@@ -4,7 +4,10 @@
 //! Provider matching, resource authorization, partial-result delivery, and
 //! caching remain in the application runtime.
 
-pub use fiex_provider_contracts::{InfoRow, InfoSection, ResourceMetadata};
+pub use fiex_provider_contracts::{
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
+    ResourceMetadata,
+};
 
 pub const MODULE_ID: &str = "core:info";
 
@@ -12,8 +15,8 @@ mod media;
 mod metadata;
 mod providers;
 
-pub use media::{duration_text, media_sections};
-pub use metadata::{directory_size_with_cancel, metadata_section, timestamp_text};
+pub use media::{compute_media_fields, duration_text, media_descriptors};
+pub use metadata::{compute_metadata_fields, metadata_descriptors, timestamp_text};
 pub use providers::{InfoMetadataInput, InfoModule, InfoModuleServices, InfoProviderRegistration};
 
 #[derive(Clone, Copy)]
@@ -39,18 +42,9 @@ impl Localization {
     }
 }
 
-fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
-    InfoRow {
-        label: label.into(),
-        value: value.into(),
-        copyable: false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicBool;
 
     fn identity(key: &'static str) -> String {
         key.into()
@@ -72,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_projection_uses_shared_info_dtos() {
+    fn metadata_projection_uses_field_descriptors() {
         let projected = ResourceMetadata {
             name: "notes.txt".into(),
             kind: "file".into(),
@@ -80,26 +74,58 @@ mod tests {
             size: Some(3),
             ..Default::default()
         };
-        let section = metadata_section(
+        let sections = metadata_descriptors(
             "/tmp/notes.txt",
-            std::path::Path::new("/tmp/notes.txt"),
+            true,
             None,
             Some(&projected),
             &localization(),
         );
-        assert_eq!(section.id, "core.metadata");
-        assert!(section.rows.iter().any(|row| row.value == "3 B"));
+        let basic = sections
+            .iter()
+            .find(|section| section.id == "basic")
+            .unwrap();
+        assert!(basic.fields.iter().any(|field| field.id == "size"));
     }
 
     #[test]
-    fn directory_size_skips_symlinks_and_can_be_cancelled() {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join("file.bin"), [1, 2, 3]).unwrap();
-        let nested = directory.path().join("nested");
-        std::fs::create_dir(&nested).unwrap();
-        std::fs::write(nested.join("more.bin"), [4, 5]).unwrap();
-        let size = directory_size_with_cancel(directory.path(), &AtomicBool::new(false)).unwrap();
-        assert_eq!(size, 5);
-        assert!(directory_size_with_cancel(directory.path(), &AtomicBool::new(true)).is_err());
+    fn directory_statistics_compute_requested_fields_from_one_walk() {
+        use std::sync::{atomic::AtomicBool, Arc};
+
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("top.txt"), b"abc").unwrap();
+        std::fs::create_dir(root.path().join("nested")).unwrap();
+        std::fs::write(root.path().join("nested/inner.txt"), b"de").unwrap();
+        let input = InfoMetadataInput {
+            display: root.path().to_string_lossy().into_owned(),
+            local: root.path().to_path_buf(),
+            stat: Some(std::fs::metadata(root.path()).unwrap()),
+            metadata: Some(ResourceMetadata {
+                name: "root".into(),
+                kind: "directory".into(),
+                ..Default::default()
+            }),
+            is_local: true,
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+        let fields = [
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "directFiles".into(),
+            },
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "recursiveFiles".into(),
+            },
+            InfoFieldKey {
+                section_id: "directoryStats".into(),
+                field_id: "recursiveSize".into(),
+            },
+        ];
+        let values = compute_metadata_fields(&input, &fields, &localization()).unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].value.as_deref(), Some("1"));
+        assert_eq!(values[1].value.as_deref(), Some("2"));
+        assert_eq!(values[2].value.as_deref(), Some("5 B (5 bytes)"));
     }
 }
