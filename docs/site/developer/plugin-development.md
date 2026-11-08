@@ -12,27 +12,7 @@ Info 字段写在 manifest 的 `extensions.info.sections` 中。每个 section �
 
 `compute` 目前支持 `onOpen` 与 `onDemand`：前者在面板打开后自动请求；后者先显示为“尚未计算”，用户点击“计算”后才请求该字段。SDK 的 `InfoProvider` 只实现 `compute(ctx, fields)`，并返回与请求字段对应的文本结果。Core 负责字段校验、缓存、会话、取消和权限检查。旧版一次性 Info 行结果与旧 RPC 格式不属于 protocol 7.0。
 
-示例 manifest：
-
-```json
-{
-  "extensions": {
-    "info": {
-      "priority": 80,
-      "match": { "extensions": ["txt"], "kinds": ["file"] },
-      "sections": [
-        {
-          "id": "integrity",
-          "title": "完整性",
-          "fields": [
-            { "id": "sha256", "label": "SHA-256", "compute": "onDemand" }
-          ]
-        }
-      ]
-    }
-  }
-}
-```
+可参考[官方 Hello 插件 manifest 中的 Info 声明](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/manifest.json)。
 
 只有字段计算确实需要文件内容时，才声明并请求相应的读取权限；声明字段本身不等于读取文件。
 
