@@ -65,17 +65,17 @@ Manifest 的顶层结构包含 schemaVersion、插件 id、名称、版本、run
 
 Rust SDK 的 Providers builder 可以注册标准 provider trait：
 
-| Provider            | 标准事件                                 |
-| ------------------- | ---------------------------------------- |
-| ConnectionProvider  | 连接校验、打开和创建生命周期             |
-| VfsProvider         | 虚拟目录发现、列出、查询、读写和文件操作 |
+| Provider            | 标准事件                                         |
+| ------------------- | ------------------------------------------------ |
+| ConnectionProvider  | 连接校验、打开和创建生命周期                     |
+| VfsProvider         | 虚拟目录发现、列出、查询、读写和文件操作         |
 | InfoProvider        | 计算 Core 精确请求的 Info 字段（`info.compute`） |
-| PreviewProvider     | 文件预览视图                             |
-| DecorationProvider  | 文件行和列的装饰                         |
-| ContextMenuProvider | 右键菜单项及执行                         |
-| SearchProvider      | 插件搜索来源                             |
-| HookProvider        | 文件打开等生命周期 hook                  |
-| ToolbarProvider     | 工具栏命令和面板                         |
+| PreviewProvider     | 文件预览视图                                     |
+| DecorationProvider  | 文件行和列的装饰                                 |
+| ContextMenuProvider | 右键菜单项及执行                                 |
+| SearchProvider      | 插件搜索来源                                     |
+| HookProvider        | 文件打开等生命周期 hook                          |
+| ToolbarProvider     | 工具栏命令和面板                                 |
 
 自定义 RPC 可作为标准分发器的 fallback；文件系统能力应优先使用共享 VFS/provider 接口。
 
