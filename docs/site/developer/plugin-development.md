@@ -18,10 +18,11 @@ Info 字段写在 manifest 的 `extensions.info.sections` 中。每个 section �
 
 ## 从真实示例开始
 
-官方插件仓库维护可编译示例及每种扩展点的说明。建议直接跟随仓库中的 Hello 插件，而不是复制网上旧的 manifest：
+官方插件仓库提供可编译的 Hello 示例。开发时优先核对当前协议、manifest 与实际 provider 实现：
 
-- [插件示例新手手册](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/README.md)
-- [扩展点指南](https://github.com/kevinhuang001/fiex-official-plugins/tree/main/example/docs)
+- [SDK protocol 7.0 provider contract](https://github.com/kevinhuang001/fiex-sdk/blob/main/docs/protocol-7.md)
+- [Hello 插件 manifest](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/manifest.json)
+- [Hello 插件 Rust 实现](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/src/main.rs)
 - [Rust SDK 新手手册](https://github.com/kevinhuang001/fiex-sdk/blob/main/rust/README.md)
 - [UI SDK](https://github.com/kevinhuang001/fiex-sdk/tree/main/ui)
 
