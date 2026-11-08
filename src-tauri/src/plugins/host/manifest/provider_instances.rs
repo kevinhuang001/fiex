@@ -20,10 +20,10 @@ pub(super) fn validate(feature: &str, contribution: &Map<String, Value>) -> Resu
         let item = item
             .as_object()
             .ok_or_else(|| format!("{feature} provider must be an object"))?;
-        if item
-            .keys()
-            .any(|key| !matches!(key.as_str(), "id" | "match" | "priority"))
-        {
+        if item.keys().any(|key| {
+            !matches!(key.as_str(), "id" | "match" | "priority")
+                && !(feature == "info" && key == "sections")
+        }) {
             return Err(format!(
                 "{feature} provider uses an unsupported descriptor field"
             ));

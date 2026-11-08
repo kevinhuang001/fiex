@@ -1,5 +1,45 @@
-use crate::{row, InfoSection, Localization};
+use crate::Localization;
+use fiex_provider_contracts::{
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
+};
 use std::{fs, path::Path, time::Duration};
+
+struct MediaRow {
+    label: String,
+    value: String,
+}
+
+struct MediaSection {
+    id: String,
+    rows: Vec<MediaRow>,
+}
+
+fn row(label: impl Into<String>, value: impl Into<String>) -> MediaRow {
+    MediaRow {
+        label: label.into(),
+        value: value.into(),
+    }
+}
+
+fn field(id: &str, label: String) -> InfoFieldDescriptor {
+    InfoFieldDescriptor {
+        id: id.into(),
+        label,
+        compute: InfoCompute::OnDemand,
+    }
+}
+
+fn descriptor(
+    id: &str,
+    title: String,
+    fields: impl IntoIterator<Item = InfoFieldDescriptor>,
+) -> InfoSectionDescriptor {
+    InfoSectionDescriptor {
+        id: id.into(),
+        title,
+        fields: fields.into_iter().collect(),
+    }
+}
 pub fn duration_text(duration: Duration) -> String {
     let total = duration.as_secs();
     let hours = total / 3600;
@@ -19,7 +59,7 @@ fn extension(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
-fn audio_section(path: &Path, localization: &Localization) -> Option<InfoSection> {
+fn audio_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
     use lofty::file::{AudioFile, TaggedFileExt};
     use lofty::tag::Accessor;
     const AUDIO: &[&str] = &[
@@ -93,17 +133,13 @@ fn audio_section(path: &Path, localization: &Localization) -> Option<InfoSection
             ),
         );
     }
-    (!rows.is_empty()).then(|| InfoSection {
+    (!rows.is_empty()).then(|| MediaSection {
         id: "core.audio".into(),
-        source: "core".into(),
-        title: localization.text("音频"),
-        plugin_id: None,
-        provider: "Fiex".into(),
         rows,
     })
 }
 
-fn mp4_section(path: &Path, localization: &Localization) -> Option<InfoSection> {
+fn mp4_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
     use mp4::{Mp4Reader, TrackType};
     let file = fs::File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
@@ -168,17 +204,13 @@ fn mp4_section(path: &Path, localization: &Localization) -> Option<InfoSection> 
         localization.text("容器"),
         mp4.major_brand().to_string(),
     ));
-    Some(InfoSection {
+    Some(MediaSection {
         id: "core.video.mp4".into(),
-        source: "core".into(),
-        title: localization.text("视频"),
-        plugin_id: None,
-        provider: "Fiex".into(),
         rows,
     })
 }
 
-fn matroska_section(path: &Path, localization: &Localization) -> Option<InfoSection> {
+fn matroska_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
     use matroska::Settings;
     let mkv = matroska::open(path).ok()?;
     let mut rows = Vec::new();
@@ -224,18 +256,14 @@ fn matroska_section(path: &Path, localization: &Localization) -> Option<InfoSect
         }
     }
     rows.push(row(localization.text("容器"), "Matroska"));
-    (!rows.is_empty()).then(|| InfoSection {
+    (!rows.is_empty()).then(|| MediaSection {
         id: "core.video.matroska".into(),
-        source: "core".into(),
-        title: localization.text("视频"),
-        plugin_id: None,
-        provider: "Fiex".into(),
         rows,
     })
 }
 
 /// Probe Core-native audio/video metadata without invoking any plugin.
-pub fn media_sections(path: &Path, localization: &Localization) -> Vec<InfoSection> {
+fn media_sections(path: &Path, localization: &Localization) -> Vec<MediaSection> {
     if !path.is_file() {
         return Vec::new();
     }
@@ -254,4 +282,99 @@ pub fn media_sections(path: &Path, localization: &Localization) -> Vec<InfoSecti
         sections.push(section);
     }
     sections
+}
+
+pub fn media_descriptors(path: &Path, localization: &Localization) -> Vec<InfoSectionDescriptor> {
+    let ext = extension(path);
+    let video = ["mp4", "m4v", "mov", "mkv", "webm"].contains(&ext.as_str());
+    if video {
+        let id = if ["mkv", "webm"].contains(&ext.as_str()) {
+            "core.video.matroska"
+        } else {
+            "core.video.mp4"
+        };
+        return vec![descriptor(
+            id,
+            localization.text("视频"),
+            [
+                field("duration", localization.text("时长")),
+                field("video", localization.text("视频")),
+                field("audio", localization.text("音频")),
+                field("container", localization.text("容器")),
+            ],
+        )];
+    }
+    let audio = [
+        "mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wave", "aiff", "aif", "ape",
+        "wv", "wma",
+    ];
+    if audio.contains(&ext.as_str()) {
+        vec![descriptor(
+            "core.audio",
+            localization.text("音频"),
+            [
+                field("format", localization.text("格式")),
+                field("title", localization.text("标题")),
+                field("artist", localization.text("艺术家")),
+                field("album", localization.text("专辑")),
+                field("genre", localization.text("流派")),
+                field("year", localization.text("年份")),
+                field("track", localization.text("音轨")),
+                field("disk", localization.text("碟片")),
+                field("duration", localization.text("时长")),
+                field("bitrate", localization.text("码率")),
+                field("sampleRate", localization.text("采样率")),
+                field("channels", localization.text("声道")),
+            ],
+        )]
+    } else {
+        Vec::new()
+    }
+}
+
+pub fn compute_media_fields(
+    path: &Path,
+    fields: &[InfoFieldKey],
+    localization: &Localization,
+) -> Vec<InfoFieldResult> {
+    let sections = media_sections(path, localization);
+    fields
+        .iter()
+        .map(|field| {
+            let label = match (field.section_id.as_str(), field.field_id.as_str()) {
+                ("core.audio", "format") => "格式",
+                (_, "title") => "标题",
+                (_, "artist") => "艺术家",
+                (_, "album") => "专辑",
+                (_, "genre") => "流派",
+                (_, "year") => "年份",
+                (_, "track") => "音轨",
+                (_, "disk") => "碟片",
+                (_, "duration") => "时长",
+                (_, "bitrate") => "码率",
+                (_, "sampleRate") => "采样率",
+                (_, "channels") => "声道",
+                (_, "video") => "视频",
+                (_, "audio") => "音频",
+                (_, "container") => "容器",
+                _ => "",
+            };
+            let value = sections
+                .iter()
+                .find(|section| section.id == field.section_id)
+                .and_then(|section| {
+                    section
+                        .rows
+                        .iter()
+                        .find(|row| row.label == localization.text(label))
+                })
+                .map(|row| row.value.clone());
+            InfoFieldResult {
+                section_id: field.section_id.clone(),
+                field_id: field.field_id.clone(),
+                unavailable: value.is_none(),
+                value,
+            }
+        })
+        .collect()
 }

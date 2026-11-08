@@ -11,6 +11,194 @@ import {
 } from '../data'
 import { notHandled, state } from './shared'
 
+type FixtureInfoField = {
+  id: string
+  sectionId: string
+  label: string
+  compute: 'onOpen' | 'onDemand'
+  status: 'idle' | 'ready' | 'pending' | 'unavailable' | 'error'
+  value?: string
+  error?: string
+}
+type FixtureInfoSection = {
+  id: string
+  title: string
+  providerId: string
+  provider: string
+  source: 'core' | 'plugin'
+  pluginId?: string
+  fields: FixtureInfoField[]
+  error?: string
+}
+const infoSessions = new Map<string, { path: string; sections: FixtureInfoSection[] }>()
+
+function infoField(
+  sectionId: string,
+  id: string,
+  label: string,
+  value: string | undefined,
+  compute: 'onOpen' | 'onDemand' = 'onOpen',
+): FixtureInfoField {
+  return {
+    id,
+    sectionId,
+    label,
+    compute,
+    status: value === undefined ? 'idle' : 'ready',
+    ...(value === undefined ? {} : { value }),
+  }
+}
+
+function infoSection(
+  providerId: string,
+  provider: string,
+  title: string,
+  sectionId: string,
+  fields: FixtureInfoField[],
+  pluginId?: string,
+): FixtureInfoSection {
+  return {
+    id: `${providerId}::${sectionId}`,
+    title,
+    providerId,
+    provider,
+    source: pluginId ? 'plugin' : 'core',
+    ...(pluginId ? { pluginId } : {}),
+    fields,
+  }
+}
+
+function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfoSection[] {
+  const ext = entry.name.split('.').pop()?.toLowerCase() || ''
+  const basic = infoSection('core.metadata', 'Fiex', '基本信息', 'basic', [
+    infoField('basic', 'name', '名称', entry.name),
+    infoField(
+      'basic',
+      'kind',
+      '种类',
+      entry.isDir ? '文件夹' : entry.isSymlink ? '符号链接' : '文件',
+    ),
+    infoField('basic', 'location', '位置', parent(entry.path)),
+    ...(!entry.isDir && ext ? [infoField('basic', 'extension', '扩展名', ext)] : []),
+    ...(!entry.isDir && entry.mime ? [infoField('basic', 'mime', 'MIME 类型', entry.mime)] : []),
+    ...(!entry.isDir
+      ? [infoField('basic', 'size', '大小', `${entry.size} B (${entry.size} bytes)`)]
+      : []),
+  ])
+  const sections = [basic]
+  sections.push(
+    infoSection('core.metadata', 'Fiex', '时间', 'times', [
+      infoField('times', 'created', '创建时间', new Date(entry.created).toLocaleString()),
+      infoField('times', 'modified', '修改时间', new Date(entry.modified).toLocaleString()),
+    ]),
+  )
+  if (entry.isDir)
+    sections.push(
+      infoSection('core.metadata', 'Fiex', '目录统计', 'directoryStats', [
+        infoField('directoryStats', 'directFiles', '直接文件数', undefined, 'onDemand'),
+        infoField('directoryStats', 'recursiveFiles', '递归文件总数', undefined, 'onDemand'),
+        infoField('directoryStats', 'recursiveSize', '递归文件总大小', undefined, 'onDemand'),
+      ]),
+    )
+  if (!entry.isDir) {
+    if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext))
+      sections.push(
+        infoSection(
+          'org.fiex.archive',
+          '压缩与解压',
+          '压缩包',
+          'archive',
+          [
+            infoField('archive', 'format', '格式', undefined, 'onDemand'),
+            infoField('archive', 'compressedSize', '压缩后大小', undefined, 'onDemand'),
+            infoField('archive', 'uncompressedSize', '解压后大小', undefined, 'onDemand'),
+            infoField('archive', 'entryCount', '文件数', undefined, 'onDemand'),
+            infoField('archive', 'compressionRatio', '压缩率', undefined, 'onDemand'),
+          ],
+          'org.fiex.archive',
+        ),
+      )
+    if (['docx', 'xlsx', 'pptx'].includes(ext))
+      sections.push(
+        infoSection(
+          'org.fiex.office-preview',
+          'Office 预览',
+          '文档',
+          'office',
+          [
+            infoField('office', 'format', '格式', undefined, 'onOpen'),
+            infoField('office', 'paragraphs', '段落', undefined, 'onDemand'),
+            infoField('office', 'tables', '表格', undefined, 'onDemand'),
+            infoField('office', 'images', '图片', undefined, 'onDemand'),
+          ],
+          'org.fiex.office-preview',
+        ),
+      )
+    if (['db', 'sqlite', 'sqlite3', 'csv', 'tsv', 'parquet', 'arrow', 'avro'].includes(ext))
+      sections.push(
+        infoSection(
+          'org.fiex.data-preview',
+          '数据预览',
+          '数据表',
+          'data',
+          [
+            infoField('data', 'format', '格式', undefined, 'onOpen'),
+            infoField('data', 'datasets', '数据集', undefined, 'onDemand'),
+            infoField('data', 'columns', '首表列数', undefined, 'onDemand'),
+            infoField('data', 'rows', '首表行数', undefined, 'onDemand'),
+          ],
+          'org.fiex.data-preview',
+        ),
+      )
+    sections.push(
+      infoSection(
+        'org.fiex.checksum',
+        '校验和',
+        '校验和',
+        'checksum',
+        [
+          ...[
+            ['sha256', 'SHA-256'],
+            ['sha512', 'SHA-512'],
+            ['sha1', 'SHA-1'],
+            ['md5', 'MD5'],
+            ['crc32', 'CRC32'],
+          ].map(([id, label]) => infoField('checksum', id!, label!, undefined, 'onDemand')),
+        ],
+        'org.fiex.checksum',
+      ),
+    )
+  }
+  return sections
+}
+
+function computeFixtureField(field: FixtureInfoField, entry: (typeof state.entries)[number]) {
+  const ext = entry.name.split('.').pop()?.toUpperCase() || ''
+  const values: Record<string, string> = {
+    sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    sha512: 'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a',
+    sha1: 'a9993e364706816aba3e25717850c26c9cd0d89d',
+    md5: '900150983cd24fb0d6963f7d28e17f72',
+    crc32: '352441c2',
+    format: ext,
+    compressedSize: `${entry.size} B`,
+    uncompressedSize: `${Math.round(entry.size * 2.4)} B`,
+    entryCount: '18',
+    compressionRatio: '58.3%',
+    paragraphs: '42',
+    tables: ext === 'XLSX' ? '3' : '1',
+    images: '2',
+    datasets: '2',
+    columns: '6',
+    rows: '128',
+    directFiles: '4',
+    recursiveFiles: '18',
+    recursiveSize: '4.2 MiB',
+  }
+  field.value = values[field.id]
+  field.status = field.value === undefined ? 'unavailable' : 'ready'
+}
+
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'list_directory': {
@@ -112,83 +300,54 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       return state.entries.find((e) => e.path === a.path)
     case 'file_parent':
       return parent(String(a.path ?? ''))
-    case 'file_info_details': {
+    case 'file_info_open': {
       const entry = state.entries.find((e) => e.path === a.path)
-      if (!entry) return []
-      const ext = entry.name.split('.').pop()?.toLowerCase() || ''
-      const sections = []
-      if (!entry.isDir) {
-        sections.push({
-          id: 'org.fiex.checksum.checksum',
-          source: 'plugin',
-          title: '校验和',
-          pluginId: 'org.fiex.checksum',
-          provider: '校验和',
-          rows: [
-            {
-              label: 'SHA-256',
-              value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-              copyable: true,
-            },
-            {
-              label: 'SHA-512',
-              value: 'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a',
-              copyable: true,
-            },
-            { label: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d', copyable: true },
-            { label: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72', copyable: true },
-            { label: 'CRC32', value: '352441c2', copyable: true },
-          ],
-        })
+      if (!entry) throw new Error('文件不存在')
+      const sessionId = `fixture-info-${crypto.randomUUID()}`
+      const sections = fixtureInfoSections(entry)
+      infoSessions.set(sessionId, { path: entry.path, sections })
+      for (const field of sections.flatMap((section) => section.fields)) {
+        if (field.compute === 'onOpen') computeFixtureField(field, entry)
       }
-      if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext)) {
-        sections.push({
-          id: 'org.fiex.archive.archive',
-          source: 'plugin',
-          title: '压缩包',
-          pluginId: 'org.fiex.archive',
-          provider: '压缩与解压',
-          rows: [
-            { label: '格式', value: ext.toUpperCase() },
-            { label: '压缩后大小', value: `${entry.size} B` },
-            { label: '解压后大小', value: `${Math.round(entry.size * 2.4)} B` },
-            { label: '文件数', value: '18' },
-            { label: '压缩率', value: '58.3%' },
-          ],
-        })
-      }
-      if (['docx', 'xlsx', 'pptx'].includes(ext)) {
-        sections.push({
-          id: 'org.fiex.office-preview.office',
-          source: 'plugin',
-          title: '文档',
-          pluginId: 'org.fiex.office-preview',
-          provider: 'Office 预览',
-          rows: [
-            { label: '格式', value: ext.toUpperCase() },
-            { label: '段落', value: '42' },
-            { label: '表格', value: ext === 'xlsx' ? '3' : '1' },
-            { label: '图片', value: '2' },
-          ],
-        })
-      }
-      if (['db', 'sqlite', 'sqlite3', 'csv', 'tsv', 'parquet', 'arrow', 'avro'].includes(ext)) {
-        sections.push({
-          id: 'org.fiex.data-preview.data',
-          source: 'plugin',
-          title: '数据表',
-          pluginId: 'org.fiex.data-preview',
-          provider: '数据预览',
-          rows: [
-            { label: '格式', value: ext.toUpperCase() },
-            { label: '数据集', value: '2' },
-            { label: '首表列数', value: '6' },
-            { label: '首表行数', value: '128' },
-          ],
-        })
-      }
-      return sections
+      return { sessionId, sections }
     }
+    case 'file_info_compute': {
+      const session = infoSessions.get(String(a.sessionId))
+      if (!session) throw new Error('Info session expired')
+      const requests = a.fields as { sectionId: string; fieldId: string }[]
+      const entry = state.entries.find((item) => item.path === session.path)
+      if (!entry) throw new Error('Info resource no longer exists')
+      const updates = []
+      for (const request of requests) {
+        const section = session.sections.find(
+          (item) =>
+            item.providerId === a.providerId &&
+            item.fields.some(
+              (candidate) =>
+                candidate.sectionId === request.sectionId && candidate.id === request.fieldId,
+            ),
+        )
+        const field = section?.fields.find(
+          (item) => item.sectionId === request.sectionId && item.id === request.fieldId,
+        )
+        if (!field) throw new Error('Info field is not declared')
+        computeFixtureField(field, entry)
+        updates.push({
+          providerId: String(a.providerId),
+          sectionId: field.sectionId,
+          fieldId: field.id,
+          status: field.status,
+          value: field.value,
+          error: field.error,
+        })
+      }
+      return { sessionId: String(a.sessionId), revision: 1, updates }
+    }
+    case 'file_info_cancel':
+      return null
+    case 'file_info_session_close':
+      infoSessions.delete(String(a.sessionId))
+      return null
     case 'read_preview':
       if (String(a.path).endsWith('/Palette.json'))
         return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'

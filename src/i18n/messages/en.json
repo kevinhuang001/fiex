@@ -1416,5 +1416,9 @@
   "插件面板无法加载": "Plugin panel failed to load",
   "连接失败": "Connection failed",
   "无法读取文件夹": "Could not read folder",
-  "无法定位已打开的文件": "The opened file could not be located"
+  "无法定位已打开的文件": "The opened file could not be located",
+  "尚未计算": "Not computed",
+  "重试并授权": "Retry and authorize",
+  "计算": "Compute",
+  "正在读取信息…": "Loading information…"
 }
