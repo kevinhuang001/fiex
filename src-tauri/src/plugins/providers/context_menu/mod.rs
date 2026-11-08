@@ -5,6 +5,9 @@ mod commands;
 mod connection_cache;
 mod file_ops;
 mod native_views;
+pub(crate) mod open_with;
+#[cfg(feature = "desktop")]
+pub(crate) use open_with::{open_picker_choice, picker_candidates, PickerResponse};
 mod proxy;
 mod session;
 pub use actions::execute_remote;

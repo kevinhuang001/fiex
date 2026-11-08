@@ -177,7 +177,7 @@ export function isNewerVersion(candidate: string, installed: string): boolean {
   return false
 }
 async function pluginCatalog(): Promise<PluginInfo[]> {
-  if (!native) return []
+  if (!native && !(import.meta.env.DEV && import.meta.env.VITE_FIEX_E2E === '1')) return []
   return call<PluginInfo[]>('plugins_list')
 }
 let catalogSnapshot: PluginInfo[] = []

@@ -31,6 +31,9 @@ impl AtomicMenuAction {
             Action::Open if can_open(selection, caps) => {
                 vec![item("open", "打开", "open", "open")]
             }
+            Action::OpenWith if one && caps.read => {
+                vec![MenuItem::submenu("openWith", crate::i18n::t("打开方式"))]
+            }
             Action::Preview if one && caps.read => {
                 vec![item("preview", "快速查看", "eye", "quickLook")]
             }
@@ -140,6 +143,24 @@ impl ContextMenuProvider for AtomicMenuAction {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        if self.0 == Action::OpenWith {
+            let (parent_id, menu_session_id) = match invocation.input()? {
+                ProviderInput::ContextMenuResolve(request) => (
+                    request.parent_id.as_deref(),
+                    request.menu_session_id.as_deref(),
+                ),
+                _ => (None, None),
+            };
+            if parent_id == Some("openWith") {
+                let session = menu_session_id
+                    .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
+                return super::super::super::open_with::menu_items(context, session)
+                    .map_err(ProviderError::internal);
+            }
+            if parent_id.is_some() {
+                return Ok(Vec::new());
+            }
+        }
         Ok(self.items(&context.selection(), &context.capabilities()))
     }
 
@@ -151,14 +172,38 @@ impl ContextMenuProvider for AtomicMenuAction {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        let (item_id, menu_session_id) = match invocation.input()? {
+            ProviderInput::ContextMenuExecute(request) => (
+                request.item_id.as_deref(),
+                request.menu_session_id.as_deref(),
+            ),
+            _ => (None, None),
+        };
+        let item_id = item_id
+            .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
+        let menu_session_id = menu_session_id
+            .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
+        if self.0 == Action::OpenWith {
+            if item_id == "openWith-choose" {
+                return Ok(MenuExecuteResult::core_action(
+                    "chooseOpenWith",
+                    context.paths.clone(),
+                    context.paths.first().cloned().unwrap_or_default(),
+                    context.directory.clone(),
+                ));
+            }
+            if !super::super::super::open_with::is_candidate_item(menu_session_id, item_id) {
+                return Err(ProviderError::invalid_params(
+                    "Open With item was not offered by this session",
+                ));
+            }
+            super::super::super::open_with::open_selected(context, menu_session_id, item_id)
+                .map_err(ProviderError::internal)?;
+            return Ok(MenuExecuteResult::handled());
+        }
         let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
             .with_local_data(Arc::new(context.clone()));
         let offered = self.resolve(&resolve)?;
-        let item_id = match invocation.input()? {
-            ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
-            _ => None,
-        }
-        .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
         if !offered
             .iter()
             .any(|item| item.id == item_id && !item.disabled)

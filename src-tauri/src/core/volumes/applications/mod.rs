@@ -44,17 +44,20 @@ pub fn cached_icon(_source: &str) -> Option<String> {
 pub(crate) use launch::is_executable_target;
 pub use launch::open;
 pub use state::{PendingKind, PendingTarget};
-use std::{collections::HashMap, sync::OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 pub const URI: &str = fiex_applications::URI;
 
-fn catalog() -> &'static fiex_applications::ApplicationCatalog {
-    static CATALOG: OnceLock<fiex_applications::ApplicationCatalog> = OnceLock::new();
+fn catalog() -> &'static Arc<fiex_applications::ApplicationCatalog> {
+    static CATALOG: OnceLock<Arc<fiex_applications::ApplicationCatalog>> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        fiex_applications::ApplicationCatalog::new(
+        Arc::new(fiex_applications::ApplicationCatalog::new(
             fiex_applications::ApplicationsStore::new(state::storage()),
             platform::backend(),
-        )
+        ))
     })
 }
 
@@ -82,7 +85,6 @@ fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
 
 pub fn list() -> Result<Vec<Entry>, String> {
     state::ensure_ready()?;
-    catalog().refresh()?;
     list_at(URI)
 }
 
@@ -100,8 +102,12 @@ pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
 /// All installed applications, including those currently mapped into folders.
 pub fn system_entries() -> Result<Vec<Entry>, String> {
     state::ensure_ready()?;
+    #[cfg(feature = "desktop")]
+    let on_change = crate::desktop::emit_applications_changed as fn();
+    #[cfg(not(feature = "desktop"))]
+    let on_change = || {};
     catalog()
-        .entries()
+        .entries_cache_first_background(on_change)
         .map(|entries| entries.into_iter().map(catalog_entry).collect())
 }
 

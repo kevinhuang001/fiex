@@ -1,5 +1,5 @@
 use super::validation::*;
-use super::{builtin, execute, query, query_core, query_plugins, sessions};
+use super::{builtin, children, execute, query, query_core, query_plugins, sessions};
 use serde_json::json;
 
 mod capabilities;
