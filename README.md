@@ -1,7 +1,7 @@
 <p align="center"><img src="assets/icon.png" width="88" alt="Fiex"></p>
 <h1 align="center">Fiex</h1>
 <p align="center">A calm, fast file explorer for macOS, Windows and Linux.</p>
-<p align="center"><a href="https://github.com/kevinhuang001/fiex/releases/latest">Download</a> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><a href="https://kevinhuang001.github.io/fiex/">Documentation</a> · <a href="https://github.com/kevinhuang001/fiex/releases/latest">Download</a> · <a href="README.zh-CN.md">简体中文</a></p>
 
 Fiex gives your files room to breathe: a translucent sidebar, compact controls, colored file-type icons, and four ways to explore.
 

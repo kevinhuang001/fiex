@@ -2,7 +2,7 @@
 
 基于 Tauri + React + shadcn/ui 的三平台资源管理器，参考 Pantodo 的磨砂侧栏与简洁圆角界面。
 
-[下载安装包](https://github.com/kevinhuang001/fiex/releases/latest)
+[项目文档](https://kevinhuang001.github.io/fiex/) · [下载安装包](https://github.com/kevinhuang001/fiex/releases/latest)
 
 - 地址栏可点击编辑当前路径，地址会自动全选，直接复制即可。
 - 列表、图标、分栏、画廊四种视图；图标视图采用类似 Finder 的固定网格、两行文件名与对齐排列；可按类型、扩展名、修改时间或大小分组。
