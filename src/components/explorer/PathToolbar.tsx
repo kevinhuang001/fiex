@@ -43,7 +43,7 @@ export function PathToolbar({
 }) {
   const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
-    <div className="path-toolbar" data-drop-folder={dropFolder}>
+    <div className="path-toolbar">
       <Button
         variant="ghost"
         size="icon"
@@ -55,6 +55,7 @@ export function PathToolbar({
       </Button>
       <nav
         className="breadcrumbs"
+        data-drop-folder={dropFolder}
         aria-label={ariaLabel}
         onClick={(event) => {
           if (event.target === event.currentTarget) startEdit()

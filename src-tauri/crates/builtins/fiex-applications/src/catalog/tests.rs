@@ -169,3 +169,38 @@ fn decoration_info_tracks_system_apps_after_they_move_into_virtual_folders() {
         })
     );
 }
+
+#[test]
+fn cached_system_catalog_entry_keeps_identity_after_its_virtual_uri_moves() {
+    let store = store("applications-catalog-move-cache-test");
+    let backend = Arc::new(TestBackend {
+        calls: AtomicUsize::new(0),
+        applications: Mutex::new(vec![application("Editor")]),
+    });
+    let catalog = ApplicationCatalog::new(store.clone(), backend);
+    let cached = catalog.entries().unwrap();
+    let original_uri = cached[0].uri.clone();
+    let stable_id = cached[0].stable_id().to_owned();
+
+    let tree = store
+        .update(|tree| {
+            tree.folders.insert(
+                "tools".into(),
+                crate::VirtualFolder {
+                    id: "tools".into(),
+                    parent: None,
+                    name: "Tools".into(),
+                    order: 0,
+                },
+            );
+            tree.apps.get_mut(&stable_id).unwrap().parent = Some("tools".into());
+            Ok(())
+        })
+        .unwrap();
+    let moved_uri = app_uri_in(&tree, &stable_id).unwrap();
+    let still_cached = catalog.entries().unwrap();
+
+    assert_ne!(original_uri, moved_uri);
+    assert_eq!(still_cached[0].uri, original_uri);
+    assert_eq!(still_cached[0].stable_id(), stable_id);
+}

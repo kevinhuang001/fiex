@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { openFilePicker } from '@/lib/filePicker'
 import type { FileOpsContext } from './types'
 
 /** Putting Trash contents back and undoing the last file operation. */
@@ -12,7 +13,8 @@ export function restoreActions({ x, notify, run }: FileOpsContext) {
       t('正在复原…'),
       async () => {
         const needsFolder = await call<boolean>('trash_restore_needs_folder', { paths })
-        const fallback = needsFolder ? await call<string | null>('pick_folder', {}) : null
+        const picked = needsFolder ? await openFilePicker({ mode: 'openDirectory' }) : null
+        const fallback = typeof picked === 'string' ? picked : null
         if (needsFolder && !fallback) return
         fallbackDirectory = fallback
         restoreStarted = true

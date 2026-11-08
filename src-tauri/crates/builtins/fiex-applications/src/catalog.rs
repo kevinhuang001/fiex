@@ -29,6 +29,13 @@ pub struct CatalogApplication {
     pub modified: u64,
 }
 
+impl CatalogApplication {
+    /// Stable identity survives changes to the visible virtual URI.
+    pub fn stable_id(&self) -> &str {
+        &self.id
+    }
+}
+
 /// OS operations are injected by the application composition root.
 pub trait ApplicationsBackend: Send + Sync {
     fn enumerate_installed(&self) -> Result<Vec<InstalledApplication>, String>;
