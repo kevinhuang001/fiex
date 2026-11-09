@@ -1,113 +1,147 @@
 # Fiex codebase structure and verification audit (2026-11-09)
 
-> Baseline: Core main `a32c699`, SDK main `ab21f3a`, Official Plugins main `51da0f5`. This document is a structural/representative source inspection, **not** a line-by-line proof that the full codebase is free of legacy code. No full local multi-platform build was run as part of this audit.
+Baseline: Core `a32c699`, SDK `ab21f3a`, Official Plugins `51da0f5`.
 
-## Existing architectural strengths
+This is a structural and representative source audit, **not** a line-by-line proof that all legacy code has been eliminated. Full local cross-platform builds were not run during the audit.
 
-- Core already uses the `crates/foundation`, `crates/builtins`, and `crates/platform` workspace layout. Retain these boundaries.
-- The provider-contracts crate owns shared typed event/FS DTOs; the runtime uses typed provider registries.
-- The resource broker, operation scope, directory mutation overlay, preflight and plugin hosting code already represent meaningful domain boundaries.
-- CI runs browser E2E, frontend tests, Core Rust workspace tests and platform-matrix Clippy; do not replace working coverage in one large PR.
+## Existing strengths
 
-## Verified findings
+- Core already separates `crates/foundation`, `crates/builtins`, and `crates/platform`.
+- The SDK contracts crate owns typed event and file-operation DTOs.
+- ProviderRegistry, ResourceBroker, Operation Scope, preflight and directory mutation overlay already provide useful boundaries.
+- The current CI already runs frontend tests, browser E2E, Rust workspace tests and platform-matrix Clippy.
 
-| ID | Priority | Evidence | Recommended change |
-| --- | --- | --- | --- |
-| ARC-001 | P0 | `src-tauri/src/usbfs/mod.rs` declares only `mod tree` and reexports `fiex_usb_fs`. Six files from the previous local driver implementation are not declared as Rust modules. | Remove the six unreachable files; retain `src-tauri/src/usbfs/tree.rs` as the Core adaptation layer and the new crate as the driver owner. |
-| ARC-002 | P0 | `scripts/check-file-size.mjs` scans only `src` and `src-tauri/src`; `npm run check:size` is missing from the Core CI workflow. `scripts/file-size-baseline.json` refers to removed `src/lib/demo/handlers/plugins.ts`. | Extend coverage to all owned code, create a measured non-growth baseline, run it in CI, and gradually eliminate exceptions. Do **not** enable the existing script in CI unchanged: it misses crates and currently has unbaselined oversized modules. |
-| ARC-003 | P0 | SDK CI invokes `cargo test --manifest-path rust/Cargo.toml` but does not explicitly test the separate `rust/contracts/Cargo.toml` package, which has matcher unit tests. | Add contracts fmt/test/Clippy jobs. Track this in the SDK PR. |
-| ARC-004 | P1 | `src/hooks/explorer/useListing.ts` (~638 lines), `src-tauri/src/core/fs/preflight.rs` (~497 lines), `src-tauri/src/plugins/resource/fs_access/scope.rs` (~438 lines), `src-tauri/src/core/volumes/mounts.rs` (~688 lines), SDK `rust/src/sdk_tests.rs` (~959 lines), Archive `official/archive/src/main.rs` (~766 lines). | Extract policy, state transitions, orchestration and I/O into cohesive modules; never split solely by line count. |
-| ARC-005 | P1 | Core `tsconfig.json` uses `strict: true` but `allowJs: true, checkJs: false`; `src/lib/api.ts` exposes unvalidated generic `call<T>(command: string, args)`. | Generate IPC DTOs from Rust contracts and introduce a typed command map + runtime validation for untrusted responses. Avoid inaccurate claims that `call<T>` is runtime safe. |
-| ARC-006 | P1 | `src-tauri/src/plugins/resource/fs_access/scope.rs` exposes JSON-value conversions at the authorization boundary; `src-tauri/src/core/fs/mod.rs` invokes serde deserialization in `ResourceBroker::resolve`. | Use typed validated resource identifiers internally; separate parse/bind/authorize/execute/revoke phases; verify non-escalation and stale-ref invariants. |
-| ARC-007 | P1 | UI unit tests are primarily utility `.test.ts` files, while `e2e/explorer.spec.ts` and `e2e/fixtures/handlers/plugins.ts` are very large; official plugins place integration executables in `integration/examples`. | Add component, hook, contract, process and cross-platform boundary tests; reorganize large fixtures by feature. Retain legitimate Rust `#[cfg(test)]` colocated tests. |
-| ARC-008 | P1 | No explicit Kani, Verus, coverage, or property-testing stage in current three-workspace CI configuration. | Add pure core invariants with Kani, property-based generators, filesystem integration tests, then coverage/mutation quality gates. |
-| ARC-009 | P2 | Rust manifests use edition 2021 with `rust-version = 1.90`. | Trial edition 2024 with compiler and dependency checks, then migrate workspace-by-workspace; the edition itself is not a bug. |
+These structures should be retained rather than replaced wholesale.
 
-## Target ownership (no unnecessary crate proliferation)
+## Confirmed findings
+
+### ARC-001: Unreachable USB driver copies (P0)
+
+`src-tauri/src/usbfs/mod.rs` declares only `mod tree` and reexports `fiex_usb_fs`. Six files from the pre-extraction implementation were not declared Rust modules:
+
+- `src-tauri/src/usbfs/access.rs`
+- `src-tauri/src/usbfs/identity.rs`
+- `src-tauri/src/usbfs/mount.rs`
+- `src-tauri/src/usbfs/util.rs`
+- `src-tauri/src/usbfs/tree/drivers.rs`
+- `src-tauri/src/usbfs/tree/stream.rs`
+
+Remove these copies. Retain `src-tauri/src/usbfs/tree.rs` as a Core adapter and the dedicated `fiex-usb-fs` crate as the driver owner.
+
+### ARC-002: Missing file-size enforcement (P0)
+
+`scripts/check-file-size.mjs` scans only `src` and `src-tauri/src`, excluding extracted Rust crates, SDK and official plugins. Core CI does not invoke `npm run check:size`. The old baseline also contained `src/lib/demo/handlers/plugins.ts`, which no longer exists.
+
+Extend coverage, establish a measured non-growth baseline and enforce it in CI. **Do not enable the existing script unchanged:** it contains unbaselined oversized modules and would block unrelated PRs.
+
+### ARC-003: SDK contracts tests omitted from the declared matrix (P0)
+
+SDK CI tests `rust/Cargo.toml` but does not explicitly test the separate `rust/contracts/Cargo.toml` package. The latter contains ProviderMatcher unit tests. Add its own fmt, test and Clippy checks to the SDK pipeline.
+
+### ARC-004: Overloaded modules (P1)
+
+Examples include `src/hooks/explorer/useListing.ts` (approximately 638 lines), `src-tauri/src/core/fs/preflight.rs` (497 lines), `src-tauri/src/plugins/resource/fs_access/scope.rs` (438 lines), `src-tauri/src/core/volumes/mounts.rs` (688 lines), SDK `rust/src/sdk_tests.rs` (959 lines) and Archive `official/archive/src/main.rs` (766 lines).
+
+Split by responsibility, state machine and I/O ownership; do not split merely to satisfy a line limit.
+
+### ARC-005: Cross-language type-safety gap (P1)
+
+Core uses TypeScript `strict: true`, but `allowJs: true` and `checkJs: false`. `src/lib/api.ts` also exposes `call<T>(command: string, args)`, which allows callers to claim an arbitrary return type without validating the runtime response.
+
+Generate IPC DTOs from Rust Serde contracts, introduce a typed command map and validate untrusted IPC/plugin data at the actual boundary. Keep dynamic plugin RPC behind an explicit validated adapter.
+
+### ARC-006: Resource and scope invariants (P1)
+
+`plugins/resource/fs_access/scope.rs` handles resource binding, path authorization and references. `core/fs/mod.rs` converts JSON values into `ResourceRef` during broker resolution.
+
+Move pure authorization predicates and state transitions into testable modules. Prefer typed validated resource identifiers after the wire boundary. Prove that binding, derivation, revocation and stale references cannot amplify authority.
+
+### ARC-007: Test coverage and placement (P1)
+
+Frontend tests are mostly pure utility tests. `e2e/explorer.spec.ts` and `e2e/fixtures/handlers/plugins.ts` are large. Official plugin integration executables live in `integration/examples`; this is not equivalent to cargo test discovering an integration test.
+
+Keep idiomatic Rust colocated `#[cfg(test)]` tests. Organize black-box tests separately and add React hook/component, IPC protocol, provider lifecycle, failure injection and OS-boundary tests.
+
+### ARC-008: No formal-verification pipeline (P1)
+
+Current workflows do not explicitly invoke Kani, Verus, property testing or coverage collection. Add a small set of pure proof targets before trying to verify host-wide I/O or concurrency.
+
+### ARC-009: Rust edition (P2)
+
+Manifests use edition 2021 with Rust 1.90. Trial migration to edition 2024 after checking macros, dependencies, warnings and every platform. Edition 2021 is not itself a defect.
+
+## Proposed ownership
 
 ```text
 fiex/
   src/
-    app/                 # composition / main application
+    app/                 # application composition
     features/
-      explorer/          # view, listing state, actions, feature tests
-      transfers/         # progress, conflicts, controller
-      plugins/           # panels, marketplace, settings
+      explorer/
+      transfers/
+      plugins/
       settings/
     shared/
-      ipc/               # generated types, typed call wrapper, runtime guards
-      ui/
-      i18n/
+      ipc/               # typed command facade and generated DTOs
       cache/
-    test/                # reusable Vitest harness and fixtures
+      i18n/
+      ui/
+    test/                # shared unit/component fixtures
   e2e/
     explorer/
     transfers/
     plugins/
     builtins/
-    fixtures/            # isolated, deterministic mocked host
+    fixtures/
   src-tauri/
     crates/
-      foundation/        # existing fiex-resource/fs/storage/runtime
-      builtins/          # existing applications/recent/trash/etc.
-      platform/          # native OS calls
-      application/       # extract ONLY acyclic policy/operations/cache components
+      foundation/        # keep existing resource/fs/storage/runtime
+      builtins/          # keep existing built-in providers
+      platform/          # keep native OS implementations
+      application/       # only acyclic pure policy/operations/cache
     src/
-      core/              # application orchestration while migration continues
-      plugins/           # provider lifecycle / host orchestration
-      desktop/           # Tauri command adapters, no domain policy
-      usbfs/             # Core-only display/ejection adapter, no driver copies
+      core/              # orchestration during gradual migration
+      plugins/           # plugin runtime and provider host
+      desktop/           # Tauri adapters, no domain authorization
+      usbfs/             # display and ejection adapter only
 ```
 
-The external `fiex-sdk` continues to be the canonical shared contract source, and `fiex-official-plugins` stays independent. Never copy contract DTO definitions into multiple hand-maintained locations.
+The SDK is the canonical source for shared contracts. Official plugins must remain independent. Do not introduce unnecessary crates or cyclic dependencies.
 
-### Rust boundaries
+## Type and module conventions
 
-1. **Domain/contracts:** immutable typed references and data; pure functions without `tauri`, subprocesses or global runtime state.
-2. **Application:** operations, scopes, preflight, conflict resolution and transaction state machines. Dependencies point inward only.
-3. **Infrastructure:** filesystem, IPC, remote provider adapters, caches, process runners; implement domain-facing traits.
-4. **Presentation:** Tauri commands and React app adapters. No storage permission decisions here.
+- Rust: prefer private modules and `pub(crate)` over broad `pub`. Use newtypes for identifiers, typed errors, enums for lifecycle states, explicit cancellation and generics when they enforce invariants.
+- TypeScript: keep `strict`; incrementally enable `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`; prefer discriminated unions, `satisfies`, exhaustive switches and readonly domain values.
+- Generate shared types from Rust and validate at runtime. A TypeScript generic return annotation is not runtime validation.
+- Separate directory fetch, event subscriptions, mutation reconciliation and presentation in `useListing`; preserve cache-before-revalidate behavior and avoid flicker.
+- Do not convert one monolith into another global utility crate.
 
-Use `pub(crate)` or private modules by default. Prefer newtypes for `MountId`, `ResourceId`, `SessionId` and validated `Uri`; enums for protocol states, `Result` with typed errors, sealed capabilities where useful, and explicit cancellation. Keep generics/typestate where they enforce an invariant; avoid ornamental abstraction or broad `dyn Any` registries.
+## Test layout policy
 
-### TypeScript boundaries
+- Rust private unit tests: colocated `src/<module>/tests.rs` under `#[cfg(test)] mod tests;` is idiomatic.
+- Rust black-box tests: package-specific `tests/*.rs` with public contracts, or local test modules where private access is required.
+- TypeScript unit and component tests: colocated `*.test.ts(x)` with setup and shared fixtures in `src/test`.
+- Browser E2E: `e2e/<feature>/*.spec.ts` with per-test isolated fixtures.
+- Official plugin integration: use `integration/tests` for test-harness-compatible cases, or `integration/src/bin` for environment-driven standalone binaries.
 
-- Keep `strict`, phase in `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` after measuring failures.
-- Generate command/event DTOs from Rust Serde contracts (evaluate `ts-rs` or equivalent); use runtime validation where external IPC or plugin messages enter the process.
-- Replace unbounded `call<T>(string)` in feature code with typed methods; allow dynamic custom methods only in a quarantined, validated SDK bridge.
-- Prefer discriminated unions, exhaustive switches, `satisfies`, narrow readonly domain values, and generic helpers where they remove casts.
-- Split `useListing` by read pipeline, event subscription, mutation reconciliation and presentation; preserve the existing cache-before-revalidate no-flicker semantics.
+## Formal and property verification targets
 
-## Test placement policy
+- **Scope and capability:** binding, delegation and revocation never amplify authorization.
+- **Resource identity:** path normalization never escapes the trusted root and stale refs do not regain access.
+- **Write session:** no write after abort, no double commit, no leftover uncommitted state.
+- **Directory overlay:** stale provider listings do not erase committed local mutations before reconciliation.
+- **Transfer planner:** source cleanup cannot precede successful destination commit.
+- **JSON-RPC:** responses belong to the correct request; missing capability cannot trigger a privileged fallback.
 
-- Rust private unit tests: `src/<module>/tests.rs` and `#[cfg(test)] mod tests;`; valid, idiomatic and not inherently misplaced.
-- Rust external contract and black-box tests: `crates/<crate>/tests/*.rs`, `sdk/rust/contracts/tests/*.rs`, or `src-tauri/tests/*.rs` where an executable host is required. Only move tests once public/private access constraints are understood.
-- TypeScript pure-unit and React tests: colocated `*.test.ts(x)`; shared test setup under `src/test`; Playwright cross-feature tests under `e2e/<feature>/*.spec.ts`.
-- Official integration harnesses: dedicated `integration/tests` for cargo test-compatible cases, or `integration/src/bin` for environment-driven standalone binaries, not falsely counted as ordinary unit tests.
+For pure, bounded Rust state machines, use Kani proof harnesses and property tests. For a small pure normalization algorithm, evaluate Verus as a separate experiment. Kani does not replace filesystem race or multithreaded integration testing.
 
-## Required invariants and proof plan
+## Implementation sequence
 
-| Target | Invariant | Technique |
-| --- | --- | --- |
-| Scope / capability policy | authorization cannot be amplified by bind/derive/revoke; stale/revoked references stay unusable | Pure transition model + Kani bounded harnesses, followed by integration tests |
-| URI / ResourceRef | normalized child path never escapes root; parse/serialize round trips | proptest, then Kani or Verus for a pure parser/normalizer |
-| Write session | at most one commit, no write after abort, uncommitted cleanup | typestate + property/model checks |
-| Cache overlay | stale list may not erase a confirmed local mutation before reconciliation; identity changes invalidate snapshots | deterministic state-machine/property tests |
-| Transfer planner | no source deletion before destination commit, error always triggers cleanup | property tests + fault-injected process integration tests |
-| JSON-RPC | unique request IDs and correct response attribution; no silent permission fallback | protocol conformance/mutation tests; concurrency harnesses outside Kani |
-| Provider registry | only registered typed capabilities are invoked | contract tests + invalid/absent-provider cases |
+1. **Hygiene:** delete proven-unreachable code, remove stale baselines, and explicitly test the SDK contracts package.
+2. **Gates:** expand file-size checking, add frontend lint and component/hook tests, and isolate E2E fixtures.
+3. **Contracts:** generate typed IPC models, validate wire inputs and move to typed internal reference/state representations.
+4. **Extraction:** isolate policy, transfer planning and cache reconciliation with explicit dependency directions.
+5. **Verification:** add Kani harnesses, property tests, injected failures, coverage and mutation testing.
+6. **Final cleanup:** trial edition 2024, remove unused dependencies and obsolete branches, and retire size exemptions.
 
-Kani is suitable for **bounded, pure** state and safety checks, but does not replace multi-threaded integration or filesystem race tests. Verus should be explored on one pure core algorithm, not applied wholesale to the Tauri/runtime code.
-
-## Rollout (small, independently verifiable PRs)
-
-1. **P0 hygiene:** delete proved-unreachable copied sources, fix SDK contracts CI, remove stale baselines; do not modify user-visible functionality.
-2. **Quality gates:** implement full-workspace source-size non-regression check and baseline; add frontend lint and tests for hooks/IPC; split E2E fixtures without changing assertions.
-3. **Type contracts:** introduce generated DTOs and typed RPC facade; introduce internal newtypes; migrate one domain at a time with snapshot/contract tests.
-4. **Domain extraction:** pull pure scope policy, transfer planner and cache reconciliation into independently testable modules/crates; enforce dependency rules.
-5. **Verification:** start with 2-4 Kani harnesses for scope and write state machine; add proptest, deterministic failures, coverage and mutation testing.
-6. **Edition/toolchain and final cleanup:** test edition 2024, remove adapters only when call sites are migrated, delete unused dependencies/examples, and remove file-size exceptions.
-
-### Merge gate for every follow-up PR
-
-`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, appropriate `cargo test` and SDK contracts tests, `npm run build`, `npm test`, targeted Playwright, platform matrix, and a diff review for legacy paths. Do not claim these passed unless jobs ran. Keep functional behavior stable until specific contract/integration coverage proves the replacement.
+Every subsequent PR should pass relevant `fmt`, `clippy`, `test`, frontend build, Playwright and native platform checks. Do not claim a gate passed until it has actually run.
