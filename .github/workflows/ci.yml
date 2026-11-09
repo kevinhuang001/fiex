@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
       - name: Verify bounded authorization invariants
         uses: model-checking/kani-github-action@v1
         with:
