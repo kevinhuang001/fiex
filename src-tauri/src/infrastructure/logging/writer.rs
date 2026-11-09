@@ -28,28 +28,30 @@ fn worker() -> &'static Arc<Writer> {
         let copy = writer.clone();
         std::thread::Builder::new()
             .name("fiex-log-writer".into())
-            .spawn(move || loop {
-                let job = {
-                    let mut queue = copy.queue.lock().unwrap_or_else(|e| e.into_inner());
-                    while queue.is_empty() {
-                        queue = copy.ready.wait(queue).unwrap_or_else(|e| e.into_inner());
-                    }
-                    queue.pop_front().unwrap()
-                };
-                match job {
-                    Job::Append(id, record) => {
-                        persist(&id, &record);
-                        prune();
-                    }
-                    Job::Flush(done) => {
-                        let _ = done.send(());
-                    }
-                    Job::Clear(id, done) => {
-                        if let Some((a, b)) = paths(&id) {
-                            let _ = fs::remove_file(a);
-                            let _ = fs::remove_file(b);
+            .spawn(move || {
+                loop {
+                    let job = {
+                        let mut queue = copy.queue.lock().unwrap_or_else(|e| e.into_inner());
+                        while queue.is_empty() {
+                            queue = copy.ready.wait(queue).unwrap_or_else(|e| e.into_inner());
                         }
-                        let _ = done.send(());
+                        queue.pop_front().unwrap()
+                    };
+                    match job {
+                        Job::Append(id, record) => {
+                            persist(&id, &record);
+                            prune();
+                        }
+                        Job::Flush(done) => {
+                            let _ = done.send(());
+                        }
+                        Job::Clear(id, done) => {
+                            if let Some((a, b)) = paths(&id) {
+                                let _ = fs::remove_file(a);
+                                let _ = fs::remove_file(b);
+                            }
+                            let _ = done.send(());
+                        }
                     }
                 }
             })

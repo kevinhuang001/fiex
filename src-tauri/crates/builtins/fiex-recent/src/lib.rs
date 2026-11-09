@@ -13,8 +13,8 @@ mod module;
 pub const PROVIDER_ID: &str = "core:recent";
 
 pub use module::{
-    recent_uri_schemes, Existence, RecentContextMenu, RecentHook, RecentModule,
-    RecentModuleServices, RecentResource, RecentVfs,
+    Existence, RecentContextMenu, RecentHook, RecentModule, RecentModuleServices, RecentResource,
+    RecentVfs, recent_uri_schemes,
 };
 
 const LIMIT: usize = 40;
@@ -211,7 +211,7 @@ fn opaque_id() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
+    use fiex_storage::{CoreOwnerKey, native::OwnerBoundStorage};
 
     fn store() -> RecentStore {
         let scope = format!("test-{}", opaque_id().unwrap());
@@ -259,8 +259,10 @@ mod tests {
         assert!(store.source_for("recent://").is_err());
         assert!(store.source_for("recent://abc/child").is_err());
         assert!(store.source_for("recent://not-registered").is_err());
-        assert!(store
-            .remove_aliases(&["recent://ok".into(), "bad".into()])
-            .is_err());
+        assert!(
+            store
+                .remove_aliases(&["recent://ok".into(), "bad".into()])
+                .is_err()
+        );
     }
 }

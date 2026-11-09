@@ -97,12 +97,12 @@ export function usePicker(request: FilePickerRequest) {
     let alive = true
     const lastKey = request.mode === 'saveFile' ? 'lastSaveDirectory' : 'lastOpenDirectory'
     void Promise.all([
-      call<{ key: SortKey; direction: 'asc' | 'desc' } | null>('state_get', {
+      call('state_get', {
         namespace: 'picker',
         key: 'sort',
       }),
-      call<GroupKey | null>('state_get', { namespace: 'picker', key: 'group' }),
-      call<string | null>('state_get', { namespace: 'picker', key: lastKey }),
+      call('state_get', { namespace: 'picker', key: 'group' }),
+      call('state_get', { namespace: 'picker', key: lastKey }),
     ])
       .then(([savedSort, savedGroup, savedDirectory]) => {
         if (!alive) return
@@ -391,7 +391,7 @@ export function usePicker(request: FilePickerRequest) {
   const createFolder = (name: string) => {
     if (!name.trim()) return
     void perform(async () => {
-      const path = await call<string>('create_entry', {
+      const path = await call('create_entry', {
         path: directory,
         name: name.trim(),
       })
@@ -400,7 +400,7 @@ export function usePicker(request: FilePickerRequest) {
   }
   const renameEntry = (entry: Entry, name: string) => {
     if (!name.trim() || name.trim() === entry.name) return
-    void perform(() => call<string>('rename_entry', { path: entry.path, name: name.trim() }))
+    void perform(() => call('rename_entry', { path: entry.path, name: name.trim() }))
   }
   const trashEntry = (entry: Entry) => {
     void perform(() => call('recycle', { paths: [entry.path], onProgress: quietProgressChannel() }))

@@ -8,6 +8,10 @@ export interface PendingSelection {
   generation: number
 }
 
+export function previousNavigationPath(history: string[], cursor: number): string | null {
+  return cursor > 0 && cursor <= history.length - 1 ? history[cursor - 1] : null
+}
+
 /** Path, history, tab state and the transient per-pane view state every
  *  navigation resets: selection, rename target and the last error. The listing
  *  itself is loaded by useListing, which reads these values. */
@@ -188,6 +192,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   return {
     path,
+    previousPath: previousNavigationPath(history, cursor),
     referencedPaths,
     selected,
     setSelected,
@@ -216,7 +221,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
       if (uriParent === path) return
       try {
         const upPath = path.startsWith('applications://')
-          ? await call<string>('file_parent', { path })
+          ? await call('file_parent', { path })
           : uriParent
         if (upPath !== path) navigate(upPath)
       } catch (cause) {

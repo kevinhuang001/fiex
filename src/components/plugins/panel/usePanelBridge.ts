@@ -8,6 +8,7 @@ import type { JsonValue } from '../../../../sdk/ui/src/index'
 import { themeSnapshot } from '@/lib/themes'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
+import { parseJsonValue } from '@/lib/ipcValidation'
 import { openFilePicker } from '@/lib/filePicker'
 import {
   beginActivity,
@@ -85,13 +86,11 @@ export function usePanelBridge({
     // protocol with the plugin document's own policy.
     if (native) {
       return urlCache.current
-        .get(key, () =>
-          call<string>('plugin_panel_asset', { pluginId, panelId }).then(convertFileSrc),
-        )
+        .get(key, () => call('plugin_panel_asset', { pluginId, panelId }).then(convertFileSrc))
         .then((url) => ({ url }))
     }
     return htmlCache.current
-      .get(key, () => call<string>('plugin_panel_html', { pluginId, panelId }))
+      .get(key, () => call('plugin_panel_html', { pluginId, panelId }))
       .then((html) => ({ html }))
   }
   useEffect(() => {
@@ -209,7 +208,7 @@ export function usePanelBridge({
                 current.allowCreate || current.selection.length === 0
                   ? (await resources.describe([current.directory]))[0]
                   : undefined
-              const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+              const settings = await call('plugin_settings', {
                 pluginId: current.pluginId,
               }).catch(() => ({}))
               return {
@@ -375,10 +374,10 @@ export function usePanelBridge({
                 p.params && typeof p.params === 'object' && !Array.isArray(p.params)
                   ? { ...(p.params as Record<string, unknown>) }
                   : {}
-              return await call<JsonValue>('plugin_invoke', {
+              return await call('plugin_invoke', {
                 pluginId: current.pluginId,
                 method: p.method,
-                params: baseParams,
+                params: parseJsonValue(baseParams),
                 directory: current.directory,
                 selectedPaths: resources.bindings(baseParams).map((binding) => binding.path),
                 resourceBindings: resources.bindings(baseParams),
@@ -388,7 +387,7 @@ export function usePanelBridge({
               const p = params as { taskId?: unknown } | null
               if (!p || typeof p.taskId !== 'string' || !p.taskId)
                 throw new Error('Invalid plugin task id')
-              return await call<JsonValue | null>('plugin_task', {
+              return await call('plugin_task', {
                 pluginId: current.pluginId,
                 taskId: p.taskId,
               })

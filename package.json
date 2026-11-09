@@ -1,6 +1,6 @@
 {
   "name": "fiex",
-  "version": "0.7.11",
+  "version": "0.7.12",
   "private": true,
   "type": "module",
   "description": "A calm, fast file explorer for macOS, Windows and Linux.",
@@ -14,7 +14,10 @@
     "e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "eslint src e2e 'scripts/**/*.mjs' '*.ts' '*.js'",
+    "check:boundary-types": "tsc --noEmit -p tsconfig.boundary.json",
     "check:size": "node scripts/check-file-size.mjs",
+    "check:tauri-contracts": "node scripts/check-tauri-command-contracts.mjs",
     "audit:native": "node scripts/audit-native-deps.mjs",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
@@ -44,6 +47,7 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.58.2",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/cli": "^2.9.0",
@@ -51,10 +55,14 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^15.15.0",
     "material-icon-theme": "^5.39.0",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^7.1.12",
     "vitest": "^3.2.4"
   },

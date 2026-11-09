@@ -33,7 +33,7 @@ export function useWorkspaceActions({
       paths.map(
         async (path) =>
           x.entries.find((entry) => entry.path === path) ||
-          (await call<Entry>('file_info', { path }).catch(() => null)),
+          (await call('file_info', { path }).catch(() => null)),
       ),
     )
     workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
@@ -50,7 +50,7 @@ export function useWorkspaceActions({
     for (const path of paths) {
       if (existing.has(path)) continue
       try {
-        const info = await call<Entry>('file_info', { path })
+        const info = await call('file_info', { path })
         if (!info.isDir) {
           files += 1
           continue

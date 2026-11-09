@@ -24,7 +24,9 @@ pub fn map_error(error: String) -> String {
     if error.starts_with("PermissionDenied:") {
         return format!(
             "PermissionDenied: {}",
-            crate::i18n::t("Fiex 无权访问废纸篓。请打开“系统设置 → 隐私与安全性 → 完全磁盘访问权限”，添加并开启 Fiex，然后退出并重新打开 Fiex，再访问废纸篓。")
+            crate::i18n::t(
+                "Fiex 无权访问废纸篓。请打开“系统设置 → 隐私与安全性 → 完全磁盘访问权限”，添加并开启 Fiex，然后退出并重新打开 Fiex，再访问废纸篓。"
+            )
         );
     }
     error

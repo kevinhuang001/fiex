@@ -78,21 +78,16 @@ pub fn resolve(display: &str) -> Result<ResourceSnapshot, String> {
 pub fn resolve_from_directory_snapshot(display: &str) -> Result<ResourceSnapshot, String> {
     if crate::core::fs::provider_registry::resource_access(display).map_err(String::from)?
         == crate::core::fs::provider_registry::ResourceAccess::Provider
+        && let Ok(parent) = crate::core::fs::provider_registry::parent_path(display)
+        && let Ok(Some(snapshot)) =
+            crate::core::fs::directory_cache::read_snapshot(&parent, true, &[])
+        && let Some(entry) = snapshot
+            .listing
+            .entries
+            .into_iter()
+            .find(|entry| entry.path == display)
     {
-        if let Ok(parent) = crate::core::fs::provider_registry::parent_path(display) {
-            if let Ok(Some(snapshot)) =
-                crate::core::fs::directory_cache::read_snapshot(&parent, true, &[])
-            {
-                if let Some(entry) = snapshot
-                    .listing
-                    .entries
-                    .into_iter()
-                    .find(|entry| entry.path == display)
-                {
-                    return Ok(from_entry(display, &entry));
-                }
-            }
-        }
+        return Ok(from_entry(display, &entry));
     }
     resolve(display)
 }
@@ -170,7 +165,7 @@ impl ResourceSnapshotProjection for ResourceSnapshot {
 }
 
 mod binding;
-pub use binding::{bind_selected, ResourceBinding};
+pub use binding::{ResourceBinding, bind_selected};
 
 #[cfg(test)]
 mod tests;

@@ -1,5 +1,5 @@
 //! Local PTY lifecycle. Connections and remote terminals are plugin-owned.
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -101,10 +101,10 @@ pub(super) fn start_session(
             }
         }
         let _ = on_event.send(TerminalEvent::Exit { code: None });
-        if let Ok(mut values) = sessions().lock() {
-            if let Some(mut session) = values.remove(&id) {
-                let _ = session.child.kill();
-            }
+        if let Ok(mut values) = sessions().lock()
+            && let Some(mut session) = values.remove(&id)
+        {
+            let _ = session.child.kill();
         }
     });
     Ok(session_id)
@@ -143,10 +143,10 @@ pub(crate) fn terminal_resize(session_id: String, cols: u16, rows: u16) -> Resul
 
 #[tauri::command]
 pub(crate) fn terminal_close(session_id: String) -> Result<(), String> {
-    if let Ok(mut values) = sessions().lock() {
-        if let Some(mut session) = values.remove(&session_id) {
-            let _ = session.child.kill();
-        }
+    if let Ok(mut values) = sessions().lock()
+        && let Some(mut session) = values.remove(&session_id)
+    {
+        let _ = session.child.kill();
     }
     Ok(())
 }

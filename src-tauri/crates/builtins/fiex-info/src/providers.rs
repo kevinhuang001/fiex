@@ -1,13 +1,13 @@
 use crate::{
-    compute_media_fields, compute_metadata_fields, media_descriptors, metadata_descriptors,
-    InfoFieldKey, InfoFieldResult, InfoSectionDescriptor, Localization,
+    InfoFieldKey, InfoFieldResult, InfoSectionDescriptor, Localization, compute_media_fields,
+    compute_metadata_fields, media_descriptors, metadata_descriptors,
 };
 use fiex_provider_contracts::{
     InfoProvider, ProviderError, ProviderInvocation, ProviderMatchRule, ResourceMetadata,
 };
 use std::{
     path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
 };
 
 pub struct InfoMetadataInput {
@@ -25,7 +25,7 @@ pub trait InfoModuleServices: Send + Sync {
         ctx: &dyn ProviderInvocation,
     ) -> Result<InfoMetadataInput, ProviderError>;
     fn media_descriptor_path(&self, ctx: &dyn ProviderInvocation)
-        -> Result<PathBuf, ProviderError>;
+    -> Result<PathBuf, ProviderError>;
     fn media_path(&self, ctx: &dyn ProviderInvocation) -> Result<PathBuf, ProviderError>;
     fn localization(&self) -> Localization;
 }

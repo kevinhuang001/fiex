@@ -9,20 +9,26 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { AppWindow, ChevronRight } from 'lucide-react'
+import {
+  AppWindow,
+  ChevronRight,
+  Copy,
+  ListMinus,
+  ListPlus,
+  MoreHorizontal,
+  Trash2,
+} from 'lucide-react'
+export { validPluginMenuItems } from '@/lib/pluginMenu'
+export type { PluginMenu, PluginMenuItem } from '@/lib/pluginMenu'
+import type { PluginMenuItem } from '@/lib/pluginMenu'
 
-export interface PluginMenuItem {
-  id: string
-  title: string
-  kind: 'action' | 'submenu' | 'separator'
-  parentId?: string
-  icon?: string
-}
-
-export interface PluginMenu {
-  pluginId: string
-  menuSessionId: string
-  items: PluginMenuItem[]
+const icons = {
+  application: AppWindow,
+  copy: Copy,
+  'list-minus': ListMinus,
+  'list-plus': ListPlus,
+  more: MoreHorizontal,
+  trash: Trash2,
 }
 
 /** Sibling submenus share one open id so moving to the next level closes the
@@ -31,41 +37,6 @@ export const SubmenuGroupContext = createContext<{
   openId: string | null
   setOpenId: Dispatch<SetStateAction<string | null>>
 } | null>(null)
-
-/** Validates the untrusted tree a plugin returns before rendering it. */
-export function validPluginMenuItems(items: unknown): items is PluginMenuItem[] {
-  if (!Array.isArray(items) || items.length > 100) return false
-  const ids = new Set<string>()
-  for (const item of items) {
-    if (!item || typeof item !== 'object') return false
-    const node = item as Record<string, unknown>
-    if (
-      typeof node.id !== 'string' ||
-      !/^[\w.-]{1,80}$/.test(node.id) ||
-      ids.has(node.id) ||
-      typeof node.title !== 'string' ||
-      node.title.length > 128 ||
-      !['action', 'submenu', 'separator'].includes(String(node.kind)) ||
-      ('parentId' in node && typeof node.parentId !== 'string')
-    ) {
-      return false
-    }
-    ids.add(node.id)
-  }
-  const byId = new Map(items.map((item) => [item.id, item as PluginMenuItem]))
-  for (const item of items as PluginMenuItem[]) {
-    let depth = 1
-    let current = item
-    const seen = new Set<string>([item.id])
-    while (current.parentId) {
-      const parent = byId.get(current.parentId)
-      if (!parent || parent.kind !== 'submenu' || seen.has(parent.id) || ++depth > 4) return false
-      seen.add(parent.id)
-      current = parent
-    }
-  }
-  return true
-}
 
 /** One row of a plugin menu. Submenus expand on hover or click and may lazily
  *  ask the plugin for their children the first time they open. */
@@ -90,6 +61,7 @@ export function PluginMenuNode({
   const [localExpanded, setLocalExpanded] = useState(false)
   const [childOpen, setChildOpen] = useState<string | null>(null)
   const expanded = group ? group.openId === item.id : localExpanded
+  const Icon = item.icon ? icons[item.icon as keyof typeof icons] : undefined
   const [openUp, setOpenUp] = useState(false)
   const [openLeft, setOpenLeft] = useState(parentLeft)
   const submenu = useRef<HTMLDivElement>(null)
@@ -153,6 +125,7 @@ export function PluginMenuNode({
             else setExpanded(false)
           }}
         >
+          {Icon && <Icon size={15} />}
           <span className="context-submenu-label">{item.title}</span>
           <ChevronRight size={13} className="submenu-arrow" />
         </button>
@@ -191,12 +164,15 @@ export function PluginMenuNode({
   return (
     <button
       role="menuitem"
+      disabled={item.disabled}
+      className={item.danger ? 'context-danger' : undefined}
       title={item.title}
       onMouseEnter={() => group?.setOpenId(null)}
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
     >
-      {item.icon === 'application' && <AppWindow size={15} />}
+      {Icon && <Icon size={15} />}
       <span className="context-submenu-label">{item.title}</span>
+      {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
     </button>
   )
 }

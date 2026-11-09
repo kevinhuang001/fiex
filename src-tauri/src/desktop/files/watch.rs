@@ -21,10 +21,10 @@ pub(crate) fn watch_directory(
     crate::plugins::mounts::reject_local(&path)?;
     let mut watcher =
         notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = event {
-                if !matches!(event.kind, notify::EventKind::Access(_)) {
-                    let _ = app.emit("directory-changed", ());
-                }
+            if let Ok(event) = event
+                && !matches!(event.kind, notify::EventKind::Access(_))
+            {
+                let _ = app.emit("directory-changed", ());
             }
         })
         .map_err(|e| e.to_string())?;

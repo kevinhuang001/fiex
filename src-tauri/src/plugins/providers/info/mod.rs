@@ -2,16 +2,16 @@
 use std::sync::OnceLock;
 
 pub use fiex_info::{
-    timestamp_text, InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult,
-    InfoSectionDescriptor,
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
+    timestamp_text,
 };
 
 mod native;
 mod proxy;
 mod sessions;
 pub(crate) use sessions::{
-    cancel_session_task, close_session, compute_fields, compute_session, initialize_session,
-    mark_fields_error, ComputeTrigger, InfoFieldDelta, InfoOpenResult,
+    ComputeTrigger, InfoFieldDelta, InfoOpenResult, cancel_session_task, close_session,
+    compute_fields, compute_session, initialize_session, mark_fields_error,
 };
 
 pub(crate) fn register_native(

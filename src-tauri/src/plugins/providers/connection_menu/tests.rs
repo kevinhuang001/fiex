@@ -62,9 +62,11 @@ fn terminal_and_plugin_views_do_not_offer_sync() {
             false,
         ),
     ] {
-        assert!(builtin_items("builtin:connection-sync", &menu)
-            .unwrap()
-            .is_empty());
+        assert!(
+            builtin_items("builtin:connection-sync", &menu)
+                .unwrap()
+                .is_empty()
+        );
     }
 }
 

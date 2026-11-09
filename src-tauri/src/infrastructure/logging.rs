@@ -88,10 +88,11 @@ fn append_context(
             .filter(|d| !d.is_empty()),
     };
     let mut state = state().lock().map_err(|_| "log store unavailable")?;
-    if state.entries.len() >= 128 && !state.entries.contains_key(plugin_id) {
-        if let Some(victim) = state.entries.keys().find(|k| k.as_str() != "core").cloned() {
-            state.entries.remove(&victim);
-        }
+    if state.entries.len() >= 128
+        && !state.entries.contains_key(plugin_id)
+        && let Some(victim) = state.entries.keys().find(|k| k.as_str() != "core").cloned()
+    {
+        state.entries.remove(&victim);
     }
     let entries = state.entries.entry(plugin_id.into()).or_default();
     entries.push_front(record.clone());
@@ -183,15 +184,15 @@ pub fn record_core(level: &str, source: &str, message: &str) {
 pub fn list(plugin_id: &str) -> Vec<LogRecord> {
     // Read history outside the memory mutex, then merge by stable process IDs.
     let mut rows = writer::load_disk(plugin_id);
-    if let Ok(state) = state().lock() {
-        if let Some(memory) = state.entries.get(plugin_id) {
-            for record in memory.iter().rev() {
-                if !rows
-                    .iter()
-                    .any(|old| old.id == record.id && old.at == record.at)
-                {
-                    rows.push_front(record.clone());
-                }
+    if let Ok(state) = state().lock()
+        && let Some(memory) = state.entries.get(plugin_id)
+    {
+        for record in memory.iter().rev() {
+            if !rows
+                .iter()
+                .any(|old| old.id == record.id && old.at == record.at)
+            {
+                rows.push_front(record.clone());
             }
         }
     }

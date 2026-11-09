@@ -1,5 +1,5 @@
 //! Stable Trash identities over the platform Recycle Bin backend.
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 #[cfg(windows)]
 use fiex_platform::recycle_bin::RecycleBinItemHandle;
 use fiex_platform::recycle_bin::{

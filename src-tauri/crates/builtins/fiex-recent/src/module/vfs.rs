@@ -1,6 +1,6 @@
 //! Recent's read-only VFS and alias search implementation.
-use super::{store, visible_records, RecentModuleServices, ROOT};
-use crate::{recent_uri, RecentRecord, RecentStore};
+use super::{ROOT, RecentModuleServices, store, visible_records};
+use crate::{RecentRecord, RecentStore, recent_uri};
 use fiex_provider_contracts::{
     FsEntry, FsKind, FsListing, FsOperation, FsRead, FsRequest, ProviderError, ProviderInvocation,
     SearchCapabilities, VfsProvider,

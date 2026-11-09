@@ -1,6 +1,6 @@
 //! Plugin command execution: spawn, capped capture, exec environment and teardown.
 use super::rpc::Running;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::path::Path;

@@ -7,6 +7,6 @@ mod host;
 mod rpc;
 mod spawn;
 
-pub use host::{global, PluginHost};
+pub use host::{PluginHost, global};
 pub use rpc::PluginTaskInfo;
 pub use spawn::run_command;

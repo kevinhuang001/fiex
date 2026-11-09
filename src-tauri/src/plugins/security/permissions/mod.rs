@@ -25,7 +25,7 @@ pub use grants::{
     set_granted,
 };
 pub use model::{
-    activation_complete, declaration_approved, ActivationConsent, PluginGrant, PERMISSIONS,
+    ActivationConsent, PERMISSIONS, PluginGrant, activation_complete, declaration_approved,
 };
 pub use store::{allowed, status};
 pub use targets::{

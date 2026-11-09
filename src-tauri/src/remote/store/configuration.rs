@@ -82,10 +82,8 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .get(key)
             .and_then(serde_json::Value::as_str)
             .is_none_or(str::is_empty);
-        if empty {
-            if let Some(value) = previous.as_ref().and_then(|conn| conn.settings.get(key)) {
-                settings.insert(key.clone(), value.clone());
-            }
+        if empty && let Some(value) = previous.as_ref().and_then(|conn| conn.settings.get(key)) {
+            settings.insert(key.clone(), value.clone());
         }
     }
     let cache_revision = crate::plugins::mounts::new_id()?;
@@ -139,18 +137,16 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     // Fail before touching the keyring if old account data cannot be cleared.
     // On success the subsequent secret update and registry write cannot
     // resurrect the old account's directory/download snapshots.
-    if identity_changed {
-        if let Some(old) = previous.as_ref() {
-            // Revoke every visited directory before replacing the public
-            // connection registry. Old snapshots may belong to another account.
-            let root = crate::plugins::mounts::uri(&old.mount_id, "")?;
-            crate::core::fs::directory_cache::drop_subtree(&root);
-            let download_cache = mount_path(old);
-            if download_cache.exists() {
-                fs::remove_dir_all(&download_cache).map_err(|e| e.to_string())?;
-            }
-            super::super::sync::forget_meta(old);
+    if identity_changed && let Some(old) = previous.as_ref() {
+        // Revoke every visited directory before replacing the public
+        // connection registry. Old snapshots may belong to another account.
+        let root = crate::plugins::mounts::uri(&old.mount_id, "")?;
+        crate::core::fs::directory_cache::drop_subtree(&root);
+        let download_cache = mount_path(old);
+        if download_cache.exists() {
+            fs::remove_dir_all(&download_cache).map_err(|e| e.to_string())?;
         }
+        super::super::sync::forget_meta(old);
     }
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
@@ -158,10 +154,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .settings
             .get(field)
             .and_then(serde_json::Value::as_str)
+            && !value.is_empty()
         {
-            if !value.is_empty() {
-                crate::plugins::storage::secret_set(&plugin_id, &scope, field, value)?;
-            }
+            crate::plugins::storage::secret_set(&plugin_id, &scope, field, value)?;
         }
     }
     for field in &record.secret_keys {

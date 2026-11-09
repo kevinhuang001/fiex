@@ -8,5 +8,5 @@ mod evaluation;
 mod tests;
 
 pub use capability::Capability;
-pub use decision::{decide, Decision, DenyReason};
+pub use decision::{Decision, DenyReason, decide};
 pub use evaluation::PermissionPolicy;

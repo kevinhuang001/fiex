@@ -1,7 +1,7 @@
 //! Connection-cache menu group. Remote selections only; the action set is
 //! owned by the connection adapter and unchanged by capability gating.
 
-use super::file_ops::{item, Selection};
+use super::file_ops::{Selection, item};
 use fiex_provider_contracts::{MenuActivity, MenuActivityKind, MenuItem};
 use fiex_resource::FileCapabilities;
 
@@ -131,6 +131,8 @@ mod tests {
         let selection = Selection {
             paths: &paths,
             entries: std::slice::from_ref(&file),
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: false,
             preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
@@ -143,6 +145,8 @@ mod tests {
         let selection = Selection {
             paths: &paths,
             entries: std::slice::from_ref(&file),
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: false,
             preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
@@ -161,6 +165,8 @@ mod tests {
         let selection = Selection {
             paths: &paths,
             entries: std::slice::from_ref(&folder),
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: false,
             preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
@@ -180,6 +186,8 @@ mod tests {
             let selection = Selection {
                 paths: &paths,
                 entries: std::slice::from_ref(&file),
+                entry_capabilities: &[],
+                directory_capabilities: FileCapabilities::default(),
                 all_local: false,
                 preflight: super::super::builtin::MenuPreflightAvailability::default(),
             };
@@ -199,6 +207,8 @@ mod tests {
         let selection = Selection {
             paths: &paths,
             entries: std::slice::from_ref(&file),
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: false,
             preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
@@ -211,6 +221,8 @@ mod tests {
         let selection = Selection {
             paths: &paths,
             entries: std::slice::from_ref(&file),
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: false,
             preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };

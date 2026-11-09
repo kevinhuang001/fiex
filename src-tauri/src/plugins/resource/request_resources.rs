@@ -1,7 +1,7 @@
 //! Project Core-owned resource identities at the host boundary.
 //! Business parameters are opaque; this module never rewrites path-like strings.
 use crate::plugins::resource::{fs_access::Scope, resource_context::ResourceSnapshotProjection};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 pub fn project(
     plugin: &str,
     params: &mut Value,
@@ -59,11 +59,15 @@ mod tests {
         assert_eq!(params["path"], "selected.txt");
         assert_eq!(params["root"], "custom-root");
         assert!(params["targets"][0].get("metadata").is_none());
-        assert!(scope
-            .resolve_reference(&params["targets"][0]["ref"])
-            .is_ok());
-        assert!(scope
-            .authorize(&root.path().join("other.txt").to_string_lossy())
-            .is_err());
+        assert!(
+            scope
+                .resolve_reference(&params["targets"][0]["ref"])
+                .is_ok()
+        );
+        assert!(
+            scope
+                .authorize(&root.path().join("other.txt").to_string_lossy())
+                .is_err()
+        );
     }
 }

@@ -48,7 +48,7 @@ export function ConnectionDialog({
     setLoading(Boolean(connection))
     if (!connection) return
     let active = true
-    void call<{ settings: Record<string, string | number | boolean> }>('remote_connection_config', {
+    void call('remote_connection_config', {
       id: connection.id,
     })
       .then((config) => {
@@ -102,7 +102,7 @@ export function ConnectionDialog({
         setValues((prev) => ({ ...prev, [field.id]: path }))
         return
       }
-      const text = await call<string>('read_preview', { path })
+      const text = await call('read_preview', { path })
       setValues((prev) => ({ ...prev, [field.id]: text }))
     } catch (cause) {
       reportError(cause, 'connections:file-picker')
@@ -124,7 +124,7 @@ export function ConnectionDialog({
               : String(values[field.id] ?? ''),
         ]),
       )
-      const savedConnection = await call<RemoteConnection>('save_remote_connection', {
+      const savedConnection = await call('save_remote_connection', {
         input: {
           id: connection?.id,
           name,

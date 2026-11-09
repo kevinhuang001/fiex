@@ -60,7 +60,7 @@ export function PluginInstaller({
     setBusyId(entry.id)
     setMessage('')
     try {
-      const data = await call<InstallPreview>('plugin_prepare_install', {
+      const data = await call('plugin_prepare_install', {
         repository: entry.repository,
         assetName: entry.asset,
       })
@@ -80,7 +80,7 @@ export function PluginInstaller({
     if (!preview || installing) return
     setInstalling(true)
     try {
-      const pluginId = await call<string>('plugin_confirm_install', {
+      const pluginId = await call('plugin_confirm_install', {
         ticket: preview.ticket,
         allowUntrusted: !preview.trusted,
       })

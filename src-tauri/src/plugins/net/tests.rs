@@ -1,8 +1,8 @@
 use super::request::send_streamed;
 
 use super::*;
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::net::TcpListener;
@@ -64,9 +64,10 @@ fn streaming_pipe_blocks_for_chunks_and_times_out_without_them() {
     let mut reader = BodyReader { pipe: pipe.clone() };
     let error = reader.read(&mut [0u8; 4]).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::TimedOut);
-    assert!(pipe
-        .read_error()
-        .is_some_and(|message| message.contains("timed out")));
+    assert!(
+        pipe.read_error()
+            .is_some_and(|message| message.contains("timed out"))
+    );
 }
 
 #[test]

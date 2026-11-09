@@ -21,7 +21,7 @@ export function usePluginConfiguration(
     void Promise.all(
       fields.map(async (field) => {
         if (field.type === 'secret') return [field.id, ''] as const
-        const value = await call<unknown>('plugin_storage_get', {
+        const value = await call('plugin_storage_get', {
           pluginId: settingsFor.id,
           scope: 'global',
           key: field.id,

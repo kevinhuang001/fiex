@@ -5,19 +5,19 @@
 //! host API exposes a sequential stream and stages parallel downloads until
 //! complete so out-of-order ranges never escape as unwritten file holes.
 use aria2_core::{
-    request::request_group::DownloadOptions, request::request_group_man::RequestGroupMan,
-    DownloadEngine, DownloadStatus,
+    DownloadEngine, DownloadStatus, request::request_group::DownloadOptions,
+    request::request_group_man::RequestGroupMan,
 };
-use base64::{engine::general_purpose::STANDARD, Engine};
-use serde_json::{json, Value};
+use base64::{Engine, engine::general_purpose::STANDARD};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     fs,
     io::Read,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -424,7 +424,7 @@ pub(crate) fn close(owner: &str, params: &Value) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{download_parallelism, MIB};
+    use super::{MIB, download_parallelism};
 
     #[test]
     fn adaptive_parallelism_respects_size_boundaries() {

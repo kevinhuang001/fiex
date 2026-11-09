@@ -1,6 +1,6 @@
 //! Application-owned staged write streams around a scoped resource.
 use super::{FsError, FsOperation, ResourceBroker};
-use fiex_fs::{WriteHandle, CHUNK};
+use fiex_fs::{CHUNK, WriteHandle};
 use serde_json::Value;
 use std::{
     io::{Read, Seek, SeekFrom, Write},

@@ -18,15 +18,15 @@ pub(super) use reservations::{
 };
 
 pub use fiex_applications::{
-    app_id, folder_id, ApplicationNode, ApplicationSource, ApplicationsState, PendingKind,
-    PendingTarget, VirtualFolder,
+    ApplicationNode, ApplicationSource, ApplicationsState, PendingKind, PendingTarget,
+    VirtualFolder, app_id, folder_id,
 };
 use fiex_applications::{app_uri_in, child_uri, folder_uri_in, parent_uri_matches};
 const SCOPE: &str = fiex_applications::STORAGE_SCOPE;
 const KEY: &str = fiex_applications::STATE_KEY;
-pub(super) use fiex_applications::{valid_extension, valid_id};
 #[cfg(test)]
-use fiex_applications::{validate_state, SCHEMA};
+use fiex_applications::{SCHEMA, validate_state};
+pub(super) use fiex_applications::{valid_extension, valid_id};
 
 pub(super) fn storage() -> fiex_storage::native::NativeScopedStorage {
     super::super::native_vfs::management_storage_for_provider(fiex_applications::PROVIDER_ID, SCOPE)

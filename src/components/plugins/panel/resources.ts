@@ -12,7 +12,7 @@ export class PanelResources {
   async describe(paths: string[]): Promise<ResourceContext[]> {
     const missing = [...new Set(paths)].filter((path) => !this.byPath.has(path))
     if (missing.length) {
-      const resources = await call<ResourceContext[]>('plugin_describe_resources', {
+      const resources = await call('plugin_describe_resources', {
         pluginId: this.pluginId,
         paths: missing,
       })

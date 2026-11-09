@@ -1,5 +1,5 @@
-use super::{actor::Operation, Running, TaskEntry};
-use serde_json::{json, Value};
+use super::{Running, TaskEntry, actor::Operation};
+use serde_json::{Value, json};
 
 pub(super) const MAX_TASKS: usize = 32;
 const MAX_TASK_HISTORY: usize = 64;

@@ -5,6 +5,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { LoaderCircle } from 'lucide-react'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
+import { parseJsonValue } from '@/lib/ipcValidation'
 import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
@@ -41,7 +42,7 @@ export function PluginConnectionView({
     let active = true
     setView(null)
     setError('')
-    void call<Destination>('connection_open', { id: connectionId })
+    void call('connection_open', { id: connectionId })
       .then((result) => {
         if (!active) return
         if (result.kind === 'vfs') {
@@ -100,7 +101,7 @@ export function PluginConnectionView({
         },
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get') {
-            const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+            const settings = await call('plugin_settings', {
               pluginId: view.pluginId,
             }).catch(() => ({}))
             return {
@@ -122,10 +123,10 @@ export function PluginConnectionView({
             ) {
               throw new Error('Invalid plugin method')
             }
-            return call<JsonValue>('plugin_invoke', {
+            return call('plugin_invoke', {
               pluginId: view.pluginId,
               method: input.method,
-              params: input.params ?? null,
+              params: parseJsonValue(input.params ?? null),
             })
           }
           if (method === 'navigation.open') {

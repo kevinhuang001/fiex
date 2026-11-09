@@ -49,22 +49,26 @@ fn callbacks_require_exact_state_host_path_and_unique_parameters() {
                 .is_none()
         );
     }
-    assert!(parse_callback(
-        &request("/oauth/callback?state=s&code=ok", "evil.test"),
-        redirect,
-        "s"
-    )
-    .unwrap()
-    .is_none());
-    assert!(parse_callback(
-        &request(
-            "/oauth/callback?state=s&error=access_denied",
-            "127.0.0.1:1234"
-        ),
-        redirect,
-        "s"
-    )
-    .is_err());
+    assert!(
+        parse_callback(
+            &request("/oauth/callback?state=s&code=ok", "evil.test"),
+            redirect,
+            "s"
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        parse_callback(
+            &request(
+                "/oauth/callback?state=s&error=access_denied",
+                "127.0.0.1:1234"
+            ),
+            redirect,
+            "s"
+        )
+        .is_err()
+    );
 }
 #[test]
 fn real_loopback_flow_returns_code_and_closes_listener() {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
 import type { ShortcutAction } from '@/lib/shortcuts'
+import { SHORTCUT_ACTIONS } from '@/lib/shortcuts/defaults'
 import { call } from '@/lib/api'
 import { validPluginMenuItems, type PluginMenu } from '@/components/plugins/PluginMenuNode'
 import type { ContextMenuProps } from './types'
@@ -41,6 +42,61 @@ interface MenuFailure {
 }
 const EMPTY_PLUGIN_MENUS: PluginMenu[] = []
 
+function parseCoreMenuItems(value: unknown): CoreMenuItem[] | null {
+  if (!Array.isArray(value) || value.length > 100) return null
+  const items: CoreMenuItem[] = []
+  for (const valueItem of value) {
+    if (!valueItem || typeof valueItem !== 'object' || Array.isArray(valueItem)) return null
+    const item = valueItem as Record<string, unknown>
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.title !== 'string' ||
+      !['action', 'submenu', 'separator'].includes(String(item.kind)) ||
+      ('parentId' in item && typeof item.parentId !== 'string') ||
+      ('icon' in item && typeof item.icon !== 'string') ||
+      ('shortcut' in item &&
+        (typeof item.shortcut !== 'string' ||
+          !SHORTCUT_ACTIONS.includes(item.shortcut as ShortcutAction))) ||
+      ('disabled' in item && typeof item.disabled !== 'boolean') ||
+      ('danger' in item && typeof item.danger !== 'boolean') ||
+      ('placement' in item && item.placement !== 'tail')
+    )
+      return null
+    const activity = item.activity
+    if ('activity' in item) {
+      if (!activity || typeof activity !== 'object' || Array.isArray(activity)) return null
+      const details = activity as Record<string, unknown>
+      if (
+        typeof details.label !== 'string' ||
+        !['sync', 'transfer'].includes(String(details.kind)) ||
+        typeof details.quiet !== 'boolean'
+      )
+        return null
+    }
+    const parsed: CoreMenuItem = {
+      id: item.id,
+      title: item.title,
+      kind: item.kind as CoreMenuItem['kind'],
+    }
+    if (typeof item.parentId === 'string') parsed.parentId = item.parentId
+    if (typeof item.icon === 'string') parsed.icon = item.icon
+    if (typeof item.shortcut === 'string') parsed.shortcut = item.shortcut as ShortcutAction
+    if (typeof item.disabled === 'boolean') parsed.disabled = item.disabled
+    if (typeof item.danger === 'boolean') parsed.danger = item.danger
+    if (item.placement === 'tail') parsed.placement = 'tail'
+    if (activity && typeof activity === 'object' && !Array.isArray(activity)) {
+      const details = activity as Record<string, unknown>
+      parsed.activity = {
+        label: details.label as string,
+        kind: details.kind as 'sync' | 'transfer',
+        quiet: details.quiet as boolean,
+      }
+    }
+    items.push(parsed)
+  }
+  return items
+}
+
 /** Start Core and plugin resolution from the same right-click session. Core
  *  readiness controls the first-level menu; plugin results update only its
  *  fixed submenu entry and never change the first-level layout. */
@@ -71,7 +127,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setFailure(undefined)
-    void call<CoreMenu[]>('plugin_context_menu_resolve', {
+    void call('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'core',
@@ -93,7 +149,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setPluginFailure(undefined)
-    void call<PluginMenu[]>('plugin_context_menu_resolve', {
+    void call('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'plugins',
@@ -135,12 +191,12 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (requestedCoreChildren.current.has(requestKey)) return
     requestedCoreChildren.current.add(requestKey)
     try {
-      const response = await call<{ items: unknown }>('plugin_context_menu_children', {
+      const response = await call('plugin_context_menu_children', {
         menuSessionId: group.menuSessionId,
         parentId,
       })
-      const children = response.items
-      if (!Array.isArray(children)) throw new Error('Invalid Core submenu response')
+      const children = parseCoreMenuItems(response.items)
+      if (!children) throw new Error('Invalid Core submenu response')
       setSnapshot((previous) => {
         if (!previous || previous.key !== key || previous.menu !== menu) return previous
         const updated = previous.menus.map((candidate) => {

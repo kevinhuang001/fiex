@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use fiex_provider_contracts::{FsRead, ProviderError, ProviderInvocation};
-use fiex_recent::{recent_uri, Existence, RecentModuleServices, RecentResource, RecentStore};
+use fiex_recent::{Existence, RecentModuleServices, RecentResource, RecentStore, recent_uri};
 use std::collections::HashMap;
 use std::sync::Arc;
 

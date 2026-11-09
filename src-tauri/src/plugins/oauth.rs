@@ -1,7 +1,7 @@
 //! Host-owned external-browser OAuth with loopback redirect and PKCE S256.
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Url;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -152,7 +152,7 @@ fn authorize_with(
                     Ok(Some(code)) => {
                         return Ok(
                             json!({"code":code,"redirectUri":redirect,"codeVerifier":verifier}),
-                        )
+                        );
                     }
                     Ok(None) => {}
                     Err(error) => return Err(error),
@@ -200,7 +200,10 @@ fn callback(stream: &mut TcpStream, redirect: &str, state: &str) -> Result<Optio
             "Authorization was not completed. Return to Fiex.",
         ),
     };
-    let response = format!("HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n{body}", body.len());
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
     let _ = stream.write_all(response.as_bytes());
     result
 }

@@ -2,14 +2,14 @@
 //! and only then touch the filesystem.
 
 use super::{
-    conflicts::{decide, Conflict, Decision, Resolution},
+    conflicts::{Conflict, Decision, Resolution, decide},
     progress::Progress,
 };
 use crate::{
     core::ignores::IgnoreSet,
     core::operations::{
-        check_cancelled, copy_stream, copy_tree_with_progress, exists, unique, OperationResult,
-        Undo, CANCELLED,
+        CANCELLED, OperationResult, Undo, check_cancelled, copy_stream, copy_tree_with_progress,
+        exists, unique,
     },
 };
 use std::{

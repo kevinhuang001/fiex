@@ -1,5 +1,5 @@
 //! Disk backend for visited directory snapshots. No filesystem providers are invoked here.
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -7,9 +7,9 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::{
+        Arc, OnceLock, RwLock,
         atomic::{AtomicUsize, Ordering},
         mpsc::{self, SyncSender},
-        Arc, OnceLock, RwLock,
     },
 };
 

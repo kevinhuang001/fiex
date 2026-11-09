@@ -97,7 +97,7 @@ pub fn load(manifest: &PluginManifest, folder: &Path) -> Result<Vec<Theme>, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     fn package(themes: Value, entrypoints: Value) -> PluginManifest {
         serde_json::from_value(json!({

@@ -2,7 +2,7 @@
 //! providers enforce their protocol-specific revision checks. Failed uploads retain bytes.
 
 use super::{cache::*, config::*, files::*, store::*, sync::*};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 
 mod upload;

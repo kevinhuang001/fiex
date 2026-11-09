@@ -143,7 +143,7 @@ export function ExplorerToolbar({
               : terminals.find((t) => t.id === prefs.terminal)?.name || t('终端'),
           )}
           aria-label="Open in Terminal"
-          disabled={hostToolsDisabled}
+          disabled={hostToolsDisabled && prefs.terminal !== 'builtin'}
           onClick={() => terminal()}
           onContextMenu={(event) => {
             event.preventDefault()

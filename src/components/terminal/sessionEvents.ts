@@ -5,6 +5,27 @@ export type TerminalEvent =
   | { type: 'exit'; code?: number | null }
   | { type: 'error'; message?: string }
 
+export function parseTerminalEvent(value: unknown): TerminalEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new TypeError('Invalid terminal event')
+  const event = value as Record<string, unknown>
+  if (event.type === 'ready') return { type: 'ready' }
+  if (
+    event.type === 'data' &&
+    Array.isArray(event.data) &&
+    event.data.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+  )
+    return { type: 'data', data: event.data as number[] }
+  if (
+    event.type === 'exit' &&
+    (event.code === undefined || event.code === null || typeof event.code === 'number')
+  )
+    return { type: 'exit', code: event.code as number | null | undefined }
+  if (event.type === 'error' && (event.message === undefined || typeof event.message === 'string'))
+    return { type: 'error', message: event.message as string | undefined }
+  throw new TypeError('Invalid terminal event')
+}
+
 /** Startup acknowledgements do not imply a live shell. Keep the first
  * failure visible when the backend follows it with an exit notification. */
 export function terminalEvents(

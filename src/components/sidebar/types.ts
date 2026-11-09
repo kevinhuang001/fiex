@@ -20,7 +20,7 @@ export interface SidebarProps {
 }
 
 export type SidebarMenuState =
-  | { kind: 'trash'; x: number; y: number }
+  | { kind: 'place'; x: number; y: number; key: string; name: string; trash: boolean }
   | { kind: 'favorite'; x: number; y: number; path: string }
   | {
       kind: 'device'

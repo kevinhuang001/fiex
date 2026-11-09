@@ -1,5 +1,5 @@
 //! Application discovery, stable identities, and platform boundary.
-use crate::{app_uri_in, ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore};
+use crate::{ApplicationNode, ApplicationSource, ApplicationsState, ApplicationsStore, app_uri_in};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,

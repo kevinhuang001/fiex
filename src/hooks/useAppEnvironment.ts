@@ -32,7 +32,7 @@ export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
       // Each provider resolves its own navigation target, including autostart.
       const path = session.mountPath
       if (app.left.tabs.includes(path)) continue
-      void call<{ kind: string; path?: string }>('connection_open', { id: session.id })
+      void call('connection_open', { id: session.id })
         .then((target) => {
           app.newWorkspaceTab()
           app.left.navigate(

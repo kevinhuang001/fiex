@@ -45,13 +45,15 @@ fn provider_cannot_choose_a_different_mount_or_escape_with_a_name() {
         "fiex://mount/owner-one/folder/report%20%23%25.txt"
     );
     assert!(projected.sync.is_none());
-    assert!(project_entry(
-        &mount,
-        &location,
-        "folder/../secret",
-        file_entry("../secret")
-    )
-    .is_err());
+    assert!(
+        project_entry(
+            &mount,
+            &location,
+            "folder/../secret",
+            file_entry("../secret")
+        )
+        .is_err()
+    );
     assert!(project_entry(&mount, &location, "other.txt", file_entry("report #%.txt")).is_err());
 }
 

@@ -28,7 +28,7 @@ pub fn run_wrapper_if_requested() {
 
 #[cfg(target_os = "linux")]
 pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
-    use arapuca::platform::{new, Sandbox};
+    use arapuca::platform::{Sandbox, new};
     use arapuca::{CgroupPolicy, Config, Profile, SeccompProfile};
     use std::os::fd::{AsRawFd, FromRawFd};
 

@@ -86,24 +86,32 @@ fn match_predicates_are_scoped_by_extension_point() {
     let info_sections = json!([{"id":"text","title":"Text","fields":[
         {"id":"format","label":"Format","compute":"onOpen"}
     ]}]);
-    assert!(validate_extensions(&serde_json::json!({
-        "decorations": {"match": {"contains": [".git"]}}
-    }))
-    .is_err());
-    assert!(validate_extensions(&serde_json::json!({
-        "contextMenus": {"match": {"selection": "single"}}
-    }))
-    .is_ok());
-    assert!(validate_extensions(&serde_json::json!({
-        "contextMenus": {"match": {
-            "exclude": {"view": {"providerIds": ["core:applications"]}}
-        }}
-    }))
-    .is_ok());
-    assert!(validate_extensions(&serde_json::json!({
-        "info": {"match": {"mimeTypes": ["text/*"]}, "sections": info_sections.clone()}
-    }))
-    .is_ok());
+    assert!(
+        validate_extensions(&serde_json::json!({
+            "decorations": {"match": {"contains": [".git"]}}
+        }))
+        .is_err()
+    );
+    assert!(
+        validate_extensions(&serde_json::json!({
+            "contextMenus": {"match": {"selection": "single"}}
+        }))
+        .is_ok()
+    );
+    assert!(
+        validate_extensions(&serde_json::json!({
+            "contextMenus": {"match": {
+                "exclude": {"view": {"providerIds": ["core:applications"]}}
+            }}
+        }))
+        .is_ok()
+    );
+    assert!(
+        validate_extensions(&serde_json::json!({
+            "info": {"match": {"mimeTypes": ["text/*"]}, "sections": info_sections.clone()}
+        }))
+        .is_ok()
+    );
     for invalid in [
         serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
         serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
@@ -155,10 +163,12 @@ fn info_fields_are_static_strict_and_bounded() {
     let too_many_fields = (0..65)
         .map(|index| json!({"id":format!("field{index}"),"label":"Field","compute":"onDemand"}))
         .collect::<Vec<_>>();
-    assert!(validate_extensions(&json!({"info":{"sections":[{
-        "id":"large","title":"Large","fields":too_many_fields
-    }]}}))
-    .is_err());
+    assert!(
+        validate_extensions(&json!({"info":{"sections":[{
+            "id":"large","title":"Large","fields":too_many_fields
+        }]}}))
+        .is_err()
+    );
 }
 
 #[test]
@@ -193,11 +203,13 @@ fn preview_loading_pages_are_optional_and_package_local() {
 
 #[test]
 fn hooks_and_search_validate_match_instead_of_ignoring_bad_rules() {
-    assert!(validate_extensions(&json!({"hooks":{
-        "event":"afterOpen",
-        "match":{"extensions":["zip"]}
-    }}))
-    .is_ok());
+    assert!(
+        validate_extensions(&json!({"hooks":{
+            "event":"afterOpen",
+            "match":{"extensions":["zip"]}
+        }}))
+        .is_ok()
+    );
     assert!(validate_extensions(&json!({"search":{"match":{"extensions":["zip"]}}})).is_ok());
     for (feature, required) in [
         ("hooks", json!({"event":"afterOpen"})),
@@ -238,10 +250,12 @@ fn metadata_and_file_operations_are_independent_grants() {
     assert!(grants.contains("files.delete"));
     assert!(!grants.contains("files.read"));
     assert!(!grants.contains("folders.read"));
-    assert!(serde_json::from_value::<PluginManifest>(json!({
-        "schemaVersion": 2,
-        "id": "test.invalid", "name": "Invalid", "version": "1",
-        "contributions": {}
-    }))
-    .is_err());
+    assert!(
+        serde_json::from_value::<PluginManifest>(json!({
+            "schemaVersion": 2,
+            "id": "test.invalid", "name": "Invalid", "version": "1",
+            "contributions": {}
+        }))
+        .is_err()
+    );
 }

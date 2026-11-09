@@ -1,15 +1,15 @@
 [package]
 name = "fiex-usb-fs"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.90"
 publish = false
 
 [features]
 default = ["driver"]
 driver = [
-    "dep:rust-fs-ext4",
-    "dep:rust-fs-btrfs",
+    "dep:fs-ext4",
+    "dep:fs-btrfs",
     "dep:apfs",
     "dep:hfsplus",
     "dep:libc",
@@ -21,8 +21,8 @@ dunce = "1"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
-rust-fs-ext4 = { version = "0.8", optional = true }
-rust-fs-btrfs = { version = "0.10", optional = true }
+fs-ext4 = { package = "rust-fs-ext4", version = "0.8", optional = true }
+fs-btrfs = { package = "rust-fs-btrfs", version = "0.10", optional = true }
 apfs = { version = "0.4", optional = true }
 hfsplus = { version = "0.4", optional = true }
 libc = { version = "0.2", optional = true }

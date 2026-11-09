@@ -1,4 +1,13 @@
 import { t } from '@/i18n'
+export const ACTIVITY_REVEAL_DELAY_MS = 1000
+
+/** Reveal the status centre after the delay only while this task is running. */
+export function scheduleActivityReveal(isRunning: () => boolean, reveal: () => void) {
+  return setTimeout(() => {
+    if (isRunning()) reveal()
+  }, ACTIVITY_REVEAL_DELAY_MS)
+}
+
 /** Duration formatting and ETA estimation for the activity centre. */
 export function formatRemaining(seconds: number) {
   const value = Math.max(1, Math.ceil(seconds))

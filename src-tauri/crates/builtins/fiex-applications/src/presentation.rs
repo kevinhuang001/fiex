@@ -1,6 +1,6 @@
 //! Applications-specific presentation data projected from the virtual tree.
 
-use crate::{app_id, app_uri_in, imported_asset_path, ApplicationCatalog, ApplicationSource};
+use crate::{ApplicationCatalog, ApplicationSource, app_id, app_uri_in, imported_asset_path};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]

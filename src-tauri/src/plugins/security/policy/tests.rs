@@ -1,5 +1,5 @@
 use super::capability::Capability;
-use super::decision::{decide, decide_command, decide_domain, Decision, DenyReason};
+use super::decision::{Decision, DenyReason, decide, decide_command, decide_domain};
 use crate::plugins::security::permissions::PluginGrant;
 use std::collections::BTreeSet;
 

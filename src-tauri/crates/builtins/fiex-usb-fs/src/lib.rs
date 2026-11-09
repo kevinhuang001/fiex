@@ -24,7 +24,7 @@ pub use mount::{detect, ensure_access, probe};
 #[cfg(feature = "driver")]
 pub use tree::{copy_file_to, list, read, read_at};
 #[cfg(feature = "driver")]
-pub use util::{route, validate_child, virtual_root, FsKind, Route, UsbEntry};
+pub use util::{FsKind, Route, UsbEntry, route, validate_child, virtual_root};
 
 #[cfg(all(test, feature = "driver"))]
 mod tests {

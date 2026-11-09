@@ -35,7 +35,7 @@ pub(super) fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
                             break missing
                                 .into_iter()
                                 .rev()
-                                .fold(base, |base: PathBuf, name| base.join(name))
+                                .fold(base, |base: PathBuf, name| base.join(name));
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                             // A one-component relative path has an empty

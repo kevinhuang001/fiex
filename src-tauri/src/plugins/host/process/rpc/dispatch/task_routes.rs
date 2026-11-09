@@ -1,6 +1,6 @@
 use super::super::{
-    tasks::{PluginTaskInfo, MAX_TASKS},
     Running, TaskEntry,
+    tasks::{MAX_TASKS, PluginTaskInfo},
 };
 use serde_json::Value;
 

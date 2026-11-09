@@ -6,9 +6,9 @@ pub mod recycle_bin;
 pub mod system_proxy;
 
 pub use file_trash::move_to_trash;
-#[cfg(windows)]
-pub use open_with::{enumerate_windows_applications, WindowsApplication};
 pub use open_with::{
-    open_with, open_with_application, open_with_applications, open_with_candidates,
-    OpenWithCandidate,
+    OpenWithCandidate, open_with, open_with_application, open_with_applications,
+    open_with_candidates,
 };
+#[cfg(windows)]
+pub use open_with::{WindowsApplication, enumerate_windows_applications};

@@ -52,10 +52,12 @@ mod windows_target_tests {
             resolve_windows_executable(r"{00000000-0000-0000-0000-000000000000}\missing.exe")
                 .is_none()
         );
-        assert!(resolve_windows_executable(
-            r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\fiex-nonexistent-test.exe"
-        )
-        .is_none());
+        assert!(
+            resolve_windows_executable(
+                r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\fiex-nonexistent-test.exe"
+            )
+            .is_none()
+        );
         assert!(resolve_windows_executable(r"C:\fiex-nonexistent-test.exe").is_none());
         assert!(resolve_windows_executable(r"C:\Windows\readme.txt").is_none());
     }

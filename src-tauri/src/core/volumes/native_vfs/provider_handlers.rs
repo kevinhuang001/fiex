@@ -1,7 +1,7 @@
 //! Provider-specific callbacks attached during native VFS registration.
 use super::{
-    application_provider, applications, recycle, trash_vfs, NativeVfsBehavior, NativeVfsIdentity,
-    APPLICATIONS_URI, RECENT_URI,
+    APPLICATIONS_URI, NativeVfsBehavior, NativeVfsIdentity, RECENT_URI, application_provider,
+    applications, recycle, trash_vfs,
 };
 use crate::core::files::Entry;
 use fiex_provider_contracts::ResourceType;

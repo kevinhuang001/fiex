@@ -34,9 +34,9 @@ pub fn emit(event: PluginTaskEvent) {
     let Some(slot) = SINK.get() else {
         return;
     };
-    if let Ok(slot) = slot.lock() {
-        if let Some(sink) = slot.as_ref() {
-            sink(event);
-        }
+    if let Ok(slot) = slot.lock()
+        && let Some(sink) = slot.as_ref()
+    {
+        sink(event);
     }
 }

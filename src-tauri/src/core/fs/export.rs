@@ -10,7 +10,7 @@ const LEASE_TTL: Duration = Duration::from_secs(30 * 60);
 const MAX_EXPORT_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const MAX_ITEMS: usize = 100_000;
 mod lease;
-use lease::{leases, prune_leases, root_dir, staging_lock, Lease};
+use lease::{Lease, leases, prune_leases, root_dir, staging_lock};
 
 #[cfg(feature = "desktop")]
 pub fn initialize() {

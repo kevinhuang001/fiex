@@ -1,5 +1,5 @@
 //! Native provider routing and provider-declared storage identities.
-use super::{registry, NativeVfsIdentity};
+use super::{NativeVfsIdentity, registry};
 use fiex_provider_contracts::ResourceType;
 
 /// Resolve the native VFS identity at the URI boundary. General services use

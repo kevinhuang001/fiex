@@ -1,6 +1,6 @@
 use super::*;
-use crate::{app_id, ApplicationDecorationInfo};
-use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
+use crate::{ApplicationDecorationInfo, app_id};
+use fiex_storage::{CoreOwnerKey, native::OwnerBoundStorage};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 

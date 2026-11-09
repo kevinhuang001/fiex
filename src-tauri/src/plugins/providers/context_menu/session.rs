@@ -4,7 +4,7 @@ use super::{
     validation::{root_menu_valid, submenu_depths},
 };
 use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, OnceLock},
@@ -79,14 +79,13 @@ pub(super) fn register(
     let mut registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
     registry.retain(|_, session| session.created.elapsed().as_secs() < 90);
     // Bound memory while allowing fast menu navigation with multiple builtin providers.
-    if registry.len() >= 512 {
-        if let Some(oldest) = registry
+    if registry.len() >= 512
+        && let Some(oldest) = registry
             .iter()
             .min_by_key(|(_, session)| session.created)
             .map(|(id, _)| id.clone())
-        {
-            registry.remove(&oldest);
-        }
+    {
+        registry.remove(&oldest);
     }
     registry.insert(
         session_id.clone(),

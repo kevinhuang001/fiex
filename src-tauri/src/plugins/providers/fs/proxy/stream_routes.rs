@@ -1,4 +1,4 @@
-use super::{provider, Mount, MountInvocation};
+use super::{Mount, MountInvocation, provider};
 use fiex_provider_contracts::{FsOperation, FsRequest};
 use serde_json::Value;
 

@@ -167,15 +167,14 @@ impl TrashDirectory {
             std::fs::remove_file(&path).map_err(io_error)?;
         }
         let root = self.root_path()?;
-        if path.parent() == Some(root.as_path()) {
-            if let Some(name) = path.file_name() {
-                crate::journal::forget_locked(&name.to_string_lossy());
-                #[cfg(target_os = "linux")]
-                if let Some(trash) = root.parent() {
-                    let name = name.to_string_lossy();
-                    let _ =
-                        std::fs::remove_file(trash.join("info").join(format!("{name}.trashinfo")));
-                }
+        if path.parent() == Some(root.as_path())
+            && let Some(name) = path.file_name()
+        {
+            crate::journal::forget_locked(&name.to_string_lossy());
+            #[cfg(target_os = "linux")]
+            if let Some(trash) = root.parent() {
+                let name = name.to_string_lossy();
+                let _ = std::fs::remove_file(trash.join("info").join(format!("{name}.trashinfo")));
             }
         }
         Ok(())

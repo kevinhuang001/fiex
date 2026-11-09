@@ -1,8 +1,8 @@
 //! Ref-only public file protocol. All host paths below this layer are Core
 //! implementation details and must never be accepted from a plugin payload.
-use super::{run, Actor, Running};
+use super::{Actor, Running, run};
 use crate::plugins::{provider_registry::FsOperation, security::policy::Capability};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) fn intercept(
     running: &Running,
@@ -109,15 +109,14 @@ pub(super) fn intercept(
         return Err("missing ResourceRef".into());
     }
     // Scope first; an unbound ref never causes a permission prompt.
-    if let Some(reference) = params.get("ref") {
-        if !actor
+    if let Some(reference) = params.get("ref")
+        && !actor
             .scope
             .as_ref()
             .ok_or("no operation scope")?
             .resource_bound(reference)?
-        {
-            return Err("resource not authorized in this operation".into());
-        }
+    {
+        return Err("resource not authorized in this operation".into());
     }
     Ok(None)
 }

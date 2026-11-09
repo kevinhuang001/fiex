@@ -37,13 +37,13 @@ fn main() {
 
         let mut count = 0usize;
         for key in ["toolbar", "preview"] {
-            if let Some(item) = manifest.extensions.get(key).and_then(Value::as_object) {
-                if item.get("panel").is_some() {
-                    let html = plugin_host::panel_html(&id, &id)
-                        .unwrap_or_else(|error| panic!("{id}: {error}"));
-                    check_panel(&id, &id, &html);
-                    count += 1;
-                }
+            if let Some(item) = manifest.extensions.get(key).and_then(Value::as_object)
+                && item.get("panel").is_some()
+            {
+                let html = plugin_host::panel_html(&id, &id)
+                    .unwrap_or_else(|error| panic!("{id}: {error}"));
+                check_panel(&id, &id, &html);
+                count += 1;
             }
         }
 

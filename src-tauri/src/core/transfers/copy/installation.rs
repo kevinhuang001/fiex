@@ -44,7 +44,7 @@ pub(crate) fn install_copy(
         match fs::hard_link(&staged, dest) {
             Ok(()) => (),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(crate::i18n::t("目标已改变，请重试").into())
+                return Err(crate::i18n::t("目标已改变，请重试").into());
             }
             Err(_) => {
                 let mut output = fs::OpenOptions::new()
@@ -83,7 +83,7 @@ pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<
                 return Ok(0);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(crate::i18n::t("目标已改变，请重试").into())
+                return Err(crate::i18n::t("目标已改变，请重试").into());
             }
             Err(_) => (),
         }

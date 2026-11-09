@@ -2,13 +2,12 @@ import { t } from '@/i18n'
 import { Pencil, Pin, Plus, Puzzle, RefreshCw, Server, TerminalSquare, Trash2 } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
+import { isJsonObject } from '@/lib/ipcValidation'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
-
-type Destination = { kind: 'vfs'; path: string } | { kind: 'pluginView' }
 
 interface ConnectionMenuItem {
   id: string
@@ -20,7 +19,7 @@ interface ConnectionMenuItem {
   placement?: 'tail'
 }
 
-interface ConnectionMenu {
+export interface ConnectionMenu {
   kind: 'builtin' | 'plugin'
   providerId: string
   pluginId?: string
@@ -99,7 +98,7 @@ export function Connections({
     let active = true
     setMenus([])
     setMenuLoading(true)
-    void call<ConnectionMenu[]>('plugin_connection_menu_resolve', { connectionId: menu.id })
+    void call('plugin_connection_menu_resolve', { connectionId: menu.id })
       .then((value) => {
         if (active) setMenus(value)
       })
@@ -120,7 +119,7 @@ export function Connections({
   const open = (connection: RemoteConnection) => {
     setPlusOpen(false)
     setMenu(null)
-    void call<Destination>('connection_open', { id: connection.id })
+    void call('connection_open', { id: connection.id })
       .then((target) =>
         x.navigate(target.kind === 'vfs' ? target.path : 'fiex-plugin-view://' + connection.id),
       )
@@ -142,16 +141,13 @@ export function Connections({
         )
         updateActivity(activityId, { indeterminate: true })
       }
-      const result = await call<{ kind?: string; command?: string }>(
-        'plugin_connection_menu_execute',
-        {
-          connectionId: connection.id,
-          providerId: source.providerId,
-          itemId: item.id,
-          menuSessionId: source.menuSessionId,
-        },
-      )
-      if (result?.kind === 'coreAction') {
+      const result = await call('plugin_connection_menu_execute', {
+        connectionId: connection.id,
+        providerId: source.providerId,
+        itemId: item.id,
+        menuSessionId: source.menuSessionId,
+      })
+      if (isJsonObject(result) && result.kind === 'coreAction') {
         if (result.command === 'editConnection') onEditConnection(connection)
         if (result.command === 'closeConnection') onRemoveConnection(connection.id)
       } else {

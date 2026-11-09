@@ -1,8 +1,8 @@
 //! Typed event candidate discovery lives beside the VFS capability registry.
 //! Matching and permission checks run before creating any IPC proxy.
-use crate::plugins::events::{matching, Resolver};
+use crate::plugins::events::{Resolver, matching};
 use fiex_provider_contracts::{
-    event, MatchResource, ProviderDescriptor, ProviderKind, ProviderMatchRule,
+    MatchResource, ProviderDescriptor, ProviderKind, ProviderMatchRule, event,
 };
 use serde_json::Value;
 

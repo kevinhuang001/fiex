@@ -68,7 +68,7 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     left.moveTab(from, to)
   }
   const openPane = () => {
-    if (!right.path) right.navigate(left.path)
+    if (!right.path) right.navigate(left.previousPath || left.path)
     setSplit(true)
   }
   const closePane = (side: Side = active) => {

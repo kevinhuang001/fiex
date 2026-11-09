@@ -17,7 +17,7 @@ function nativeIcon(path: string, size: number): Promise<string | null> {
   return new Promise((resolve) => {
     const start = () => {
       ++iconRequests
-      void call<string>('native_icon', { path, size })
+      void call('native_icon', { path, size })
         .then(resolve, () => resolve(null))
         .finally(() => {
           --iconRequests

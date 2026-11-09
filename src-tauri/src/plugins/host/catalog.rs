@@ -1,5 +1,5 @@
 //! Installed-plugin discovery and catalog assembly.
-use super::manifest::{activation_requirements, declared, valid_id, PluginAuthor, PluginManifest};
+use super::manifest::{PluginAuthor, PluginManifest, activation_requirements, declared, valid_id};
 use crate::plugin_sdk;
 use serde::Serialize;
 use serde_json::Value;
@@ -109,10 +109,10 @@ static DISCOVERY: OnceLock<DiscoverySnapshot> = OnceLock::new();
 
 pub(crate) fn invalidate_discovery() {
     #[cfg(not(test))]
-    if let Some(cache) = DISCOVERY.get() {
-        if let Ok(mut snapshot) = cache.lock() {
-            *snapshot = None;
-        }
+    if let Some(cache) = DISCOVERY.get()
+        && let Ok(mut snapshot) = cache.lock()
+    {
+        *snapshot = None;
     }
 }
 
@@ -124,12 +124,11 @@ fn discovery_for_matching() -> Vec<(PluginManifest, PathBuf)> {
     #[cfg(not(test))]
     {
         let snapshot = DISCOVERY.get_or_init(|| Mutex::new(None));
-        if let Ok(guard) = snapshot.lock() {
-            if let Some((at, manifests)) = guard.as_ref() {
-                if at.elapsed() < Duration::from_secs(2) {
-                    return manifests.clone();
-                }
-            }
+        if let Ok(guard) = snapshot.lock()
+            && let Some((at, manifests)) = guard.as_ref()
+            && at.elapsed() < Duration::from_secs(2)
+        {
+            return manifests.clone();
         }
         let fresh = discover();
         if let Ok(mut guard) = snapshot.lock() {
@@ -189,9 +188,9 @@ pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> V
             let declared = declared(&manifest).unwrap_or_default();
             let state = crate::plugins::security::permissions::status(&manifest.id, &declared)
                 .unwrap_or_default(); // unreadable policy fails closed
-                                      // `enabled` means the package may run. Individual capabilities may
-                                      // be switched off; their operations ask again instead of
-                                      // deactivating the whole plugin.
+            // `enabled` means the package may run. Individual capabilities may
+            // be switched off; their operations ask again instead of
+            // deactivating the whole plugin.
             let approved = state.approved && declared.is_subset(&state.approved_declared);
             let active = approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();

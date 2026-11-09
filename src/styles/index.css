@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './terminal-font.css';
 @import './tokens.css';
 @import './activity.css';
 @import './workspace.css';

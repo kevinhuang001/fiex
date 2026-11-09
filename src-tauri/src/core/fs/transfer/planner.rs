@@ -1,7 +1,7 @@
-use super::{binding, model::Step, FsOperation};
+use super::{FsOperation, binding, model::Step};
 use crate::core::{
     fs::ResourceBroker,
-    operations::{check_cancelled, OperationResult},
+    operations::{OperationResult, check_cancelled},
     transfers::{Action, Conflict, FileVersion, Resolution},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;
@@ -189,7 +189,13 @@ pub(super) fn plan(
             crate::core::fs::provider_registry::ChildKind::File
         },
     )?;
-    if source.path == target.path
+    if source.path == target.path && keep_both && action == TransferKind::Copy {
+        // Duplicate means a sibling copy. The ordinary transfer API derives
+        // the target name from the source, so when the destination is its
+        // parent the first target is the source itself. Pick a distinct name
+        // before the containment check (which correctly rejects nesting).
+        target = unique(parent, name, directory)?;
+    } else if source.path == target.path
         || (directory
             && target
                 .path

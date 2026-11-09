@@ -5,7 +5,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
-use tauri::{ipc::Channel, Window};
+use tauri::{Window, ipc::Channel};
 
 pub async fn start(
     window: Window,

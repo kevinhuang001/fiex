@@ -88,9 +88,11 @@ fn absent_context_does_not_bypass_rules() {
     assert!(!rules.matches_event(&[Value::Null], ""));
     assert!(!rules.matches_event(&[json!({"extension":"txt"})], ""));
     for contribution in [json!(true), json!({}), json!({"match":{}})] {
-        assert!(MatchRules::from_contribution(&contribution)
-            .unwrap()
-            .matches_event(&[], ""));
+        assert!(
+            MatchRules::from_contribution(&contribution)
+                .unwrap()
+                .matches_event(&[], "")
+        );
     }
 }
 

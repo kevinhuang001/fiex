@@ -1,11 +1,10 @@
 //! Executable symlinks import as ordinary .desktop launchers. The original
 //! executable/link is retained; no escaping symlink enters the private store.
 use super::{
-    binding,
+    FsOperation, binding,
     planner::{optional_stat, unique},
-    FsOperation,
 };
-use crate::core::operations::{check_cancelled, OperationResult};
+use crate::core::operations::{OperationResult, check_cancelled};
 use crate::core::volumes::applications;
 use crate::plugin_sdk::filesystem::PreflightPhase;
 use fiex_provider_contracts::TransferKind;

@@ -3,7 +3,6 @@ import { call } from '@/lib/api'
 import { basename, displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
 import { useEffect, useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
-import type { Entry } from '@/lib/types'
 
 export function usePathEditor({
   x,
@@ -43,8 +42,8 @@ export function usePathEditor({
       while (current !== root && descendants.length < 128 && !seen.has(current)) {
         seen.add(current)
         const [entry, parent] = await Promise.all([
-          call<Entry>('file_info', { path: current }),
-          call<string>('file_parent', { path: current }),
+          call('file_info', { path: current }),
+          call('file_parent', { path: current }),
         ])
         descendants.unshift({ name: entry.name, path: current })
         current = parent

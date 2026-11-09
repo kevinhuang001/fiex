@@ -1,11 +1,11 @@
 //! Ref-only Feature → Core service. Scope is validated before any permission
 //! dialog; every storage operation then goes through the ResourceBroker.
-use super::{refs, Context};
+use super::{Context, refs};
 use crate::{
     core::fs::{self, ResourceBroker},
     plugins::{provider_registry::FsOperation, security::policy::Capability},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
@@ -36,11 +36,10 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     if ctx.method == "host.fs.stat"
         && scope.resolve_reference(reference).is_err()
         && scope.remote_target(&json!({"ref":reference}))?.is_none()
+        && let Some(metadata) = scope.metadata_reference(reference)?
     {
-        if let Some(metadata) = scope.metadata_reference(reference)? {
-            ctx.running.ensure_permission(Capability::Metadata)?;
-            return Ok(refs::metadata(metadata));
-        }
+        ctx.running.ensure_permission(Capability::Metadata)?;
+        return Ok(refs::metadata(metadata));
     }
     let resource = ResourceBroker::resolve(&scope, &owner, reference)?;
     let create = ctx.params["create"].as_bool().unwrap_or(false);

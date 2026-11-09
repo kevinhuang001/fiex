@@ -14,7 +14,7 @@ import {
   Circle,
 } from 'lucide-react'
 
-interface LogRecord {
+export interface LogRecord {
   id: number
   at: number
   source: string
@@ -54,7 +54,7 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
       loadingPage = true
       const token = generation.current
       try {
-        const page = await call<{ entries: LogRecord[]; cursor: number }>('plugin_logs', {
+        const page = await call('plugin_logs', {
           pluginId,
           after: cursor,
         })

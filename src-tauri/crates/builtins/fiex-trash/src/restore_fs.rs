@@ -96,10 +96,12 @@ mod tests {
 
         copy_entry(&source, &target).unwrap();
 
-        assert!(std::fs::symlink_metadata(&target)
-            .unwrap()
-            .file_type()
-            .is_symlink());
+        assert!(
+            std::fs::symlink_metadata(&target)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         assert_eq!(std::fs::read_link(target).unwrap(), outside);
     }
 

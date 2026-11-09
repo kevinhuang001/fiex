@@ -24,16 +24,22 @@ fn metadata_descriptors_keep_file_and_directory_attributes_separate() {
         .find(|section| section.id == "basic")
         .unwrap();
     assert!(file_basic.fields.iter().any(|field| field.id == "size"));
-    assert!(!directory_basic
-        .fields
-        .iter()
-        .any(|field| field.id == "size"));
-    assert!(directory_sections
-        .iter()
-        .any(|section| section.id == "directoryStats"));
-    assert!(!file_sections
-        .iter()
-        .any(|section| section.id == "directoryStats"));
+    assert!(
+        !directory_basic
+            .fields
+            .iter()
+            .any(|field| field.id == "size")
+    );
+    assert!(
+        directory_sections
+            .iter()
+            .any(|section| section.id == "directoryStats")
+    );
+    assert!(
+        !file_sections
+            .iter()
+            .any(|section| section.id == "directoryStats")
+    );
 }
 
 #[test]

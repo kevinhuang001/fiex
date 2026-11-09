@@ -14,6 +14,7 @@ import { notHandled, state } from './shared'
 type FixtureInfoField = {
   id: string
   sectionId: string
+  providerId?: string
   label: string
   compute: 'onOpen' | 'onDemand'
   status: 'idle' | 'ready' | 'pending' | 'unavailable' | 'error'
@@ -58,13 +59,13 @@ function infoSection(
   pluginId?: string,
 ): FixtureInfoSection {
   return {
-    id: `${providerId}::${sectionId}`,
+    id: sectionId,
     title,
     providerId,
     provider,
     source: pluginId ? 'plugin' : 'core',
     ...(pluginId ? { pluginId } : {}),
-    fields,
+    fields: pluginId ? fields.map((field) => ({ ...field, providerId })) : fields,
   }
 }
 

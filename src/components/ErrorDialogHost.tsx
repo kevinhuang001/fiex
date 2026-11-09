@@ -15,9 +15,7 @@ export function ErrorDialogHost() {
       if (polling) return
       polling = true
       try {
-        const entries = await call<
-          Array<{ id: number; source: string; code: string; message: string }>
-        >('errors_pending', { after: cursor })
+        const entries = await call('errors_pending', { after: cursor })
         if (alive) {
           for (const entry of entries) {
             reportError(entry.message, `${entry.source}:${entry.code}`, `error:${entry.id}`)

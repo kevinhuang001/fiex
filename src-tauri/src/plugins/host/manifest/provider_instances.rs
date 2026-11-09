@@ -68,15 +68,17 @@ mod tests {
         ] {
             assert!(validate("info", json!({"providers":providers}).as_object().unwrap()).is_err());
         }
-        assert!(validate(
-            "info",
-            json!({"providers":[
-                {"id":"metadata","priority":100},
-                {"id":"media","match":{"kinds":["file"]}}
-            ]})
-            .as_object()
-            .unwrap()
-        )
-        .is_ok());
+        assert!(
+            validate(
+                "info",
+                json!({"providers":[
+                    {"id":"metadata","priority":100},
+                    {"id":"media","match":{"kinds":["file"]}}
+                ]})
+                .as_object()
+                .unwrap()
+            )
+            .is_ok()
+        );
     }
 }

@@ -12,7 +12,7 @@ struct ShellIconRequest {
 
 #[cfg(all(target_os = "windows", feature = "desktop"))]
 pub fn extract_icon(source: &str, target: &std::path::Path) -> Result<(), String> {
-    use std::sync::{mpsc, OnceLock};
+    use std::sync::{OnceLock, mpsc};
     static WORKER: OnceLock<mpsc::SyncSender<ShellIconRequest>> = OnceLock::new();
     let worker = WORKER.get_or_init(|| {
         let (sender, receiver) = mpsc::sync_channel::<ShellIconRequest>(32);
@@ -38,7 +38,7 @@ pub fn extract_icon(source: &str, target: &std::path::Path) -> Result<(), String
 #[cfg(all(target_os = "windows", feature = "desktop"))]
 fn icon_worker(receiver: std::sync::mpsc::Receiver<ShellIconRequest>) {
     use windows::Win32::System::Com::{
-        CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+        COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
     };
 
     let initialized =
@@ -62,18 +62,18 @@ fn icon_worker(receiver: std::sync::mpsc::Receiver<ShellIconRequest>) {
 fn extract_icon_sta(source: &str, target: &std::path::Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::{
-        core::PCWSTR,
         Win32::{
             Foundation::SIZE,
             Graphics::Gdi::{
-                DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO,
-                BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+                BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC,
+                GetDIBits, GetObjectW, ReleaseDC,
             },
             UI::Shell::{
                 IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
                 SIIGBF_ICONONLY,
             },
         },
+        core::PCWSTR,
     };
 
     let source = std::ffi::OsStr::new(source)
@@ -167,7 +167,7 @@ fn extract_icon_sta(source: &str, target: &std::path::Path) -> Result<(), String
 /// Resolving the identifier is separate from checking that the target exists.
 #[cfg(target_os = "windows")]
 pub fn resolve_known_folder_path(value: &str) -> Option<std::path::PathBuf> {
-    use std::ffi::{c_void, OsStr, OsString};
+    use std::ffi::{OsStr, OsString, c_void};
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::ptr;
 

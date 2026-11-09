@@ -11,14 +11,14 @@ export async function startFileDrag(
   onResult: (result: 'Dropped' | 'Cancelled') => void,
   copyRequested = false,
 ) {
-  const exported = await call<string[]>('register_drag', { paths, copyRequested })
+  const exported = await call('register_drag', { paths, copyRequested })
   const completed = (result: 'Dropped' | 'Cancelled') => {
     void call('ci_log', { message: `drag result ${result}` }).catch(() => {})
     void call('finish_drag').catch(() => {})
     onResult(result)
   }
   try {
-    platform ??= call<string>('platform')
+    platform ??= call('platform')
     const kind = await platform
     void call('ci_log', {
       message: `drag start platform=${kind} exported=${JSON.stringify(exported)}`,

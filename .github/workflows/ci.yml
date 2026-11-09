@@ -12,6 +12,57 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  scope-policy-verification:
+    name: Formal scope policy proofs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - name: Verify bounded authorization invariants
+        uses: model-checking/kani-github-action@v1
+        with:
+          kani-version: '0.68.0'
+          command: cargo-kani
+          args: '--manifest-path src-tauri/crates/foundation/fiex-scope-policy/Cargo.toml --output-format terse'
+
+  scope-policy-coverage:
+    name: Scope policy coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Measure policy unit-test coverage
+        run: >-
+          cargo llvm-cov --locked
+          --manifest-path src-tauri/crates/foundation/fiex-scope-policy/Cargo.toml
+          --all-features --fail-under-lines 85
+
+  scope-policy-mutation:
+    name: Scope policy mutation tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-mutants
+        run: cargo install --locked cargo-mutants
+      - name: Mutate derived authorization decisions
+        run: >-
+          cargo mutants
+          --in-place
+          --manifest-path src-tauri/crates/foundation/fiex-scope-policy/Cargo.toml
+          --package fiex-scope-policy
+          --file crates/foundation/fiex-scope-policy/src/derived.rs
+          --exclude-re verification::stale_or_invalid_derivations_never_grant_authority
+          -- --all-features --lib
+
   checks:
     name: Frontend and UI tests
     runs-on: ubuntu-latest
@@ -25,6 +76,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run format:check
+      - run: npm run lint
+      - run: npm run check:boundary-types
+      - run: npm run check:size
+      - run: npm run check:tauri-contracts
       - run: npm run check:i18n
       - run: npm test
       - name: Restore checked frontend bundle and native icons

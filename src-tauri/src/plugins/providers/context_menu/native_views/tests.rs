@@ -60,9 +60,11 @@ fn restore_is_single_selection_and_empty_trash_is_root_only() {
         "recent://two.txt?id=two".into(),
     ];
     for recent in [&recent_single, &recent_multiple] {
-        assert!(providers("recent://", recent)
-            .iter()
-            .any(|provider| provider.id == "builtin:remove-from-recent"));
+        assert!(
+            providers("recent://", recent)
+                .iter()
+                .any(|provider| provider.id == "builtin:remove-from-recent")
+        );
         let resolved = resolve("builtin:remove-from-recent", "recent://", recent).unwrap();
         assert_eq!(
             resolved["items"].as_array().unwrap()[0]["id"],

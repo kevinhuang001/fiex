@@ -38,7 +38,7 @@ type LoadingDocument = { src: string }
 const loadingDocumentCache = new MemoryCache<LoadingDocument | null>(16, 5 * 60_000)
 function loadingDocument(pluginId: string): Promise<LoadingDocument | null> {
   return loadingDocumentCache.get(pluginId, async () => {
-    const path = await call<string | null>('preview_loading_asset', { pluginId })
+    const path = await call('preview_loading_asset', { pluginId })
     return path ? { src: asset(path) } : null
   })
 }
@@ -95,11 +95,8 @@ export function Preview({
           entry.isDir,
         ]),
         () =>
-          call<PreviewCandidate[]>('preview_candidates', {
+          call('preview_candidates', {
             path: entry.path,
-            extension: entry.extension,
-            mime: entry.mime,
-            isDir: entry.isDir,
           }),
       )
       .then((values) => {
@@ -178,7 +175,7 @@ export function Preview({
           }
         })
     }
-    const result = call<ResolvedPreview>('preview_open', {
+    const result = call('preview_open', {
       path: entry.path,
       providerId,
       providerOrder: candidates.map((candidate) => candidate.id),
@@ -195,7 +192,7 @@ export function Preview({
       // inherits the app shell CSP and blocks the plugin's inline bundle.
       if (native && value.view?.kind === 'html' && value.view.pluginId && value.view.entry) {
         try {
-          const path = await call<string>('plugin_view_asset', {
+          const path = await call('plugin_view_asset', {
             pluginId: value.view.pluginId,
             entry: value.view.entry,
           })

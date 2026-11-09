@@ -6,6 +6,7 @@ import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import { isVirtualResource } from '@/lib/files'
+import { terminalWorkingDirectory } from '@/lib/terminalPath'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import type { Notify, Run } from './types'
@@ -64,7 +65,7 @@ export function useOpenActions({
     if (e.path.startsWith('recent://')) {
       try {
         targetPath = (
-          await call<{ parent: string; target: string }>('recent_navigation_target', {
+          await call('recent_navigation_target', {
             alias: e.path,
           })
         ).target
@@ -78,7 +79,7 @@ export function useOpenActions({
     // The listing snapshot can be stale after an upload or eviction. Ask the
     // cache registry before deciding whether this open needs an activity.
     const cached = remote
-      ? await call<boolean>('remote_cached', { path: targetPath }).catch(() => Boolean(e.hasCache))
+      ? await call('remote_cached', { path: targetPath }).catch(() => Boolean(e.hasCache))
       : false
     let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     void run(
@@ -136,16 +137,16 @@ export function useOpenActions({
   const openTrash = () => openLocation('trash://')
   const openApplications = () => openLocation('applications://')
   const terminal = (id = prefs.terminal) => {
-    if (isVirtualResource(x.path) || (first && isVirtualResource(first.path))) return
     if (id === 'builtin') {
-      const cwd = first?.isDir ? first.path : x.path
+      const cwd = terminalWorkingDirectory(first?.isDir ? first.path : x.path)
       window.dispatchEvent(
         new CustomEvent('fiex:open-builtin-terminal', {
-          detail: { cwd: isRemotePath(cwd) ? '' : cwd },
+          detail: { cwd },
         }),
       )
       return
     }
+    if (isVirtualResource(x.path) || (first && isVirtualResource(first.path))) return
     void run(t('正在打开终端…'), () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )

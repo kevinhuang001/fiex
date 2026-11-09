@@ -4,12 +4,15 @@ use super::*;
 fn router_resolves_builtin_selection_and_execute_uses_its_snapshot() {
     let (_temp, directory, paths) = temp_selection();
     let many = super::query(&directory, &paths).unwrap();
-    assert!(many
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:batch-rename"));
-    assert!(!many
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:rename"));
+    assert!(
+        many.iter()
+            .any(|menu| menu["providerId"] == "builtin:batch-rename")
+    );
+    assert!(
+        !many
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:rename")
+    );
     let menu = action(&many, "batchRename");
     let session = menu["menuSessionId"].as_str().unwrap();
     let result = super::execute(session, "batchRename").unwrap();
@@ -17,16 +20,20 @@ fn router_resolves_builtin_selection_and_execute_uses_its_snapshot() {
     assert_eq!(result["paths"], json!(paths));
     assert!(super::execute(session, "batchRename").is_err());
     let single = super::query(&directory, &paths[..1]).unwrap();
-    assert!(single
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:rename"));
-    assert!(!single
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:batch-rename"));
+    assert!(
+        single
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:rename")
+    );
+    assert!(
+        !single
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:batch-rename")
+    );
 }
 
 #[test]
-fn core_open_with_submenu_resolves_children_and_binds_the_picker_action() {
+fn core_open_with_is_a_direct_icon_action_that_opens_the_picker() {
     let (_temp, directory, paths) = temp_selection();
     let menus = super::query_core(&directory, &paths[..1], None).unwrap();
     let menu = menus
@@ -34,13 +41,19 @@ fn core_open_with_submenu_resolves_children_and_binds_the_picker_action() {
         .find(|menu| {
             menu["items"]
                 .as_array()
-                .is_some_and(|items| items.iter().any(|item| item["id"] == "openWith"))
+                .is_some_and(|items| items.iter().any(|item| item["id"] == "openWith-choose"))
         })
         .expect("single readable file should offer Open With");
     let session = menu["menuSessionId"].as_str().unwrap();
-    let children = super::children(session, "openWith").unwrap();
-    let items = children["items"].as_array().unwrap();
-    assert!(items.iter().any(|item| item["id"] == "openWith-choose"));
+    let open_with = menu["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "openWith-choose")
+        .unwrap();
+    assert_eq!(open_with["kind"], "action");
+    assert_eq!(open_with["icon"], "application-search");
+    assert_eq!(open_with["title"], "打开方式");
 
     let result = super::execute(session, "openWith-choose").unwrap();
     assert_eq!(result["kind"], "coreAction");
@@ -106,12 +119,16 @@ fn trash_and_permanent_delete_are_independent_core_actions() {
         .map(|provider| provider.id)
         .collect::<Vec<_>>();
     assert!(registered.iter().any(|id| id == "builtin:move-to-trash"));
-    assert!(registered
-        .iter()
-        .any(|id| id == "builtin:delete-permanently"));
-    assert!(!super::builtin::providers(&ctx)
-        .iter()
-        .any(|provider| provider.id == "builtin:pin"));
+    assert!(
+        registered
+            .iter()
+            .any(|id| id == "builtin:delete-permanently")
+    );
+    assert!(
+        !super::builtin::providers(&ctx)
+            .iter()
+            .any(|provider| provider.id == "builtin:pin")
+    );
 }
 
 #[test]

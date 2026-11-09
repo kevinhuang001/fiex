@@ -41,7 +41,7 @@ fn url(value: &str) -> Option<String> {
 
 #[cfg(windows)]
 fn detect() -> Option<(String, String)> {
-    use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+    use winreg::{RegKey, enums::HKEY_CURRENT_USER};
     let key = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
         .ok()?;
@@ -115,10 +115,10 @@ fn detect() -> Option<(String, String)> {
         "ALL_PROXY",
         "all_proxy",
     ] {
-        if let Ok(value) = std::env::var(key) {
-            if let Some(proxy) = url(&value) {
-                return Some(("environment".into(), proxy));
-            }
+        if let Ok(value) = std::env::var(key)
+            && let Some(proxy) = url(&value)
+        {
+            return Some(("environment".into(), proxy));
         }
     }
     None

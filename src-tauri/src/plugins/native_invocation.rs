@@ -5,8 +5,8 @@ use crate::core::fs::mapped_access::UserActionContext;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderRequestContext};
 use fiex_storage::{
-    native::{NativeScopedStorage, OwnerBoundStorage},
     CoreOwnerKey,
+    native::{NativeScopedStorage, OwnerBoundStorage},
 };
 use serde_json::Value;
 use std::{any::Any, sync::Arc};

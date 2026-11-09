@@ -18,7 +18,7 @@ export function useDirectoryColumns(path: string, fallback: ListColumns) {
     let active = true
     const version = edits.current
     void keyFor(path)
-      .then((key) => call<ListColumns | null>('state_get', { namespace: 'layout', key }))
+      .then((key) => call('state_get', { namespace: 'layout', key }))
       .then((value) => {
         if (active && version === edits.current)
           setState({ path, value: value ? normalizeListColumns(value) : fallback })

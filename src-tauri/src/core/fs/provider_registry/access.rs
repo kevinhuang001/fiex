@@ -1,7 +1,6 @@
 use super::{
-    plugin,
-    routing::{resolve, Route},
-    FsError, FsErrorKind, ResourceBroker,
+    FsError, FsErrorKind, ResourceBroker, plugin,
+    routing::{Route, resolve},
 };
 use crate::core::volumes::native_vfs;
 use fiex_provider_contracts::FsOperation;

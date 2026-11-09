@@ -41,7 +41,6 @@ export function PathToolbar({
   close?: { label: string; title: string; className: string; onClose: () => void }
   showGlobalSearch?: boolean
 }) {
-  const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
     <div className="path-toolbar">
       <Button
@@ -55,7 +54,6 @@ export function PathToolbar({
       </Button>
       <nav
         className="breadcrumbs"
-        data-drop-folder={dropFolder}
         aria-label={ariaLabel}
         onClick={(event) => {
           if (event.target === event.currentTarget) startEdit()
@@ -91,11 +89,12 @@ export function PathToolbar({
                     ]
                   : crumbs.map((crumb) => ({ ...crumb, ellipsis: false }))
               return visible.map((crumb, index) => (
-                <span key={crumb.path} data-drop-folder={crumb.path}>
+                <span key={crumb.path}>
                   {index > 0 && <ChevronRight size={11} />}
                   <button
                     title={crumb.ellipsis ? t('更上层') : crumb.path}
                     aria-label={crumb.ellipsis ? t('更上层') : undefined}
+                    data-drop-folder={crumb.path}
                     onClick={() =>
                       crumb.ellipsis || index === visible.length - 1
                         ? crumb.ellipsis

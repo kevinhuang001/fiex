@@ -43,10 +43,25 @@ export function normalizeListColumns(value: unknown): ListColumns {
   }
 }
 
-/** CSS grid template shared by the header and every row: the name column takes
- * the rest, the trailing columns use their stored widths. */
-export function listGridTemplate(columns: ListColumns): string {
-  return `minmax(${columns.name ?? LIST_COLUMNS_DEFAULT.name}px, 1fr) ${columns.modified}px ${columns.size}px ${columns.kind}px`
+/** CSS grid template shared by the header and every row. Stored widths remain
+ * the preferred layout; narrow panes proportionally compress every column. */
+export function listGridTemplate(columns: ListColumns, availableWidth = 0): string {
+  const preferred = [
+    columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN,
+    columns.modified,
+    columns.size,
+    columns.kind,
+  ]
+  const fixedSpace = 24 + 14 * (preferred.length - 1)
+  const total = preferred.reduce((sum, width) => sum + width, 0)
+  if (availableWidth <= fixedSpace || total <= availableWidth - fixedSpace)
+    return `minmax(${preferred[0]}px, 1fr) ${preferred
+      .slice(1)
+      .map((width) => `${width}px`)
+      .join(' ')}`
+  const scale = (availableWidth - fixedSpace) / total
+  const [name, ...fixed] = preferred.map((width) => Math.max(1, Math.floor(width * scale)))
+  return `minmax(${name}px, 1fr) ${fixed.map((width) => `${width}px`).join(' ')}`
 }
 
 /** Applies one divider drag. `dx` is the pointer movement in pixels and the

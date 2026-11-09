@@ -14,7 +14,7 @@ export function CredentialSettings() {
       return
     }
     let alive = true
-    void call<string>('credential_backend')
+    void call('credential_backend')
       .then((value) => {
         if (alive) {
           setBackend(value)

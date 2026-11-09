@@ -1,7 +1,7 @@
 //! Filesystem primitives: create and rename entries, move items to the Trash
 //! and copy trees.
 
-use super::{check_cancelled, exists, OperationResult};
+use super::{OperationResult, check_cancelled, exists};
 use crate::{core::files::validate_name, core::ignores::IgnoreSet};
 use std::{
     fs,

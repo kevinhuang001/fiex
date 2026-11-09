@@ -234,14 +234,13 @@ pub(super) fn compare_and_set(
     next: Option<Value>,
 ) -> Result<bool, String> {
     validate(owner, scope, key)?;
-    if let Some(value) = &next {
-        if serde_json::to_vec(value)
+    if let Some(value) = &next
+        && serde_json::to_vec(value)
             .map_err(|error| error.to_string())?
             .len()
             > max_value_bytes(owner, scope, key)
-        {
-            return Err("plugin storage value too large".into());
-        }
+    {
+        return Err("plugin storage value too large".into());
     }
     with_scope(owner, scope, |snapshot| {
         snapshot.compare_and_set(key, expected.as_ref(), next)

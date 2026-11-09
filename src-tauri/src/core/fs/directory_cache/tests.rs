@@ -77,9 +77,11 @@ fn cached_entry_uses_the_authorized_directory_snapshot() {
         cached_entry(directory, &child).unwrap().unwrap().path,
         child
     );
-    assert!(cached_entry(directory, "applications://app/other-note")
-        .unwrap()
-        .is_none());
+    assert!(
+        cached_entry(directory, "applications://app/other-note")
+            .unwrap()
+            .is_none()
+    );
     drop_subtree(directory);
 }
 #[test]

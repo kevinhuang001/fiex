@@ -43,17 +43,17 @@ fn canonicalize_target(path: &Path) -> Result<PathBuf, String> {
 #[cfg(windows)]
 fn move_to_trash_sta(path: PathBuf) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::core::PCWSTR;
     use windows::Win32::{
         System::Com::{
-            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-            COINIT_DISABLE_OLE1DDE,
+            CLSCTX_ALL, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoCreateInstance,
+            CoInitializeEx, CoUninitialize,
         },
         UI::Shell::{
-            FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName,
-            FOFX_RECYCLEONDELETE, FOF_ALLOWUNDO, FOF_NO_UI,
+            FOF_ALLOWUNDO, FOF_NO_UI, FOFX_RECYCLEONDELETE, FileOperation, IFileOperation,
+            IShellItem, SHCreateItemFromParsingName,
         },
     };
+    use windows::core::PCWSTR;
 
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) }
         .ok()

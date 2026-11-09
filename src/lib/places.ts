@@ -26,3 +26,8 @@ export function commonPlaces(locations: Location[]): Location[] {
   }
   return result.map((place) => ({ ...place, name: t(place.name) }))
 }
+
+/** Shared hidden-place preference update for Sidebar and SidebarSettings. */
+export function setPlaceHidden(hiddenPlaces: string[], key: string, hidden: boolean) {
+  return hidden ? [...new Set([...hiddenPlaces, key])] : hiddenPlaces.filter((item) => item !== key)
+}

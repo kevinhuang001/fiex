@@ -6,8 +6,8 @@ use crate::core::files::{Entry, Listing};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -56,15 +56,14 @@ fn record(parent: &str, path: &str, change: Kind) {
             at: Instant::now(),
         },
     );
-    if directory.pending.len() > MAX_PENDING_PER_DIRECTORY {
-        if let Some(oldest) = directory
+    if directory.pending.len() > MAX_PENDING_PER_DIRECTORY
+        && let Some(oldest) = directory
             .pending
             .iter()
             .min_by_key(|(_, pending)| pending.at)
             .map(|(path, _)| path.clone())
-        {
-            let _ = directory.pending.remove(&oldest);
-        }
+    {
+        let _ = directory.pending.remove(&oldest);
     }
 }
 pub(super) fn upsert(parent: &str, entry: Entry) {
@@ -251,10 +250,12 @@ mod tests {
 
         assert_eq!(stale.entries.len(), 2);
         assert!(stale.entries.iter().any(|item| item.path == added_path));
-        assert!(stale
-            .entries
-            .iter()
-            .any(|item| { item.path == updated_path && item.size == 42 }));
+        assert!(
+            stale
+                .entries
+                .iter()
+                .any(|item| { item.path == updated_path && item.size == 42 })
+        );
         assert!(!stale.entries.iter().any(|item| item.path == removed_path));
         discard(dir);
     }

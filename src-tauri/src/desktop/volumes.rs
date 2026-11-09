@@ -5,7 +5,7 @@ use crate::{
     core::volumes,
     remote,
 };
-use tauri::{ipc::Channel, Manager};
+use tauri::{Manager, ipc::Channel};
 
 #[tauri::command]
 pub(crate) async fn register_drag(

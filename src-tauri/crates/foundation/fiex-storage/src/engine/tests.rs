@@ -3,13 +3,15 @@ use super::*;
 #[test]
 fn rejects_traversal() {
     let owner = OwnerId::plugin("valid.plugin");
-    assert!(set(
-        &OwnerId::Plugin("../evil".into()),
-        "global",
-        "safe",
-        Value::Null
-    )
-    .is_err());
+    assert!(
+        set(
+            &OwnerId::Plugin("../evil".into()),
+            "global",
+            "safe",
+            Value::Null
+        )
+        .is_err()
+    );
     assert!(set(&owner, "../x", "safe", Value::Null).is_err());
     assert!(set(&owner, "global", "../x", Value::Null).is_err());
 }
@@ -17,13 +19,15 @@ fn rejects_traversal() {
 #[test]
 fn size_cap() {
     let owner = OwnerId::plugin("valid.plugin");
-    assert!(set(
-        &owner,
-        "global",
-        "test",
-        Value::String("a".repeat(MAX_VALUE_BYTES + 1))
-    )
-    .is_err());
+    assert!(
+        set(
+            &owner,
+            "global",
+            "test",
+            Value::String("a".repeat(MAX_VALUE_BYTES + 1))
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -50,22 +54,32 @@ fn cas_distinguishes_absent_null_and_conflicts_and_skips_noop_saves() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("state.json");
     let mut state = Snapshot::new(path.clone());
-    assert!(state
-        .compare_and_set("key", None, Some(Value::Null))
-        .unwrap());
-    assert!(!state
-        .compare_and_set("key", None, Some(Value::Bool(true)))
-        .unwrap());
-    assert!(state
-        .compare_and_set("key", Some(&Value::Null), Some(Value::from(1)))
-        .unwrap());
-    assert!(!state
-        .compare_and_set("key", Some(&Value::Null), None)
-        .unwrap());
+    assert!(
+        state
+            .compare_and_set("key", None, Some(Value::Null))
+            .unwrap()
+    );
+    assert!(
+        !state
+            .compare_and_set("key", None, Some(Value::Bool(true)))
+            .unwrap()
+    );
+    assert!(
+        state
+            .compare_and_set("key", Some(&Value::Null), Some(Value::from(1)))
+            .unwrap()
+    );
+    assert!(
+        !state
+            .compare_and_set("key", Some(&Value::Null), None)
+            .unwrap()
+    );
     let modified = fs::metadata(&path).unwrap().modified().unwrap();
-    assert!(state
-        .compare_and_set("key", Some(&Value::from(1)), Some(Value::from(1)))
-        .unwrap());
+    assert!(
+        state
+            .compare_and_set("key", Some(&Value::from(1)), Some(Value::from(1)))
+            .unwrap()
+    );
     assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
     assert_eq!(state.get("key").unwrap(), Some(Value::from(1)));
 }

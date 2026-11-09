@@ -1,8 +1,8 @@
 //! One transfer planner for local, plugin and raw-device resources. Planning
 //! finds conflicts before any writes; execution moves bytes in bounded chunks.
-use super::{binding, FsOperation, CHUNK};
+use super::{CHUNK, FsOperation, binding};
 use crate::core::{
-    operations::{check_cancelled, OperationResult},
+    operations::{OperationResult, check_cancelled},
     transfers::Resolution,
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;

@@ -43,6 +43,17 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   })
   const permits = (operation: string) =>
     ops.length > 0 && ops.every((allowed) => allowed.includes(operation))
+  const canCopySources =
+    entries.length === paths.length &&
+    entries.every((entry, index) => ops[index]?.includes(entry?.isDir ? 'list' : 'read'))
+  const canCutSources = canCopySources && permits('remove')
+  const destinationOps = allEntries.find((entry) => entry.path === directory)?.allowedOps || []
+  const needsDirectory = entries.some((entry) => entry?.isDir)
+  const needsFile = entries.some((entry) => !entry?.isDir)
+  const canDuplicate =
+    canCopySources &&
+    (!needsDirectory || destinationOps.includes('mkdir')) &&
+    (!needsFile || destinationOps.includes('write'))
   const platform = new URLSearchParams(location.search).get('platform') || ''
   // Mirrors Core: an unavailable operation is skipped, never emitted disabled.
   const item = (
@@ -66,14 +77,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
                   !entries[0]?.isDir &&
                   !trashView &&
                   !paths[0].startsWith('applications://')
-                    ? [
-                        {
-                          id: 'openWith',
-                          title: t('打开方式'),
-                          icon: 'application',
-                          kind: 'submenu' as const,
-                        },
-                      ]
+                    ? [item('openWith-choose', '打开方式', 'application-search')]
                     : []),
                 ]
               : []),
@@ -93,11 +97,9 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   groups.push([
     'clipboard',
     [
-      ...(permits('read') ? [item('copy', '复制', 'copy', 'copy')] : []),
-      ...(permits('read') && permits('remove') ? [item('cut', '剪切', 'scissors', 'cut')] : []),
-      ...(permits('read') && permits('write')
-        ? [item('duplicate', '创建副本', 'copy', 'duplicate')]
-        : []),
+      ...(canCopySources ? [item('copy', '复制', 'copy', 'copy')] : []),
+      ...(canCutSources ? [item('cut', '剪切', 'scissors', 'cut')] : []),
+      ...(canDuplicate ? [item('duplicate', '创建副本', 'copy', 'duplicate')] : []),
     ],
   ])
   groups.push(['copy-path', [item('copyPath', '复制路径', 'copy')]])
@@ -152,7 +154,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   const providerForAction: Record<string, string> = {
     open: 'builtin:open',
-    openWith: 'builtin:open-with',
+    'openWith-choose': 'builtin:open-with',
     preview: 'builtin:preview',
     info: 'builtin:info',
     tags: 'builtin:tags',
@@ -178,14 +180,6 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
     const submenus = new Set(items.filter((item) => item.kind === 'submenu').map((item) => item.id))
     const children = new Map<string, CoreMenuItem[]>()
-    if (submenus.has('openWith')) {
-      children.set('openWith', [
-        { id: 'openWith-markdown', title: 'Markdown Viewer', kind: 'action' },
-        { id: 'openWith-plain-text', title: 'Plain Text Editor', kind: 'action' },
-        { id: 'openWith-separator', title: ' ', kind: 'separator' },
-        { id: 'openWith-choose', title: t('选择其他应用…'), kind: 'action' },
-      ])
-    }
     sessions.set(menuSessionId, {
       paths: [...paths],
       directory,

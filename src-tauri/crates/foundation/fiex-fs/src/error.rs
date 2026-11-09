@@ -89,10 +89,10 @@ impl std::error::Error for FsError {}
 
 impl From<String> for FsError {
     fn from(message: String) -> Self {
-        if let Some((prefix, rest)) = message.split_once(": ") {
-            if let Some(kind) = FsErrorKind::parse(prefix) {
-                return Self::new(kind, rest);
-            }
+        if let Some((prefix, rest)) = message.split_once(": ")
+            && let Some(kind) = FsErrorKind::parse(prefix)
+        {
+            return Self::new(kind, rest);
         }
         Self::internal(message)
     }

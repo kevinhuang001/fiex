@@ -2,8 +2,8 @@ use super::super::{Context, Selection};
 use super::item;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
-    ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
-    ProviderInvocation,
+    ContextMenuProvider, FsOperation, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
+    ProviderInput, ProviderInvocation,
 };
 use fiex_resource::FileCapabilities;
 use std::sync::Arc;
@@ -11,6 +11,38 @@ use std::sync::Arc;
 use fiex_actions::Action;
 
 pub(super) struct AtomicMenuAction(pub(super) Action);
+
+fn can_copy_sources(selection: &Selection<'_>) -> bool {
+    !selection.paths.is_empty()
+        && selection.paths.len() == selection.entries.len()
+        && selection.paths.len() == selection.entry_capabilities.len()
+        && selection
+            .entries
+            .iter()
+            .zip(selection.entry_capabilities)
+            .all(|(entry, capabilities)| {
+                capabilities.allows(if entry.is_dir {
+                    FsOperation::List
+                } else {
+                    FsOperation::Read
+                })
+            })
+}
+
+fn can_cut_sources(selection: &Selection<'_>) -> bool {
+    can_copy_sources(selection)
+        && selection
+            .entry_capabilities
+            .iter()
+            .all(|capabilities| capabilities.remove)
+}
+
+fn can_duplicate_to_directory(selection: &Selection<'_>) -> bool {
+    let needs_folder = selection.entries.iter().any(|entry| entry.is_dir);
+    let needs_file = selection.entries.iter().any(|entry| !entry.is_dir);
+    (!needs_folder || selection.directory_capabilities.create)
+        && (!needs_file || selection.directory_capabilities.write)
+}
 
 fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
     !selection.paths.is_empty()
@@ -32,7 +64,12 @@ impl AtomicMenuAction {
                 vec![item("open", "打开", "open", "open")]
             }
             Action::OpenWith if one && caps.read => {
-                vec![MenuItem::submenu("openWith", crate::i18n::t("打开方式"))]
+                vec![item(
+                    "openWith-choose",
+                    "打开方式",
+                    "application-search",
+                    "",
+                )]
             }
             Action::Preview if one && caps.read => {
                 vec![item("preview", "快速查看", "eye", "quickLook")]
@@ -59,13 +96,17 @@ impl AtomicMenuAction {
             {
                 vec![item("batchRename", "批量重命名…", "pencil", "")]
             }
-            Action::Copy if nonzero && caps.read => vec![item("copy", "复制", "copy", "copy")],
+            Action::Copy if can_copy_sources(selection) => {
+                vec![item("copy", "复制", "copy", "copy")]
+            }
             // Cut records references only. Import/Export/Move authorization is
             // checked when Paste or drag-and-drop actually performs a transfer.
-            Action::Cut if nonzero && caps.read && caps.remove => {
+            Action::Cut if can_cut_sources(selection) => {
                 vec![item("cut", "剪切", "scissors", "cut")]
             }
-            Action::Duplicate if nonzero && caps.read && caps.write => {
+            Action::Duplicate
+                if can_copy_sources(selection) && can_duplicate_to_directory(selection) =>
+            {
                 vec![item("duplicate", "创建副本", "copy", "duplicate")]
             }
             Action::CopyPath if nonzero => vec![item("copyPath", "复制路径", "copy", "")],
@@ -143,24 +184,6 @@ impl ContextMenuProvider for AtomicMenuAction {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-        if self.0 == Action::OpenWith {
-            let (parent_id, menu_session_id) = match invocation.input()? {
-                ProviderInput::ContextMenuResolve(request) => (
-                    request.parent_id.as_deref(),
-                    request.menu_session_id.as_deref(),
-                ),
-                _ => (None, None),
-            };
-            if parent_id == Some("openWith") {
-                let session = menu_session_id
-                    .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
-                return super::super::super::open_with::menu_items(context, session)
-                    .map_err(ProviderError::internal);
-            }
-            if parent_id.is_some() {
-                return Ok(Vec::new());
-            }
-        }
         Ok(self.items(&context.selection(), &context.capabilities()))
     }
 
@@ -181,26 +204,8 @@ impl ContextMenuProvider for AtomicMenuAction {
         };
         let item_id = item_id
             .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
-        let menu_session_id = menu_session_id
+        let _menu_session_id = menu_session_id
             .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
-        if self.0 == Action::OpenWith {
-            if item_id == "openWith-choose" {
-                return Ok(MenuExecuteResult::core_action(
-                    "chooseOpenWith",
-                    context.paths.clone(),
-                    context.paths.first().cloned().unwrap_or_default(),
-                    context.directory.clone(),
-                ));
-            }
-            if !super::super::super::open_with::is_candidate_item(menu_session_id, item_id) {
-                return Err(ProviderError::invalid_params(
-                    "Open With item was not offered by this session",
-                ));
-            }
-            super::super::super::open_with::open_selected(context, menu_session_id, item_id)
-                .map_err(ProviderError::internal)?;
-            return Ok(MenuExecuteResult::handled());
-        }
         let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
             .with_local_data(Arc::new(context.clone()));
         let offered = self.resolve(&resolve)?;
@@ -210,6 +215,14 @@ impl ContextMenuProvider for AtomicMenuAction {
         {
             return Err(ProviderError::invalid_params(
                 "native menu action was not offered",
+            ));
+        }
+        if self.0 == Action::OpenWith {
+            return Ok(MenuExecuteResult::core_action(
+                "chooseOpenWith",
+                context.paths.clone(),
+                context.paths.first().cloned().unwrap_or_default(),
+                context.directory.clone(),
             ));
         }
         Ok(super::super::super::builtin::action_result(
@@ -229,6 +242,8 @@ mod tests {
         Selection {
             paths,
             entries: &[],
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: true,
             preflight,
         }

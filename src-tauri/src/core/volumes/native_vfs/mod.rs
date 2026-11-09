@@ -49,8 +49,8 @@ pub use identity::{provider_id, shared_provider_id};
 pub(crate) use presentation::navigable_source;
 pub(crate) use presentation::recent_navigation_source;
 pub use presentation::{default_view, icon_for, opaque, resource_entry};
-pub(crate) use registration::{register, registry, RegisteredNativeVfsProvider};
 pub(crate) use registration::{NativeVfsBehavior, NativeVfsIdentity};
+pub(crate) use registration::{RegisteredNativeVfsProvider, register, registry};
 pub use shared::core_entry;
 use shared::target_invocation;
 

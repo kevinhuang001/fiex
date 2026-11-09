@@ -1,6 +1,5 @@
 //! Atomic Core context-menu providers and their shared trusted selection data.
 use super::builtin::Context;
-use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::ContextMenuProvider;
@@ -11,12 +10,14 @@ use fiex_provider_contracts::{ProviderError, ProviderInvocation};
 #[cfg(test)]
 use fiex_resource::FileCapabilities;
 use rayon::prelude::*;
+use serde_json::Value;
 #[cfg(test)]
 use serde_json::json;
-use serde_json::Value;
 use std::sync::{Arc, OnceLock};
 
 mod providers;
+mod selection;
+pub(super) use selection::Selection;
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     providers::register(values);
 }
@@ -28,20 +29,6 @@ pub(super) fn item(
     shortcut: &str,
 ) -> fiex_provider_contracts::MenuItem {
     providers::item(id, title, icon, shortcut)
-}
-
-/// The selection a menu is resolved for.
-pub(super) struct Selection<'a> {
-    pub(super) paths: &'a [String],
-    pub(super) entries: &'a [Entry],
-    pub(super) all_local: bool,
-    pub(super) preflight: super::builtin::MenuPreflightAvailability,
-}
-
-impl Selection<'_> {
-    fn many(&self) -> bool {
-        self.paths.len() > 1
-    }
 }
 
 fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {
@@ -119,11 +106,11 @@ pub(super) fn preflight_availability(
     if context.paths.is_empty() {
         let check_file = capabilities.write && matched.contains("builtin:new-file");
         let check_folder = capabilities.create && matched.contains("builtin:new-folder");
-        if check_file || check_folder {
-            if let Ok(parent) = crate::core::fs::trusted(&context.directory, "core:context-menu") {
-                result.new_file = check_file && parent.review_create_available(false);
-                result.new_folder = check_folder && parent.review_create_available(true);
-            }
+        if (check_file || check_folder)
+            && let Ok(parent) = crate::core::fs::trusted(&context.directory, "core:context-menu")
+        {
+            result.new_file = check_file && parent.review_create_available(false);
+            result.new_folder = check_folder && parent.review_create_available(true);
         }
         return result;
     }
@@ -285,9 +272,11 @@ mod registry_tests {
             .collect::<Vec<_>>();
         assert_eq!(sorted[0].id, "builtin:open");
         assert_eq!(sorted.last().unwrap().id, "builtin:empty-trash");
-        assert!(sorted
-            .windows(2)
-            .all(|pair| pair[0].priority >= pair[1].priority));
+        assert!(
+            sorted
+                .windows(2)
+                .all(|pair| pair[0].priority >= pair[1].priority)
+        );
         assert!(registered.get("builtin:nonexistent").is_none());
     }
 

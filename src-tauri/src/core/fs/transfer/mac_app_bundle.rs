@@ -1,13 +1,12 @@
 //! Native macOS application bundles import as executable units, never a
 //! destructive move of an installed application. ditto preserves bundle links.
 use super::{
-    binding,
+    FsOperation, binding,
     planner::{collision, optional_stat, same_version, unique_application},
-    FsOperation,
 };
 use crate::core::volumes::applications;
 use crate::core::{
-    operations::{check_cancelled, OperationResult},
+    operations::{OperationResult, check_cancelled},
     transfers::{Action, Resolution},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;
@@ -80,7 +79,7 @@ pub(super) fn import(
                 }
                 Some(Action::KeepBoth) => target = unique_application(&parent, &name)?,
                 Some(Action::Replace) => {
-                    return Err(crate::i18n::t("应用已存在，请重命名或选择保留两者").into())
+                    return Err(crate::i18n::t("应用已存在，请重命名或选择保留两者").into());
                 }
             }
         }

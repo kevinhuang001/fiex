@@ -37,7 +37,7 @@ export function useEntryDecorations({
     if (!enabled || !path || !entries.length) return
     const generation = ++request.current
     const timer = window.setTimeout(() => {
-      void call<EntryDecoration[]>('plugin_decorations', {
+      void call('plugin_decorations', {
         directory: path,
         entries: entries.map((entry) => ({
           path: entry.path,

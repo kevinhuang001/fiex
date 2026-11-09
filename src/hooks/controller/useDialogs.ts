@@ -30,7 +30,7 @@ export function useDialogs(x: Explorer) {
   const first = chosen[0]
   // Bottom notifications are intentionally disabled; operations report through
   // Status Center and inline errors instead.
-  const notify = useCallback((_message: string) => {}, [])
+  const notify = useCallback((_message: string) => undefined, [])
   useEffect(() => {
     if (dialog) {
       setDialogValue(dialog.value || '')

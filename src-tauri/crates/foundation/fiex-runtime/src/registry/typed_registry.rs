@@ -1,7 +1,7 @@
 //! Typed registry views keep provider kinds and implementation types aligned.
 use super::{
     module_registrar::ModuleRegistrar,
-    runtime::{global_runtime_registry, RuntimeRegistry},
+    runtime::{RuntimeRegistry, global_runtime_registry},
     types::{ModuleDescriptor, ProviderCandidate},
 };
 use fiex_provider_contracts::{MatchResource, ProviderDescriptor, ProviderKind, ProviderMatcher};

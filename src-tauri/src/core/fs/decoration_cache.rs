@@ -185,7 +185,7 @@ pub(crate) fn invalidate(list_key: &str) {
 #[cfg(feature = "desktop")]
 pub(crate) fn resolve_missing(path: &str, listing: &Listing) -> Vec<Decoration> {
     use crate::plugins::providers::decorations::{
-        query_with_plugins, DecorationEntry, DecorationTag,
+        DecorationEntry, DecorationTag, query_with_plugins,
     };
     let original_identity = key(path);
     let previous: Option<Snapshot> = enabled(path).then(|| disk::load(&identity(path))).flatten();

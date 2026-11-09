@@ -74,10 +74,10 @@ fn emit(event: PermissionPromptEvent) {
     let Some(slot) = SINK.get() else {
         return;
     };
-    if let Ok(slot) = slot.lock() {
-        if let Some(sink) = slot.as_ref() {
-            sink(event);
-        }
+    if let Ok(slot) = slot.lock()
+        && let Some(sink) = slot.as_ref()
+    {
+        sink(event);
     }
 }
 
@@ -91,7 +91,7 @@ mod registry;
 #[cfg(test)]
 mod tests;
 
-use registry::{display, next_id, registry, resolve, wait, Key, Prompt};
+use registry::{Key, Prompt, display, next_id, registry, resolve, wait};
 
 pub fn request(
     plugin_id: &str,
