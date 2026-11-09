@@ -145,6 +145,8 @@ pub(super) fn open_application(file: &Path, application_id: &str) -> Result<(), 
 }
 
 unsafe fn activate_package_for_file(file: &Path, aumid: &str) -> Result<(), String> {
+    // SAFETY: The Shell pointers are derived from live UTF-16 buffers or returned by the preceding Shell call, and the COM objects remain owned for the duration of each call.
+    unsafe {
     use windows::Win32::UI::Shell::Common::ITEMIDLIST;
     let manager: IApplicationActivationManager =
         CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_LOCAL_SERVER)
@@ -168,9 +170,12 @@ unsafe fn activate_package_for_file(file: &Path, aumid: &str) -> Result<(), Stri
     })();
     CoTaskMemFree(Some(item.cast::<c_void>()));
     result
-}
+
+    }}
 
 unsafe fn enumerate_apps_folder() -> Result<Vec<AppsFolderItem>, String> {
+    // SAFETY: The COM interfaces are owned references on the initialized STA thread; Shell-allocated strings are converted and released by take_string.
+    unsafe {
     let folder: IShellItem = SHGetKnownFolderItem(&FOLDERID_AppsFolder, KF_FLAG_DEFAULT, None)
         .map_err(|error| error.to_string())?;
     let items: IEnumShellItems = folder
@@ -208,29 +213,39 @@ unsafe fn enumerate_apps_folder() -> Result<Vec<AppsFolderItem>, String> {
         });
     }
     Ok(output)
-}
+
+    }}
 
 unsafe fn display_name(
     item: &IShellItem,
     kind: windows::Win32::UI::Shell::SIGDN,
 ) -> Option<String> {
+    // SAFETY: item is a live COM interface reference; GetDisplayName returns a Shell-allocated string that take_string converts and frees.
+    unsafe {
     let value = item.GetDisplayName(kind).ok()?;
     take_string(value)
-}
+
+    }}
 
 unsafe fn property_string(
     item: &IShellItem2,
     key: &windows::Win32::Foundation::PROPERTYKEY,
 ) -> Option<String> {
+    // SAFETY: item is a live COM interface reference; GetString returns a Shell-allocated string that take_string converts and frees.
+    unsafe {
     let value = item.GetString(key as *const _).ok()?;
     take_string(value)
-}
+
+    }}
 
 unsafe fn take_string(value: PWSTR) -> Option<String> {
+    // SAFETY: value is an owned PWSTR returned by a Windows Shell/COM API and is freed exactly once after conversion.
+    unsafe {
     let result = value.to_string().ok();
     CoTaskMemFree(Some(value.0.cast::<c_void>()));
     result.filter(|value| !value.is_empty())
-}
+
+    }}
 
 pub(super) fn candidates(extension: &str) -> Result<Vec<OpenWithCandidate>, String> {
     let extension = normalize_extension(extension);
@@ -256,6 +271,8 @@ fn normalize_extension(extension: &str) -> String {
 }
 
 unsafe fn enumerate_handlers(extension: &str) -> Result<Vec<OpenWithCandidate>, String> {
+    // SAFETY: The extension buffer is NUL-terminated and stays alive during the Shell call; returned COM interfaces remain owned while queried.
+    unsafe {
     let wide = wide(extension);
     let default_id = query_default_handler(&wide);
     let handlers = SHAssocEnumHandlers(PCWSTR(wide.as_ptr()), ASSOC_FILTER_NONE)
@@ -293,9 +310,12 @@ unsafe fn enumerate_handlers(extension: &str) -> Result<Vec<OpenWithCandidate>, 
             .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
     });
     Ok(output)
-}
+
+    }}
 
 unsafe fn query_default_handler(extension: &[u16]) -> Option<String> {
+    // SAFETY: extension is a live NUL-terminated UTF-16 buffer; the output buffer remains allocated for each AssocQueryStringW call.
+    unsafe {
     let mut required = 0;
     let status = AssocQueryStringW(
         ASSOCF_INIT_DEFAULTTOSTAR,
@@ -321,9 +341,12 @@ unsafe fn query_default_handler(extension: &[u16]) -> Option<String> {
     Some(String::from_utf16_lossy(
         &buffer[..required.saturating_sub(1) as usize],
     ))
-}
+
+    }}
 
 unsafe fn next_handler(handlers: &IEnumAssocHandlers) -> Option<IAssocHandler> {
+    // SAFETY: handlers is a live COM interface reference and the COM enumerator initializes the optional output interface.
+    unsafe {
     let mut next = [None];
     let mut fetched = 0;
     handlers
@@ -331,26 +354,35 @@ unsafe fn next_handler(handlers: &IEnumAssocHandlers) -> Option<IAssocHandler> {
         .ok()
         .filter(|_| fetched == 1)?;
     next.into_iter().flatten().next()
-}
+
+    }}
 
 unsafe fn handler_string(handler: &IAssocHandler, display: bool) -> Option<String> {
+    // SAFETY: handler is a live COM interface reference; the returned COM-allocated string is transferred to take_string for conversion and release.
+    unsafe {
     let value = if display {
         handler.GetUIName().ok()?
     } else {
         handler.GetName().ok()?
     };
     take_string(value)
-}
+
+    }}
 
 unsafe fn handler_icon(handler: &IAssocHandler) -> Option<String> {
+    // SAFETY: handler is a live COM interface reference; GetIconLocation initializes an owned Shell string that take_string converts and frees.
+    unsafe {
     let mut icon = PWSTR::null();
     let mut index = 0;
     handler.GetIconLocation(&mut icon, &mut index).ok()?;
     let path = take_string(icon)?;
     Some(format!("{path},{index}"))
-}
+
+    }}
 
 unsafe fn invoke_handler(file: &Path, extension: &str, application_id: &str) -> Result<(), String> {
+    // SAFETY: All UTF-16 buffers outlive their Shell calls; the PIDL returned by SHParseDisplayName is freed exactly once after data-object creation and invocation.
+    unsafe {
     let candidates = enumerate_handlers(extension)?;
     if !candidates
         .iter()
@@ -387,7 +419,8 @@ unsafe fn invoke_handler(file: &Path, extension: &str, application_id: &str) -> 
     let result = handler.Invoke(&data).map_err(|error| error.to_string());
     CoTaskMemFree(Some(item.cast::<c_void>()));
     result
-}
+
+    }}
 
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
