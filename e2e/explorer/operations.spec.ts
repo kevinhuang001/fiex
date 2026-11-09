@@ -104,7 +104,7 @@ test('folders offer copy, cut and duplicate in their correct context menu sectio
   await expect(page.getByRole('menuitem', { name: /^复制(?:\s|$)/ })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: /^剪切(?:\s|$)/ })).toBeVisible()
   await page.getByRole('menuitem', { name: '更多', exact: true }).click()
-  await expect(page.getByRole('menuitem', { name: '创建副本', exact: true })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /^创建副本(?:\s|$)/ })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '彻底删除', exact: true })).toBeVisible()
 })
 
