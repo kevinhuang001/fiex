@@ -35,7 +35,7 @@ fn revoking_a_derived_resource_invalidates_its_children_in_every_scope_clone() {
     let nested = directory.join("nested.txt");
     std::fs::write(&nested, b"data").unwrap();
 
-    let mut scope = Scope::selected(&root_path, &[root_path.clone()]).unwrap();
+    let mut scope = Scope::selected(&root_path, std::slice::from_ref(&root_path)).unwrap();
     let root_snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
         root_path.to_str().unwrap(),
         &root_path,
