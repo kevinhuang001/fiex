@@ -1,5 +1,5 @@
 import { useEntryDecorations } from './useEntryDecorations'
-import { cachePresentationPatch, cachePresentations, sameDecoration } from '@/lib/entryPresentation'
+import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
@@ -8,6 +8,11 @@ import { call, native, search } from '@/lib/api'
 import { openDirectoryStream, requestDirectoryRefresh } from '@/lib/listing'
 import { sameListing, sameStringSet, sameVisibleListing } from '@/lib/listingDiff'
 import { isVirtualResource } from '@/lib/files'
+import {
+  PaintedListingCache,
+  sameDirectoryDecorations,
+  sameListingMetadata,
+} from './paintedListingCache'
 import type {
   Entry,
   EntryDecoration,
@@ -17,34 +22,6 @@ import type {
   RemoteConnection,
 } from '@/lib/types'
 import type { Navigation } from './useNavigation'
-
-const MAX_PAINTED_DIRECTORIES = 32
-
-interface PaintedDirectorySnapshot {
-  listing: Listing
-  decorations: EntryDecoration[]
-  revision: number
-}
-
-function sameListingMetadata(previous: Listing, next: Listing): boolean {
-  return (
-    previous.path === next.path &&
-    sameStringSet(previous.allowedOps, next.allowedOps) &&
-    previous.virtualVolume === next.virtualVolume &&
-    previous.defaultView === next.defaultView &&
-    previous.warnings.length === next.warnings.length &&
-    previous.warnings.every((warning, index) => warning === next.warnings[index])
-  )
-}
-
-function sameDirectoryDecorations(previous: EntryDecoration[], next: EntryDecoration[]): boolean {
-  if (previous.length !== next.length) return false
-  const nextByPath = new Map(next.map((value) => [value.path, value]))
-  return previous.every((value) => {
-    const other = nextByPath.get(value.path)
-    return other !== undefined && sameDecoration(value, other)
-  })
-}
 
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and current-directory capabilities. Path, history and tab
@@ -102,7 +79,7 @@ export function useListing(
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
   const [renderedPath, setRenderedPath] = useState('')
-  const paintedByPath = useRef(new Map<string, PaintedDirectorySnapshot>())
+  const paintedByPath = useRef(new PaintedListingCache(32))
   const renderedPathRef = useRef('')
   const renderedKeyRef = useRef('')
   const request = useRef(0)
@@ -260,18 +237,8 @@ export function useListing(
         return sameDirectoryDecorations(oldValues, decorations) ? previous : next
       })
     }
-    const remember = (snapshot: PaintedDirectorySnapshot) => {
-      paintedByPath.current.delete(viewKey)
-      paintedByPath.current.set(viewKey, snapshot)
-      while (paintedByPath.current.size > MAX_PAINTED_DIRECTORIES) {
-        const oldest = paintedByPath.current.keys().next().value
-        if (oldest === undefined) break
-        paintedByPath.current.delete(oldest)
-      }
-    }
     if (paintedSnapshot) {
-      paintedByPath.current.delete(viewKey)
-      paintedByPath.current.set(viewKey, paintedSnapshot)
+      paintedByPath.current.touch(viewKey)
       if (
         renderedKeyRef.current !== viewKey ||
         !sameVisibleListing(
@@ -307,7 +274,7 @@ export function useListing(
           decorations: nextDecorations,
           revision: snapshot.revision,
         }
-        remember(paintedSnapshot)
+        paintedByPath.current.remember(viewKey, paintedSnapshot)
         cachePresentationPatch(paintedSnapshot.listing.entries, snapshot.decorations)
         publishPresentationIcons(paintedSnapshot.listing.entries, snapshot.presentationPending)
         if (snapshot.decorations.length) {
@@ -360,7 +327,7 @@ export function useListing(
         decorations: snapshot.decorations,
         revision: snapshot.revision,
       }
-      remember(paintedSnapshot)
+      paintedByPath.current.remember(viewKey, paintedSnapshot)
       applyDirectoryMetadata(stableListing, snapshot.decorations)
       if (
         renderedKeyRef.current !== viewKey ||
