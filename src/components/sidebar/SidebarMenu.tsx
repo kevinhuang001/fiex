@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
+import { setPlaceHidden } from '@/lib/places'
 import { Folder, Plug, Unplug, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import { MenuLayer } from '@/components/ui/MenuLayer'
@@ -31,25 +32,37 @@ export function SidebarMenu({
         className="context-menu sidebar-menu"
         role="menu"
         aria-label={
-          menu.kind === 'trash'
-            ? t(isWindows() ? '回收站' : '废纸篓')
+          menu.kind === 'place'
+            ? menu.name
             : menu.kind === 'favorite'
               ? t('收藏')
               : menu.name || t('设备')
         }
         style={menuPosition}
       >
-        {menu.kind === 'trash' ? (
+        {menu.kind === 'place' ? (
           <>
+            {menu.trash && (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  onTrash()
+                }}
+              >
+                <Folder size={14} />
+                {t(isWindows() ? '打开回收站' : '打开废纸篓')}
+              </button>
+            )}
             <button
               role="menuitem"
               onClick={() => {
+                update({ hiddenPlaces: setPlaceHidden(prefs.hiddenPlaces, menu.key, true) })
                 setMenu(null)
-                onTrash()
               }}
             >
-              <Folder size={14} />
-              {t(isWindows() ? '打开回收站' : '打开废纸篓')}
+              <X size={14} />
+              {t('从侧栏移除')}
             </button>
           </>
         ) : menu.kind === 'favorite' ? (

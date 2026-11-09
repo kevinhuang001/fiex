@@ -1,4 +1,4 @@
-import type { Group, Sort, View } from './types'
+import type { Group, Preferences, Sort, View } from './types'
 
 /** Per-folder presentation remembered across sessions. */
 export interface FolderViewState {
@@ -13,7 +13,7 @@ const LIMIT = 2000
 
 const views: View[] = ['list', 'icons', 'gallery', 'columns']
 const sorts: Sort[] = ['name', 'modified', 'size', 'kind']
-const groups: Group[] = ['none', 'kind', 'modified', 'size']
+const groups: Group[] = ['none', 'kind', 'modified', 'extension', 'size']
 
 function read(): Record<string, FolderViewState> {
   try {
@@ -37,12 +37,32 @@ export function loadFolderView(path: string): FolderViewState | null {
   if (!value || typeof value !== 'object') return null
   if (!views.includes(value.view) || !sorts.includes(value.sort) || !groups.includes(value.group))
     return null
+  const previousDefaults = value.group === 'none' && value.sort === 'name' && !value.descending
   return {
     view: value.view,
-    sort: value.sort,
-    descending: Boolean(value.descending),
-    group: value.group,
+    sort: previousDefaults ? 'modified' : value.sort,
+    descending: previousDefaults ? true : Boolean(value.descending),
+    group: previousDefaults ? 'modified' : value.group,
   }
+}
+
+/** Resolve a pane's current presentation from its folder record. Unvisited
+ * folders inherit the application defaults and provider-specific view. */
+export function folderViewPreferences(
+  prefs: Preferences,
+  path: string,
+  defaultView?: View | null,
+): Preferences {
+  const saved = loadFolderView(path)
+  return saved ? { ...prefs, ...saved } : { ...prefs, view: defaultView ?? prefs.view }
+}
+
+/** Apply only presentation fields to a folder record, retaining the rest. */
+export function patchFolderView(
+  current: Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>,
+  patch: Partial<Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>>,
+): FolderViewState {
+  return { ...current, ...patch }
 }
 
 export function saveFolderView(path: string, state: FolderViewState) {

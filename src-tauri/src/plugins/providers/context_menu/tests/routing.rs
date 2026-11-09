@@ -26,7 +26,7 @@ fn router_resolves_builtin_selection_and_execute_uses_its_snapshot() {
 }
 
 #[test]
-fn core_open_with_submenu_resolves_children_and_binds_the_picker_action() {
+fn core_open_with_is_a_direct_icon_action_that_opens_the_picker() {
     let (_temp, directory, paths) = temp_selection();
     let menus = super::query_core(&directory, &paths[..1], None).unwrap();
     let menu = menus
@@ -34,13 +34,19 @@ fn core_open_with_submenu_resolves_children_and_binds_the_picker_action() {
         .find(|menu| {
             menu["items"]
                 .as_array()
-                .is_some_and(|items| items.iter().any(|item| item["id"] == "openWith"))
+                .is_some_and(|items| items.iter().any(|item| item["id"] == "openWith-choose"))
         })
         .expect("single readable file should offer Open With");
     let session = menu["menuSessionId"].as_str().unwrap();
-    let children = super::children(session, "openWith").unwrap();
-    let items = children["items"].as_array().unwrap();
-    assert!(items.iter().any(|item| item["id"] == "openWith-choose"));
+    let open_with = menu["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "openWith-choose")
+        .unwrap();
+    assert_eq!(open_with["kind"], "action");
+    assert_eq!(open_with["icon"], "application-search");
+    assert_eq!(open_with["title"], "打开方式");
 
     let result = super::execute(session, "openWith-choose").unwrap();
     assert_eq!(result["kind"], "coreAction");

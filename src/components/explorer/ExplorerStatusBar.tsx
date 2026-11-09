@@ -1,7 +1,8 @@
 import { t, getLocale } from '@/i18n'
 import type { AppController } from '@/hooks/useAppController'
 import type { Entry } from '@/lib/types'
-import { isVirtualResource, size } from '@/lib/files'
+import { size } from '@/lib/files'
+import { terminalWorkingDirectory } from '@/lib/terminalPath'
 import { ListChecks, TerminalSquare, X } from 'lucide-react'
 export function ExplorerStatusBar({
   x,
@@ -43,10 +44,11 @@ export function ExplorerStatusBar({
             className="statusbar-terminal"
             title={t('打开终端')}
             aria-label={t('打开终端')}
-            disabled={isVirtualResource(x.path)}
             onClick={() =>
               window.dispatchEvent(
-                new CustomEvent('fiex:show-terminal-panel', { detail: { cwd: x.path } }),
+                new CustomEvent('fiex:show-terminal-panel', {
+                  detail: { cwd: terminalWorkingDirectory(x.path) },
+                }),
               )
             }
           >

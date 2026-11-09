@@ -22,6 +22,7 @@ import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, native } from '@/lib/api'
+import { folderViewPreferences, patchFolderView, saveFolderView } from '@/lib/folderView'
 import { Download, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -29,6 +30,34 @@ export default function App() {
   useLocale()
 
   const app = useAppController()
+  const leftPrefs = folderViewPreferences(app.prefs, app.left.path, app.left.defaultView)
+  const rightPrefs = folderViewPreferences(app.prefs, app.right.path, app.right.defaultView)
+  const updatePaneView =
+    (path: string, current: typeof app.prefs, otherPath: string, other: typeof app.prefs) =>
+    (patch: Partial<typeof app.prefs>) => {
+      const changesView =
+        'view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch
+      if (changesView) {
+        if (otherPath && otherPath !== path) saveFolderView(otherPath, patchFolderView(other, {}))
+        if (path) saveFolderView(path, patchFolderView(current, patch))
+      }
+      app.update(patch)
+    }
+  const updateLeftView = updatePaneView(app.left.path, leftPrefs, app.right.path, rightPrefs)
+  const updateRightView = updatePaneView(app.right.path, rightPrefs, app.left.path, leftPrefs)
+  const activePrefs = app.active === 'right' ? rightPrefs : leftPrefs
+  const updateActiveView = app.active === 'right' ? updateRightView : updateLeftView
+  const updateToolbarView = (patch: Partial<typeof app.prefs>) => {
+    const changesOrdering = 'sort' in patch || 'descending' in patch || 'group' in patch
+    if (!changesOrdering) {
+      updateActiveView(patch)
+      return
+    }
+    if (app.left.path) saveFolderView(app.left.path, patchFolderView(leftPrefs, patch))
+    if (app.right.path && app.right.path !== app.left.path)
+      saveFolderView(app.right.path, patchFolderView(rightPrefs, patch))
+    app.update(patch)
+  }
   usePluginTasks()
   useEffect(() => {
     if (!app.x.error) return
@@ -38,6 +67,11 @@ export default function App() {
 
   useEffect(() => {
     warmFilePickerData()
+  }, [])
+  useEffect(() => {
+    const suppressNativeContextMenu = (event: MouseEvent) => event.preventDefault()
+    window.addEventListener('contextmenu', suppressNativeContextMenu)
+    return () => window.removeEventListener('contextmenu', suppressNativeContextMenu)
   }, [])
   const pluginViewOf = (path: string) =>
     /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
@@ -94,6 +128,8 @@ export default function App() {
         {!fullView && (
           <ExplorerToolbar
             {...app}
+            prefs={activePrefs}
+            update={updateToolbarView}
             split={app.split}
             onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
           />
@@ -135,8 +171,8 @@ export default function App() {
               <FileViews
                 trashPath={app.trashPath}
                 explorer={app.left}
-                prefs={app.prefs}
-                updatePrefs={app.update}
+                prefs={leftPrefs}
+                updatePrefs={updateLeftView}
                 onOpen={app.openLeft}
                 onPreview={(entry) => app.previewEntry(entry, app.left)}
                 onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
@@ -154,7 +190,7 @@ export default function App() {
         {!fullView && app.split && (
           <SecondaryPane
             explorer={app.right}
-            prefs={app.prefs}
+            prefs={rightPrefs}
             active={app.active === 'right'}
             onFocus={() => app.setActive('right')}
             onClose={() => app.closePane('right')}
@@ -165,7 +201,7 @@ export default function App() {
             onBlankMenu={(mx, my) => app.setMenu({ entry: null, x: mx, y: my })}
             dragPaths={app.selectedAll}
             displayName={app.displayName}
-            updatePrefs={app.update}
+            updatePrefs={updateRightView}
             width={app.paneWidth}
             onWidthChange={app.setPaneWidth}
           />

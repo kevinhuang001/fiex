@@ -1,5 +1,37 @@
-import { describe, expect, it } from 'vitest'
-import { activityEta, formatRemaining } from './activity'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  ACTIVITY_REVEAL_DELAY_MS,
+  activityEta,
+  formatRemaining,
+  scheduleActivityReveal,
+} from './activity'
+
+describe('delayed activity centre reveal', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('waits one second before revealing a still-running task', () => {
+    vi.useFakeTimers()
+    const reveal = vi.fn()
+    const timer = scheduleActivityReveal(() => true, reveal)
+
+    vi.advanceTimersByTime(ACTIVITY_REVEAL_DELAY_MS - 1)
+    expect(reveal).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(reveal).toHaveBeenCalledOnce()
+    clearTimeout(timer)
+  })
+
+  it('does not reveal a task that finished before the delay', () => {
+    vi.useFakeTimers()
+    let running = true
+    const reveal = vi.fn()
+    scheduleActivityReveal(() => running, reveal)
+    running = false
+
+    vi.advanceTimersByTime(ACTIVITY_REVEAL_DELAY_MS)
+    expect(reveal).not.toHaveBeenCalled()
+  })
+})
 
 describe('activity progress formatting', () => {
   it('formats seconds, minutes and hours', () => {

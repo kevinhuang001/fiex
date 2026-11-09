@@ -72,8 +72,8 @@ export function TerminalPanel({
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ cwd?: string }>).detail
-      const cwd = detail?.cwd || lastCwd.current
-      if (cwd) lastCwd.current = cwd
+      const cwd = typeof detail?.cwd === 'string' ? detail.cwd : lastCwd.current
+      lastCwd.current = cwd
       const id = crypto.randomUUID()
       const number = nextNumber.current++
       setTabs((values) => [
@@ -90,10 +90,10 @@ export function TerminalPanel({
   useEffect(() => {
     const show = (event: Event) => {
       const detail = (event as CustomEvent<{ cwd?: string }>).detail
-      const cwd = detail?.cwd || lastCwd.current
-      if (cwd) lastCwd.current = cwd
+      const cwd = typeof detail?.cwd === 'string' ? detail.cwd : lastCwd.current
+      lastCwd.current = cwd
       if (tabs.length) {
-        setOpen((value) => !value)
+        setOpen(true)
         setShellMenu(false)
         setSettingsMenu(false)
         if (!active || !tabs.some((tab) => tab.id === active)) setActive(tabs[tabs.length - 1].id)

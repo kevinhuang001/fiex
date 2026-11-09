@@ -93,9 +93,15 @@ export function Places({
                 : x.navigate(location.path)
           }
           onContextMenu={(event) => {
-            if (location.kind !== 'trash') return
             event.preventDefault()
-            setMenu({ kind: 'trash', x: event.clientX, y: event.clientY })
+            setMenu({
+              kind: 'place',
+              x: event.clientX,
+              y: event.clientY,
+              key: location.path || location.name,
+              name: location.name,
+              trash: location.kind === 'trash',
+            })
           }}
           data-drop-folder={
             location.kind === 'trash' || location.kind === 'recent'

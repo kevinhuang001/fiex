@@ -4,7 +4,7 @@ import type { Explorer } from '@/hooks/useExplorer'
 import { PathToolbar } from './PathToolbar'
 
 describe('PathToolbar drop target', () => {
-  it('keeps the up button outside the breadcrumb drop highlight', () => {
+  it('keeps the up button and breadcrumb separators outside the drop highlight', () => {
     const x = {
       path: '/Users/kevin/Documents',
       up: vi.fn(),
@@ -40,6 +40,9 @@ describe('PathToolbar drop target', () => {
     )
 
     expect(markup).toMatch(/<div class="path-toolbar"><button[^>]*>/)
-    expect(markup).toMatch(/<nav class="breadcrumbs" data-drop-folder="\/Users\/kevin\/Documents"/)
+    expect(markup).toMatch(/<nav class="breadcrumbs" aria-label="Path">/)
+    expect(markup).toContain('<span><svg')
+    expect(markup).toMatch(/<button[^>]*data-drop-folder="\/Users\/kevin"/)
+    expect(markup).not.toContain('<span data-drop-folder=')
   })
 })

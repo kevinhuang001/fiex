@@ -69,7 +69,7 @@ function terminalTheme() {
 function terminalFontFamily(terminalFont?: string) {
   return [
     terminalFont,
-    'JetBrainsMono Nerd Font',
+    'JetBrainsMono Nerd Font Mono',
     'MesloLGS NF',
     'Hack Nerd Font',
     'FiraCode Nerd Font',
@@ -96,7 +96,7 @@ export function TerminalView({
   cwd?: string
   shell?: string
   name: string
-  /** A system font family chosen in Settings; Nerd Font names are supported. */
+  /** A system font or the bundled Nerd Font chosen in Settings. */
   terminalFont?: string
   terminalFontSize?: number
 }) {

@@ -42,10 +42,14 @@ describe('normalizeListColumns', () => {
 })
 
 describe('listGridTemplate', () => {
-  it('keeps the name column flexible and pins the trailing widths', () => {
+  it('keeps the saved column widths when the pane is wide enough', () => {
     expect(listGridTemplate({ modified: 155, size: 75, kind: 108 })).toBe(
       `minmax(${LIST_COLUMNS_DEFAULT.name}px, 1fr) 155px 75px 108px`,
     )
+  })
+
+  it('compresses all columns to fit a narrow split pane', () => {
+    expect(listGridTemplate(LIST_COLUMNS_DEFAULT, 556)).toBe('minmax(213px, 1fr) 127px 61px 88px')
   })
 })
 

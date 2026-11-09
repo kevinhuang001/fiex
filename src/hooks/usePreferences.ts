@@ -11,16 +11,17 @@ import {
 } from '@/lib/shortcuts'
 import { TAG_PRESETS, normalizeTags } from '@/lib/tags'
 import { LIST_COLUMNS_DEFAULT, normalizeListColumns } from '@/lib/listColumns'
-import type { Preferences, SidebarSection } from '@/lib/types'
+import { BUILTIN_TERMINAL_FONT } from '@/lib/terminalFonts'
+import type { Group, Preferences, SidebarSection, Sort } from '@/lib/types'
 import { useEffect, useState } from 'react'
 
 function defaultsFor(style: ShortcutStyle): Preferences {
   return {
     locale: getLocale(),
     view: 'list',
-    group: 'none',
-    sort: 'name',
-    descending: false,
+    group: 'modified',
+    sort: 'modified',
+    descending: true,
     hidden: false,
     terminal: 'default',
     ide: 'vscode',
@@ -29,7 +30,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     backgroundImage: '',
     backgroundOpacity: 0.6,
     fontSize: 11,
-    terminalFont: '',
+    terminalFont: BUILTIN_TERMINAL_FONT,
     terminalFontSize: 13,
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
@@ -54,19 +55,53 @@ function isStyle(value: unknown): value is ShortcutStyle {
   return value === 'mac' || value === 'win' || value === 'linux'
 }
 
+function isGroup(value: unknown): value is Group {
+  return (
+    value === 'none' ||
+    value === 'kind' ||
+    value === 'modified' ||
+    value === 'extension' ||
+    value === 'size'
+  )
+}
+
+function isSort(value: unknown): value is Sort {
+  return value === 'name' || value === 'modified' || value === 'size' || value === 'kind'
+}
+
 function load(input?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
     const stored = input ?? {}
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
+    const previousDefaults =
+      stored.group === 'none' && stored.sort === 'name' && stored.descending === false
+    const group = previousDefaults
+      ? fallback.group
+      : isGroup(stored.group)
+        ? stored.group
+        : fallback.group
+    const sort = previousDefaults
+      ? fallback.sort
+      : isSort(stored.sort)
+        ? stored.sort
+        : fallback.sort
+    const descending = previousDefaults
+      ? fallback.descending
+      : typeof stored.descending === 'boolean'
+        ? stored.descending
+        : fallback.descending
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
     const backgroundOpacity =
       typeof stored.backgroundOpacity === 'number'
         ? Math.min(1, Math.max(0.05, stored.backgroundOpacity))
         : fallback.backgroundOpacity
-    const terminalFont = typeof stored.terminalFont === 'string' ? stored.terminalFont : ''
+    const terminalFont =
+      typeof stored.terminalFont === 'string' && stored.terminalFont
+        ? stored.terminalFont
+        : BUILTIN_TERMINAL_FONT
     const terminalFontSize =
       typeof stored.terminalFontSize === 'number'
         ? Math.min(24, Math.max(9, stored.terminalFontSize))
@@ -90,6 +125,9 @@ function load(input?: Partial<Preferences>): Preferences {
       ...fallback,
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
       locale: normalizeLocale(stored.locale),
+      group,
+      sort,
+      descending,
       tags,
       listColumns: normalizeListColumns(stored.listColumns),
       startPage,

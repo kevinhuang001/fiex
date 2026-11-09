@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { scheduleActivityReveal } from '@/lib/activity'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import type { OperationProgress } from '@/lib/types'
@@ -33,6 +34,7 @@ let open = false
 let seq = 0
 const listeners = new Set<() => void>()
 const cancellers = new Map<string, () => void>()
+const revealTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function load(): ActivityItem[] {
   try {
@@ -107,11 +109,20 @@ export function beginActivity(
     },
     ...items,
   ].slice(0, LIMIT)
-  // Transfers and syncs surface their progress; other operations stay in
-  // history without covering the window. A quiet activity is recorded for
-  // history but does not open the panel.
+  // Surface progress only if the operation is still running after one second.
+  // Quiet activities stay in history without opening the panel.
   if (reveal && (kind === 'transfer' || kind === 'delete' || kind === 'sync' || kind === 'plugin'))
-    open = true
+    revealTimers.set(
+      id,
+      scheduleActivityReveal(
+        () => items.some((item) => item.id === id && item.status === 'running'),
+        () => {
+          revealTimers.delete(id)
+          open = true
+          emit()
+        },
+      ),
+    )
   if (cancel) cancellers.set(id, cancel)
   persist()
   emit()
@@ -162,6 +173,9 @@ export function progressChannel(id: string): Channel<OperationProgress> {
 }
 
 export function cancelActivity(id: string) {
+  const revealTimer = revealTimers.get(id)
+  if (revealTimer) clearTimeout(revealTimer)
+  revealTimers.delete(id)
   cancellers.get(id)?.()
   cancellers.delete(id)
   items = items.map((item) =>
@@ -178,6 +192,9 @@ export function isCancellable(id: string) {
 }
 
 export function finishActivity(id: string, error?: string, detail?: string) {
+  const revealTimer = revealTimers.get(id)
+  if (revealTimer) clearTimeout(revealTimer)
+  revealTimers.delete(id)
   cancellers.delete(id)
   items = items.map((item) =>
     item.id === id

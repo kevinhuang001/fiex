@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { FileIcon } from '../../FileIcon'
 import { DecoratedValue, NameCell, rowVars } from './shared'
@@ -46,9 +46,23 @@ export function ListView({
   // A drag previews locally and commits once on release, so moving the divider
   // never writes preferences on every pointer event.
   const [draft, setDraft] = useState<ListColumns | null>(null)
+  const [availableWidth, setAvailableWidth] = useState(0)
   const drag = useRef<{ startX: number; columns: ListColumns; key: ListColumnKey } | null>(null)
   const widths = draft ?? columns
-  const template = listGridTemplate(widths)
+  const template = listGridTemplate(widths, availableWidth)
+  const header = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const area = header.current?.parentElement
+    if (!area) return
+    const measure = () => {
+      // listGridTemplate reserves the file-area padding and grid gaps itself.
+      setAvailableWidth(area.clientWidth)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(area)
+    return () => observer.disconnect()
+  }, [])
   const beginDrag = (key: ListColumnKey, event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -120,7 +134,12 @@ export function ListView({
   }
   return (
     <>
-      <div className="list-header" style={{ gridTemplateColumns: template }} role="row">
+      <div
+        ref={header}
+        className="list-header"
+        style={{ gridTemplateColumns: template }}
+        role="row"
+      >
         <span className="list-col" role="columnheader" aria-sort={ariaSort('name')}>
           {sortButton('name', t('名称'))}
           {resizer('name')}

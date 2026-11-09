@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { commonPlaces as getCommonPlaces } from '@/lib/places'
+import { commonPlaces as getCommonPlaces, setPlaceHidden } from '@/lib/places'
 import type { Location, Preferences, SidebarSection } from '@/lib/types'
 import {
   AppWindow,
@@ -223,9 +223,7 @@ export function SidebarSettings({
               ? undefined
               : () =>
                   update({
-                    hiddenPlaces: hidden
-                      ? prefs.hiddenPlaces.filter((item) => item !== key)
-                      : [...prefs.hiddenPlaces, key],
+                    hiddenPlaces: setPlaceHidden(prefs.hiddenPlaces, key, !hidden),
                   })
           }
         />

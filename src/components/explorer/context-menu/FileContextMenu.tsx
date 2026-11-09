@@ -13,6 +13,7 @@ import {
   Eye,
   Info,
   AppWindow,
+  ListPlus,
   Pencil,
   PinOff,
   RotateCcw,
@@ -29,6 +30,7 @@ import {
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { OpenWithPicker } from './OpenWithPicker'
 import { useContextMenu } from './useContextMenu'
+import { hasTopLevelMenuActions } from './menuVisibility'
 import { executeCoreMenu } from './execute'
 import type { CoreMenu, CoreMenuItem } from './useContextMenu'
 import type { ContextMenuProps } from './types'
@@ -75,6 +77,32 @@ export function FileContextMenu(props: ContextMenuProps) {
   } = useContextMenu(props)
   const [openCoreChild, setOpenCoreChild] = useState<string | null>(null)
   const setError = x.setError
+  const hasCoreActions = hasTopLevelMenuActions(menus)
+  const hasPluginActions = hasTopLevelMenuActions(pluginMenus)
+  const hasWorkspaceAction = paths.length > 0
+  useEffect(() => {
+    if (
+      menu &&
+      ready &&
+      !error &&
+      !pluginLoading &&
+      !pluginError &&
+      !hasCoreActions &&
+      !hasPluginActions &&
+      !hasWorkspaceAction
+    )
+      setMenu(null)
+  }, [
+    menu,
+    ready,
+    error,
+    pluginLoading,
+    pluginError,
+    hasCoreActions,
+    hasPluginActions,
+    hasWorkspaceAction,
+    setMenu,
+  ])
   useEffect(() => {
     // Menu resolution errors use the one modal error channel, never an inline
     // row that would resize the popup.
@@ -93,6 +121,9 @@ export function FileContextMenu(props: ContextMenuProps) {
   // top-level height instead of growing as providers answer.
   if (!ready) return null
   if (error) return null
+  if (!hasCoreActions && pluginLoading && !hasWorkspaceAction) return null
+  if (!hasCoreActions && !pluginLoading && !pluginError && !hasPluginActions && !hasWorkspaceAction)
+    return null
   const render = (group: CoreMenu, item: CoreMenuItem) => {
     if (item.kind === 'separator')
       return <div key={item.id} role="separator" className="context-divider" />
@@ -152,16 +183,30 @@ export function FileContextMenu(props: ContextMenuProps) {
                 .map((item) => render(group, item)),
             )}
           </SubmenuGroupContext.Provider>
-          <PluginContextActions
-            paths={paths}
-            path={x.path}
-            menus={pluginMenus}
-            loading={pluginLoading}
-            error={pluginError}
-            onRetry={retryPlugins}
-            onClose={() => setMenu(null)}
-            onError={x.setError}
-          />
+          {hasWorkspaceAction && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setMenu(null)
+                void props.addWorkspace(paths).then(() => props.workspace.setOpen(true))
+              }}
+            >
+              <ListPlus />
+              {t('添加到工作区')}
+            </button>
+          )}
+          {(pluginLoading || pluginError || hasPluginActions) && (
+            <PluginContextActions
+              paths={paths}
+              path={x.path}
+              menus={pluginMenus}
+              loading={pluginLoading}
+              error={pluginError}
+              onRetry={retryPlugins}
+              onClose={() => setMenu(null)}
+              onError={x.setError}
+            />
+          )}
           <SubmenuGroupContext.Provider
             value={{ openId: openCoreChild, setOpenId: setOpenCoreChild }}
           >

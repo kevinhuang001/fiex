@@ -1605,8 +1605,6 @@ body.resizing-terminal {
   right: 0;
   bottom: 28px;
   z-index: 30;
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
   display: grid;
   width: 240px;
   gap: 12px;
@@ -1622,17 +1620,69 @@ body.resizing-terminal {
   color: var(--text);
   font-size: 11px;
 }
-.terminal-settings-menu select,
 .terminal-settings-menu input[type='range'] {
   width: 100%;
 }
-.terminal-settings-menu select {
+.terminal-font-picker {
+  position: relative;
+}
+.terminal-font-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   min-width: 0;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 5px;
   background: var(--canvas);
   color: var(--text);
+  text-align: left;
+  font-size: 11px;
+}
+.terminal-font-picker-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-font-picker-trigger svg {
+  flex: 0 0 auto;
+}
+.terminal-font-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 31;
+  display: grid;
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.terminal-font-options button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 4px;
+  text-align: left;
+  font-size: 11px;
+}
+.terminal-font-options button:hover,
+.terminal-font-options button[aria-selected='true'] {
+  background: var(--control-hover-background);
+}
+.terminal-font-options button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .terminal-shell-menu {
   position: absolute;
