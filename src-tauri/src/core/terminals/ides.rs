@@ -56,12 +56,12 @@ fn windows_ide_executable(id: &str) -> Option<std::path::PathBuf> {
 
     let app_paths = format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{executable}");
     for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
-        if let Ok(key) = RegKey::predef(hive).open_subkey(&app_paths) {
-            if let Ok(value) = key.get_value::<String, _>("") {
-                let path = std::path::PathBuf::from(value.trim().trim_matches('"'));
-                if path.is_file() {
-                    return Some(path);
-                }
+        if let Ok(key) = RegKey::predef(hive).open_subkey(&app_paths)
+            && let Ok(value) = key.get_value::<String, _>("")
+        {
+            let path = std::path::PathBuf::from(value.trim().trim_matches('"'));
+            if path.is_file() {
+                return Some(path);
             }
         }
     }
