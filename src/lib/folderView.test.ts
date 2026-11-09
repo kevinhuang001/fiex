@@ -4,6 +4,7 @@ import {
   folderViewPreferences,
   loadFolderView,
   patchFolderView,
+  saveActiveFolderView,
   saveFolderView,
 } from './folderView'
 
@@ -66,5 +67,35 @@ describe('folderView', () => {
         { sort: 'name' },
       ),
     ).toEqual({ view: 'list', sort: 'name', descending: true, group: 'modified' })
+  })
+
+  it('applies toolbar sorting only to the focused pane folder', () => {
+    vi.stubGlobal('localStorage', storage)
+    const left = {
+      view: 'list',
+      sort: 'name',
+      descending: false,
+      group: 'kind',
+    } as const
+    const right = {
+      view: 'icons',
+      sort: 'modified',
+      descending: true,
+      group: 'modified',
+    } as const
+    saveFolderView('/tmp/left', left)
+    saveFolderView('/tmp/right', right)
+
+    saveActiveFolderView(
+      'right',
+      {
+        left: { path: '/tmp/left', preferences: left },
+        right: { path: '/tmp/right', preferences: right },
+      },
+      { sort: 'size', descending: false },
+    )
+
+    expect(loadFolderView('/tmp/left')).toEqual(left)
+    expect(loadFolderView('/tmp/right')).toEqual({ ...right, sort: 'size', descending: false })
   })
 })

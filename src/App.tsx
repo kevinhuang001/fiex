@@ -22,7 +22,12 @@ import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, native } from '@/lib/api'
-import { folderViewPreferences, patchFolderView, saveFolderView } from '@/lib/folderView'
+import {
+  folderViewPreferences,
+  patchFolderView,
+  saveActiveFolderView,
+  saveFolderView,
+} from '@/lib/folderView'
 import { Download, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -53,9 +58,14 @@ export default function App() {
       updateActiveView(patch)
       return
     }
-    if (app.left.path) saveFolderView(app.left.path, patchFolderView(leftPrefs, patch))
-    if (app.right.path && app.right.path !== app.left.path)
-      saveFolderView(app.right.path, patchFolderView(rightPrefs, patch))
+    saveActiveFolderView(
+      app.active,
+      {
+        left: { path: app.left.path, preferences: leftPrefs },
+        right: { path: app.right.path, preferences: rightPrefs },
+      },
+      patch,
+    )
     app.update(patch)
   }
   usePluginTasks()

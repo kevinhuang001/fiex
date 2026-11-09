@@ -65,6 +65,26 @@ export function patchFolderView(
   return { ...current, ...patch }
 }
 
+/** Persist a toolbar change for the focused folder and pin the other pane's
+ *  current view before the shared preference defaults change. */
+export function saveActiveFolderView(
+  active: 'left' | 'right',
+  panes: Record<
+    'left' | 'right',
+    {
+      path: string
+      preferences: Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>
+    }
+  >,
+  patch: Partial<Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>>,
+) {
+  const pane = panes[active]
+  const other = panes[active === 'left' ? 'right' : 'left']
+  if (other.path && other.path !== pane.path)
+    saveFolderView(other.path, patchFolderView(other.preferences, {}))
+  if (pane.path) saveFolderView(pane.path, patchFolderView(pane.preferences, patch))
+}
+
 export function saveFolderView(path: string, state: FolderViewState) {
   if (!path) return
   const values = read()

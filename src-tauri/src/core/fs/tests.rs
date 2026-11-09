@@ -194,6 +194,44 @@ fn keep_both_copy_in_source_parent_creates_a_suffixed_sibling() {
 }
 
 #[test]
+fn duplicate_directory_in_source_parent_creates_a_suffixed_sibling() {
+    let parent = tempfile::tempdir().unwrap();
+    let source = parent.path().join("assets");
+    std::fs::create_dir_all(source.join("nested")).unwrap();
+    std::fs::write(source.join("nested/image.png"), b"image bytes").unwrap();
+    let source_path = source.to_string_lossy().into_owned();
+    let destination = parent.path().to_string_lossy().into_owned();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+
+    let result = transfer(
+        &[source_path],
+        &destination,
+        false,
+        true,
+        &[],
+        &[],
+        &cancel,
+        &|_, _, _| {},
+    )
+    .unwrap();
+
+    assert!(result.errors.is_empty(), "{:?}", result.errors);
+    assert_eq!(
+        result.paths,
+        vec![parent
+            .path()
+            .join("assets (2)")
+            .to_string_lossy()
+            .into_owned()]
+    );
+    assert!(source.join("nested/image.png").is_file());
+    assert_eq!(
+        std::fs::read(parent.path().join("assets (2)/nested/image.png")).unwrap(),
+        b"image bytes"
+    );
+}
+
+#[test]
 fn cancelled_multi_file_copy_rolls_back_committed_destinations() {
     use std::sync::atomic::{AtomicBool, Ordering};
     let source = tempfile::tempdir().unwrap();
