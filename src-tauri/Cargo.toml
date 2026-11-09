@@ -60,6 +60,7 @@ fiex-trash = { path = "crates/builtins/fiex-trash" }
 fiex-info = { path = "crates/builtins/fiex-info" }
 fiex-preview = { path = "crates/builtins/fiex-preview" }
 fiex-decorations = { path = "crates/builtins/fiex-decorations" }
+fiex-scope-policy = { path = "crates/foundation/fiex-scope-policy" }
 fiex-actions = { path = "crates/builtins/fiex-actions" }
 fiex-local-fs = { path = "crates/builtins/fiex-local-fs" }
 fiex-usb-fs = { path = "crates/builtins/fiex-usb-fs", optional = true, default-features = false }

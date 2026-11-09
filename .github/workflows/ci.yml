@@ -12,6 +12,18 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  scope-policy-verification:
+    name: Formal scope policy proofs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify bounded authorization invariants
+        uses: model-checking/kani-github-action@v1
+        with:
+          kani-version: '0.68.0'
+          command: cargo-kani
+          args: '--manifest-path src-tauri/crates/foundation/fiex-scope-policy/Cargo.toml --output-format terse'
+
   checks:
     name: Frontend and UI tests
     runs-on: ubuntu-latest

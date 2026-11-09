@@ -2,12 +2,13 @@ import { useEntryDecorations } from './useEntryDecorations'
 import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { t, getLocale } from '@/i18n'
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { call, native, search } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { openDirectoryStream, requestDirectoryRefresh } from '@/lib/listing'
-import { sameListing, sameStringSet, sameVisibleListing } from '@/lib/listingDiff'
+import { sameStringSet, sameVisibleListing } from '@/lib/listingDiff'
 import { isVirtualResource } from '@/lib/files'
+import { useListingSearch } from './useListingSearch'
 import {
   PaintedListingCache,
   sameDirectoryDecorations,
@@ -36,8 +37,6 @@ export function useListing(
   const {
     path,
     query,
-    globalSearch,
-    searchMode,
     history,
     navigate,
     setSelected,
@@ -60,8 +59,6 @@ export function useListing(
     null,
   )
   const [loading, setLoading] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const [searchStats, setSearchStats] = useState('')
   const [revalidation, setRevalidation] = useState(0)
   const [searchRefresh, setSearchRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -84,8 +81,16 @@ export function useListing(
   const renderedKeyRef = useRef('')
   const request = useRef(0)
   const locationsRequest = useRef(0)
-  const searchRequest = useRef(0)
-  const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const { searching, searchStats } = useListingSearch({
+    enabled,
+    pane,
+    path,
+    prefs,
+    nav,
+    refresh: searchRefresh,
+    setEntries,
+    setLoading,
+  })
   const reload = useCallback(() => {
     if (query.trim()) setSearchRefresh((value) => value + 1)
     else requestDirectoryRefresh([path])
@@ -430,99 +435,6 @@ export function useListing(
       cleanup?.()
     }
   }, [enabled, native, path, query])
-  useEffect(() => {
-    if (!enabled || !path) return
-    const generation = ++searchRequest.current
-    const cancel = () => {
-      cancelQueue.current = cancelQueue.current
-        .then(() => call('cancel_search', { pane }))
-        .catch(() => {})
-      return cancelQueue.current
-    }
-    const cancelled = cancel()
-    if (!query.trim()) {
-      setSearching(false)
-      setSearchStats('')
-      return
-    }
-    setSearching(true)
-    setLoading(false)
-    setEntries([])
-    setSelected([])
-    setError('')
-    const root = globalSearch ? 'everywhere://' : path
-    // A Core-owned virtual root only has an in-process entry set; local search
-    // providers cannot enumerate it, so the engine stays builtin.
-    const engine = 'auto'
-    const timer = setTimeout(() => {
-      void cancelled
-        .then(() => {
-          if (generation !== searchRequest.current) return
-          return search(
-            pane,
-            root,
-            query,
-            prefs.hidden,
-            prefs.displayIgnore,
-            searchMode,
-            engine,
-            (b) => {
-              if (generation !== searchRequest.current) return
-              if (b.replace) {
-                // Virtual-folder results are complete snapshots.
-                startTransition(() =>
-                  setEntries((previous) =>
-                    sameListing(previous, b.entries) ? previous : b.entries,
-                  ),
-                )
-              } else if (b.entries.length) {
-                startTransition(() =>
-                  setEntries((previous) => {
-                    const merged = new Map(previous.map((entry) => [entry.path, entry]))
-                    let changed = false
-                    for (const entry of b.entries) {
-                      if (JSON.stringify(merged.get(entry.path)) !== JSON.stringify(entry)) {
-                        merged.set(entry.path, entry)
-                        changed = true
-                      }
-                    }
-                    return changed ? [...merged.values()] : previous
-                  }),
-                )
-              }
-              if (b.done) {
-                setSearching(false)
-                const warning = b.warning ? `${b.warning} · ` : ''
-                setSearchStats(
-                  `${warning}${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
-                )
-              }
-            },
-          )
-        })
-        .catch((e) => {
-          if (generation === searchRequest.current) {
-            setError(String(e))
-            setSearching(false)
-          }
-        })
-    }, 200)
-    return () => {
-      clearTimeout(timer)
-      ++searchRequest.current
-      void cancel()
-    }
-  }, [
-    enabled,
-    pane,
-    query,
-    globalSearch,
-    path,
-    searchMode,
-    prefs.hidden,
-    prefs.displayIgnore,
-    searchRefresh,
-  ])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])

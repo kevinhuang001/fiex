@@ -2,6 +2,7 @@
 /// existing parent so a symlinked parent cannot change the selected target.
 use super::*;
 use fiex_provider_contracts::FsOperation;
+use fiex_scope_policy::{method_denial, MethodDenial};
 
 #[derive(Clone)]
 struct MappedResourceBinding {
@@ -212,35 +213,16 @@ impl Scope {
             }))
     }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
-        if method.starts_with("fs.") {
-            return Err("unsupported filesystem method namespace".into());
+        match method_denial(method, self.metadata_only, self.read_only) {
+            Some(MethodDenial::UnsupportedFilesystemNamespace) => {
+                Err("unsupported filesystem method namespace".into())
+            }
+            Some(MethodDenial::ReadOnly) => {
+                Err("PermissionDenied: view does not support writes".into())
+            }
+            Some(MethodDenial::MetadataOnly) => Err("discovery scope permits metadata only".into()),
+            None => Ok(()),
         }
-        if self.read_only
-            && matches!(
-                method,
-                "host.fs.mkdir"
-                    | "host.fs.seekWrite"
-                    | "host.fs.beginWrite"
-                    | "host.fs.writeChunk"
-                    | "host.fs.writeBuffer"
-                    | "host.fs.commit"
-                    | "host.fs.remove"
-                    | "host.fs.trash"
-                    | "host.fs.rename"
-                    | "host.process.run"
-                    | "host.vfs.openView"
-            )
-        {
-            return Err("PermissionDenied: view does not support writes".into());
-        }
-        if self.metadata_only
-            && ((method.starts_with("host.fs.")
-                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
-                || matches!(method, "host.process.run" | "host.vfs.openView"))
-        {
-            return Err("discovery scope permits metadata only".into());
-        }
-        Ok(())
     }
     pub fn selected_paths(&self) -> Vec<PathBuf> {
         self.allowed
