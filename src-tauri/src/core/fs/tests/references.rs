@@ -27,20 +27,21 @@ fn revoking_a_derived_resource_invalidates_its_children_in_every_scope_clone() {
     use crate::plugins::contracts::ResourceMetadata;
 
     let root = tempfile::tempdir().unwrap();
-    let directory = root.path().join("directory");
+    // Scope canonicalizes its root (for example, macOS temp paths may be
+    // exposed through /var while the resolved directory is under /private/var).
+    let root_path = dunce::canonicalize(root.path()).unwrap();
+    let directory = root_path.join("directory");
     std::fs::create_dir(&directory).unwrap();
     let nested = directory.join("nested.txt");
     std::fs::write(&nested, b"data").unwrap();
 
-    let mut scope = Scope::selected(root.path(), &[root.path().to_path_buf()]).unwrap();
+    let mut scope = Scope::selected(&root_path, &[root_path.clone()]).unwrap();
     let root_snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
-        root.path().to_str().unwrap(),
-        root.path(),
+        root_path.to_str().unwrap(),
+        &root_path,
     );
     let root_target = json!({"ref":root_snapshot.reference,"metadata":root_snapshot.metadata()});
-    scope
-        .bind_resource(&root_target, Some(root.path()))
-        .unwrap();
+    scope.bind_resource(&root_target, Some(&root_path)).unwrap();
 
     let directory_ref = scope
         .issue_child(

@@ -58,7 +58,7 @@ function infoSection(
   pluginId?: string,
 ): FixtureInfoSection {
   return {
-    id: `${providerId}::${sectionId}`,
+    id: sectionId,
     title,
     providerId,
     provider,
