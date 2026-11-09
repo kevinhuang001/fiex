@@ -6,6 +6,7 @@ import { FileIcon } from './FileIcon'
 import { tagHex } from '@/lib/tags'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
+import { parseInfoFieldDelta } from '@/lib/ipcValidation'
 import type { Entry } from '@/lib/types'
 import { Channel } from '@tauri-apps/api/core'
 
@@ -36,8 +37,8 @@ type InfoFieldUpdate = {
   value?: string
   error?: string
 }
-type InfoFieldDelta = { sessionId: string; revision: number; updates: InfoFieldUpdate[] }
-type InfoOpenResult = { sessionId: string; sections: InfoSection[] }
+export type InfoFieldDelta = { sessionId: string; revision: number; updates: InfoFieldUpdate[] }
+export type InfoOpenResult = { sessionId: string; sections: InfoSection[] }
 
 function mergeFieldUpdates(sections: InfoSection[], updates: InfoFieldUpdate[]) {
   if (!updates.length) return sections
@@ -81,10 +82,17 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     setSections([])
     setLoading(true)
     earlyUpdates.current.clear()
-    const onUpdate = native ? new Channel<InfoFieldDelta>() : undefined
+    const onUpdate = native ? new Channel<unknown>() : undefined
     if (onUpdate)
-      onUpdate.onmessage = (delta) => {
-        if (!alive || !Array.isArray(delta?.updates)) return
+      onUpdate.onmessage = (raw) => {
+        if (!alive) return
+        let delta: InfoFieldDelta
+        try {
+          delta = parseInfoFieldDelta(raw)
+        } catch (cause) {
+          reportError(cause, 'file-info:ipc')
+          return
+        }
         for (const update of delta.updates) {
           earlyUpdates.current.set(
             `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
@@ -95,7 +103,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
       }
     const open = async () => {
       try {
-        const result = await call<InfoOpenResult>('file_info_open', {
+        const result = await call('file_info_open', {
           path: info.path,
           ...(onUpdate ? { onUpdate } : {}),
         })
@@ -148,7 +156,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
       ),
     )
     try {
-      const result = await call<InfoFieldDelta>('file_info_compute', {
+      const result = await call('file_info_compute', {
         sessionId: activeSession,
         providerId: section.providerId,
         fields: [{ sectionId: field.sectionId, fieldId: field.id }],

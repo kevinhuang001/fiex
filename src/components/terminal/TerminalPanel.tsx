@@ -15,7 +15,7 @@ interface TerminalTab {
   shellName?: string
 }
 
-interface ShellChoice {
+export interface ShellChoice {
   id: string
   name: string
   path: string
@@ -47,13 +47,13 @@ export function TerminalPanel({
 
   useEffect(() => {
     if (!settingsMenu || fonts.length) return
-    void call<string[]>('system_fonts')
+    void call('system_fonts')
       .then((items) => setFonts(Array.isArray(items) ? items : []))
       .catch(() => {})
   }, [settingsMenu, fonts.length])
 
   useEffect(() => {
-    void call<ShellChoice[]>('detect_shells')
+    void call('detect_shells')
       .then((items) => setShells(Array.isArray(items) ? items : []))
       .catch(() => {})
   }, [])

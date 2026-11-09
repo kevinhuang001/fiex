@@ -13,7 +13,7 @@ version = "0.7.11"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.92"
 license = "GPL-3.0-or-later"
 
 [lib]

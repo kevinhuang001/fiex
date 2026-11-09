@@ -86,7 +86,7 @@ export function usePluginSettingsController() {
       })
       const path = Array.isArray(picked) ? picked[0] : picked
       if (!path) return
-      const preview = await call<LocalPreview>('plugin_prepare_local_install', { path })
+      const preview = await call('plugin_prepare_local_install', { path })
       setLocalPreview(preview)
     } catch (error) {
       reportError(error, 'plugins:management')
@@ -98,7 +98,7 @@ export function usePluginSettingsController() {
     if (!localPreview) return
     setBusy(true)
     try {
-      const pluginId = await call<string>('plugin_confirm_install', {
+      const pluginId = await call('plugin_confirm_install', {
         ticket: localPreview.ticket,
         allowUntrusted: !localPreview.trusted,
       })

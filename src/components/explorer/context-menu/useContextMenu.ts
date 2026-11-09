@@ -71,7 +71,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setFailure(undefined)
-    void call<CoreMenu[]>('plugin_context_menu_resolve', {
+    void call('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'core',
@@ -93,7 +93,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setPluginFailure(undefined)
-    void call<PluginMenu[]>('plugin_context_menu_resolve', {
+    void call('plugin_context_menu_resolve', {
       directory: x.path,
       paths: JSON.parse(selectionKey),
       source: 'plugins',
@@ -135,7 +135,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (requestedCoreChildren.current.has(requestKey)) return
     requestedCoreChildren.current.add(requestKey)
     try {
-      const response = await call<{ items: unknown }>('plugin_context_menu_children', {
+      const response = await call('plugin_context_menu_children', {
         menuSessionId: group.menuSessionId,
         parentId,
       })

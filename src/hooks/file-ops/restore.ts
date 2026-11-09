@@ -12,13 +12,13 @@ export function restoreActions({ x, notify, run }: FileOpsContext) {
     void run(
       t('正在复原…'),
       async () => {
-        const needsFolder = await call<boolean>('trash_restore_needs_folder', { paths })
+        const needsFolder = await call('trash_restore_needs_folder', { paths })
         const picked = needsFolder ? await openFilePicker({ mode: 'openDirectory' }) : null
         const fallback = typeof picked === 'string' ? picked : null
         if (needsFolder && !fallback) return
         fallbackDirectory = fallback
         restoreStarted = true
-        const restored = await call<number>('restore_from_trash', { paths, fallback })
+        const restored = await call('restore_from_trash', { paths, fallback })
         if (restored === undefined) return
         notify(t('已复原 {0} 个项目', restored))
         x.setSelected([])

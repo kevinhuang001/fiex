@@ -178,7 +178,7 @@ export function isNewerVersion(candidate: string, installed: string): boolean {
 }
 async function pluginCatalog(): Promise<PluginInfo[]> {
   if (!native && !(import.meta.env.DEV && import.meta.env.VITE_FIEX_E2E === '1')) return []
-  return call<PluginInfo[]>('plugins_list')
+  return call('plugins_list')
 }
 let catalogSnapshot: PluginInfo[] = []
 const catalogListeners = new Set<() => void>()
@@ -245,7 +245,7 @@ export function refreshPluginCatalog() {
 }
 
 export async function pluginMarketplace(): Promise<MarketplacePlugin[]> {
-  return call<MarketplacePlugin[]>('plugin_marketplace', {
+  return call('plugin_marketplace', {
     repository: 'kevinhuang001/fiex-official-plugins',
   })
 }

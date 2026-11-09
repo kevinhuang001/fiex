@@ -127,7 +127,7 @@ export function useListing(
     (force = false): Promise<Location[]> => {
       if (locationsPending.current && !force) return locationsPending.current
       const request = ++locationsRequest.current
-      const pending = call<Location[]>('locations')
+      const pending = call('locations')
         .then((next) => {
           if (request !== locationsRequest.current) return next
           const key = JSON.stringify(next)
@@ -167,21 +167,21 @@ export function useListing(
     void refreshLocations().catch(() => {})
     void (async () => {
       // A folder passed on the command line wins over the start page.
-      const launched = native && (await call<string | null>('launch_path').catch(() => null))
+      const launched = native && (await call('launch_path').catch(() => null))
       if (cancelled) return
       let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
       else if (!start && prefs.startPage === 'last') {
-        start = await call<string | null>('state_get', {
+        start = await call('state_get', {
           namespace: 'explorer',
           key: 'lastPath',
         }).catch(() => null)
         if (!start) start = localStorage.getItem('fiex:lastPath')
       }
       if (!start) {
-        const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
+        const initial = native ? await call('initial_path').catch(() => null) : null
         if (cancelled) return
-        const locations = await call<Location[]>('locations').catch(() => [] as Location[])
+        const locations = await call('locations').catch(() => [] as Location[])
         if (cancelled) return
         const pick = (name: string) => locations.find((item) => item.name === name)?.path
         start =
@@ -458,7 +458,7 @@ export function useListing(
       }
       setError('')
       try {
-        const next = await call<string>('rename_entry', { path: target, name })
+        const next = await call('rename_entry', { path: target, name })
         setRenaming(null)
         setSelected([next])
         requestDirectoryRefresh([path])
@@ -481,7 +481,7 @@ export function useListing(
   }
   const refreshConnections = useCallback(async () => {
     try {
-      const list = await call<RemoteConnection[]>('remote_connections')
+      const list = await call('remote_connections')
       setConnections(Array.isArray(list) ? [...list] : [])
     } catch {
       setConnections([])

@@ -1,7 +1,6 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
-import type { OperationResult } from '@/lib/types'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
 
@@ -11,7 +10,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
     paths: string[],
     onProgress: ReturnType<typeof progressChannel> = quietProgressChannel(),
   ) => {
-    return call<OperationResult>('recycle', { paths, onProgress })
+    return call('recycle', { paths, onProgress })
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
   const recycle = (selection = x.selected) => {
@@ -69,7 +68,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
         }`
         await run(
           t('正在彻底删除…'),
-          () => call<number>('delete_permanently', { paths }),
+          () => call('delete_permanently', { paths }),
           t('删除：\n{0}', source),
           true,
           'delete',
@@ -91,7 +90,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
       action: async () => {
         const removed = await run(
           t(isWindows() ? '正在清空回收站…' : '正在清空废纸篓…'),
-          () => call<number>('empty_trash'),
+          () => call('empty_trash'),
           t(isWindows() ? '删除：回收站中的所有项目' : '删除：废纸篓中的所有项目'),
           true,
           'delete',

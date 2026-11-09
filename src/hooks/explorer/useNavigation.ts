@@ -216,7 +216,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
       if (uriParent === path) return
       try {
         const upPath = path.startsWith('applications://')
-          ? await call<string>('file_parent', { path })
+          ? await call('file_parent', { path })
           : uriParent
         if (upPath !== path) navigate(upPath)
       } catch (cause) {

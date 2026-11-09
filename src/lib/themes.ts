@@ -8,7 +8,7 @@ export interface Theme {
 }
 let applied: string[] = []
 export async function installedThemes(): Promise<Theme[]> {
-  if (native) return call<Theme[]>('plugin_themes')
+  if (native) return call('plugin_themes')
   return []
 }
 export function applyTheme(theme: Theme | undefined, mode: 'light' | 'dark') {

@@ -68,7 +68,7 @@ export function useConnectionActions({
     })
   const mountDevice = (device: string) => {
     void run(t('正在请求挂载…'), async () => {
-      const path = await call<string>('mount_device', { device })
+      const path = await call('mount_device', { device })
       await left.refreshLocations(true)
       x.navigate(path)
       notify(t('设备已挂载'))

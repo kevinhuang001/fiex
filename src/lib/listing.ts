@@ -1,6 +1,8 @@
 import { cachePresentationPatch, cachePresentations } from './entryPresentation'
 import { publishPresentationIcons } from './decorationIcons'
 import { call, native } from './api'
+import { parseDirectoryViewUpdate } from './ipcValidation'
+import { reportError } from './errorCenter'
 import { Channel } from '@tauri-apps/api/core'
 import type { Entry, EntryDecoration, Listing } from './types'
 
@@ -17,7 +19,7 @@ export function listDirectory(
   const key = JSON.stringify([path, hidden, ignores])
   const existing = pending.get(key)
   if (existing) return existing
-  const request = call<Listing>('list_directory', { path, hidden, ignores })
+  const request = call('list_directory', { path, hidden, ignores })
   pending.set(key, request)
   void request.then(
     () => {
@@ -83,9 +85,15 @@ export function openDirectoryStream(
       }),
     )
   }
-  const channel = new Channel<DirectoryViewUpdate>()
-  channel.onmessage = onSnapshot
-  return call<void>('directory_open', { path, hidden, ignores, onSnapshot: channel })
+  const channel = new Channel<unknown>()
+  channel.onmessage = (raw) => {
+    try {
+      onSnapshot(parseDirectoryViewUpdate(raw))
+    } catch (cause) {
+      reportError(cause, 'explorer:directory-ipc')
+    }
+  }
+  return call('directory_open', { path, hidden, ignores, onSnapshot: channel })
 }
 
 export function openPresentedDirectory(

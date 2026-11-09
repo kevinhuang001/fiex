@@ -29,8 +29,8 @@ interface Preference {
   disabled: string[]
 }
 
-type Preferences = Record<string, Preference>
-type Catalog = Record<string, ProviderEntry[]>
+export type ProviderPreferences = Record<string, Preference>
+export type Catalog = Record<string, ProviderEntry[]>
 
 const FEATURES = [
   ['search', '搜索'],
@@ -59,16 +59,13 @@ export function ProviderSettings() {
   const [feature, setFeature] = useState('search')
   const [dragged, setDragged] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<Catalog>({})
-  const [preferences, setPreferences] = useState<Preferences>({})
+  const [preferences, setPreferences] = useState<ProviderPreferences>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
 
   useEffect(() => {
     let active = true
-    void Promise.all([
-      call<{ features: Catalog }>('provider_catalog'),
-      call<Preferences>('provider_preferences'),
-    ])
+    void Promise.all([call('provider_catalog'), call('provider_preferences')])
       .then(([nextCatalog, nextPreferences]) => {
         if (!active) return
         setCatalog(nextCatalog?.features ?? {})
@@ -97,7 +94,7 @@ export function ProviderSettings() {
   const save = async (feature: string, order: string[], disabled: string[]) => {
     setSaving(feature)
     try {
-      const next = await call<Preferences>('set_provider_preference', {
+      const next = await call('set_provider_preference', {
         feature,
         order,
         disabled,
@@ -132,7 +129,7 @@ export function ProviderSettings() {
   const reset = async (feature: string) => {
     setSaving(feature)
     try {
-      setPreferences((await call<Preferences>('reset_provider_preference', { feature })) ?? {})
+      setPreferences((await call('reset_provider_preference', { feature })) ?? {})
     } catch (reason) {
       reportError(reason, 'plugins:providers')
     } finally {

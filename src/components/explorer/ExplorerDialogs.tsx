@@ -194,11 +194,7 @@ export function ExplorerDialogs({
           // A connection may open a pluginView instead of a VFS mount. Resolve
           // the destination first; the stored mountPath is not a VFS URI for
           // pluginView connections such as Email.
-          void call<{
-            kind: 'vfs' | 'pluginView'
-            path?: string
-            connectionId?: string
-          }>('connection_open', { id: connection.id })
+          void call('connection_open', { id: connection.id })
             .then((target) => {
               x.navigate(
                 target.kind === 'vfs'

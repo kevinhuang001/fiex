@@ -5,6 +5,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
 import type { ConflictState, Transfer } from './types'
 
+export type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
+
 /** Native drag-and-drop: dropping onto a sidebar bookmark or the workspace
  *  keeps a reference, dropping onto a folder (or the pane itself) transfers. */
 export function useDropTargets({
@@ -25,7 +27,6 @@ export function useDropTargets({
     if (!native) return
     let active = true
     let dispose: (() => void) | undefined
-    type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
     let origin: { key: string; pending: Promise<DropPlan | null> } | null = null
     const key = (paths: string[]) => [...paths].sort().join('\0')
     void getCurrentWebviewWindow()
@@ -39,9 +40,7 @@ export function useDropTargets({
           const paths = event.payload.paths
           origin = {
             key: key(paths),
-            pending: call<DropPlan | null>('internal_drop', { paths, consume: false }).catch(
-              () => null,
-            ),
+            pending: call('internal_drop', { paths, consume: false }).catch(() => null),
           }
           setDragging(true)
         } else if (event.payload.type === 'leave') {
@@ -53,7 +52,7 @@ export function useDropTargets({
           const captured = origin?.key === key(paths) ? origin.pending : null
           origin = null
           void (async () => {
-            const current = await call<DropPlan | null>('internal_drop', {
+            const current = await call('internal_drop', {
               paths,
               consume: true,
               captured: await captured,

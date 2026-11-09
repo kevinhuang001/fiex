@@ -5,7 +5,7 @@ export function readCachedLocations(): Location[] {
   return snapshot
 }
 export async function loadCachedLocations(): Promise<Location[]> {
-  const stored = await call<Location[] | null>('state_get', {
+  const stored = await call('state_get', {
     namespace: 'explorer',
     key: 'locations',
   })

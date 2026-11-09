@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
-import { terminalEvents } from './sessionEvents'
+import { parseTerminalEvent, terminalEvents } from './sessionEvents'
 
 describe('terminal startup and asynchronous failures', () => {
+  it('validates terminal wire events before dispatch', () => {
+    expect(parseTerminalEvent({ type: 'data', data: [0, 10, 255] })).toEqual({
+      type: 'data',
+      data: [0, 10, 255],
+    })
+    expect(() => parseTerminalEvent({ type: 'data', data: [256] })).toThrow(
+      'Invalid terminal event',
+    )
+    expect(() => parseTerminalEvent({ type: 'error', message: 3 })).toThrow(
+      'Invalid terminal event',
+    )
+  })
+
   it('keeps an authentication error visible through exit and late readiness', () => {
     const status = vi.fn(),
       error = vi.fn()

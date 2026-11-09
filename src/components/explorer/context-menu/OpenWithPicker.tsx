@@ -10,7 +10,7 @@ interface PickerItem {
   name: string
   iconSource?: string
 }
-interface PickerResponse {
+export interface PickerResponse {
   sessionId: string
   items: PickerItem[]
 }
@@ -20,7 +20,7 @@ function PickerApplication({ item, onChoose }: { item: PickerItem; onChoose: () 
   useEffect(() => {
     if (!item.iconSource) return
     let active = true
-    void call<string>('native_icon', { path: item.iconSource, size: 32 })
+    void call('native_icon', { path: item.iconSource, size: 32 })
       .then((source) => {
         if (active) setIcon(source)
       })
@@ -68,7 +68,7 @@ export function OpenWithPicker({
 
   useEffect(() => {
     let active = true
-    void call<PickerResponse>('open_with_picker_candidates', { path })
+    void call('open_with_picker_candidates', { path })
       .then((result) => {
         if (active) setSession(result)
       })

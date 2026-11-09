@@ -11,7 +11,7 @@ import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import { themeSnapshot } from '@/lib/themes'
 
-import { terminalEvents, type TerminalEvent, type SessionStatus } from './sessionEvents'
+import { parseTerminalEvent, terminalEvents, type SessionStatus } from './sessionEvents'
 
 function withAlpha(color: string, alpha: number) {
   const value = color.trim()
@@ -145,7 +145,7 @@ export function TerminalView({
     }
     window.addEventListener('fiex:theme-changed', applyTheme)
 
-    let channel: Channel<TerminalEvent> | null = null
+    let channel: Channel<unknown> | null = null
     terminal.onData((data) => {
       if (sessionId)
         void call('terminal_write', {
@@ -190,7 +190,7 @@ export function TerminalView({
       return true
     })
     setStatus('connecting')
-    channel = new Channel<TerminalEvent>()
+    channel = new Channel<unknown>()
     const events = terminalEvents(
       (data) => terminal.write(data),
       setStatus,
@@ -199,10 +199,16 @@ export function TerminalView({
         reportError(detail, 'terminal:session')
       },
     )
-    channel.onmessage = (event) => {
-      if (!disposed) events.receive(event)
+    channel.onmessage = (raw) => {
+      if (disposed) return
+      try {
+        events.receive(parseTerminalEvent(raw))
+      } catch (cause) {
+        reportError(cause, 'terminal:ipc')
+        events.receive({ type: 'error', message: t('终端事件格式无效') })
+      }
     }
-    const opening = call<string>('local_terminal_open', {
+    const opening = call('local_terminal_open', {
       cwd: cwd || null,
       shell: shell || null,
       cols: terminal.cols,

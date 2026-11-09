@@ -34,7 +34,7 @@ export function applyCoreAction(
       return (async () => {
         const alias = effect.paths[0]
         if (!alias) throw new Error('Recent navigation requires one selected alias')
-        const target = await call<{ parent: string; target: string }>('recent_navigation_target', {
+        const target = await call('recent_navigation_target', {
           alias,
         })
         x.navigateTo(target.parent, target.target)
@@ -101,13 +101,22 @@ export async function executeCoreMenu(
 ) {
   let onProgress: ReturnType<typeof progressChannel> | undefined = quietProgressChannel()
   const execute = async () => {
-    const effect = await call<CoreAction | { handled: boolean }>('plugin_context_menu_execute', {
+    const effect = await call('plugin_context_menu_execute', {
       menuSessionId: menu.menuSessionId,
       itemId: item.id,
       onProgress,
     })
-    if ('kind' in effect && effect.kind === 'coreAction') {
-      await applyCoreAction(effect, props, chooseOpenWith)
+    if (
+      effect !== null &&
+      !Array.isArray(effect) &&
+      typeof effect === 'object' &&
+      effect.kind === 'coreAction' &&
+      typeof effect.command === 'string' &&
+      Array.isArray(effect.paths) &&
+      typeof effect.path === 'string' &&
+      typeof effect.directory === 'string'
+    ) {
+      await applyCoreAction(effect as unknown as CoreAction, props, chooseOpenWith)
       return true
     }
     requestDirectoryRefresh([props.x.path])

@@ -147,11 +147,11 @@ export function useAppController() {
     try {
       for (const [index, item] of renames.entries()) {
         const tempName = `.fiex-batch-${crypto.randomUUID().slice(0, 8)}-${index}`
-        const temp = await call<string>('rename_entry', { path: item.path, name: tempName })
+        const temp = await call('rename_entry', { path: item.path, name: tempName })
         staged.push({ original: item.path, temp, name: item.name })
       }
       for (const item of staged) {
-        const path = await call<string>('rename_entry', { path: item.temp, name: item.name })
+        const path = await call('rename_entry', { path: item.temp, name: item.name })
         final.push({ path, original: item.original, temp: item.temp })
       }
       setBatchRename(null)

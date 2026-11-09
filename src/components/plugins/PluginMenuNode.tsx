@@ -10,20 +10,9 @@ import {
   type SetStateAction,
 } from 'react'
 import { AppWindow, ChevronRight } from 'lucide-react'
-
-export interface PluginMenuItem {
-  id: string
-  title: string
-  kind: 'action' | 'submenu' | 'separator'
-  parentId?: string
-  icon?: string
-}
-
-export interface PluginMenu {
-  pluginId: string
-  menuSessionId: string
-  items: PluginMenuItem[]
-}
+export { validPluginMenuItems } from '@/lib/pluginMenu'
+export type { PluginMenu, PluginMenuItem } from '@/lib/pluginMenu'
+import type { PluginMenuItem } from '@/lib/pluginMenu'
 
 /** Sibling submenus share one open id so moving to the next level closes the
  *  previous panel immediately instead of leaving two panels side by side. */
@@ -31,41 +20,6 @@ export const SubmenuGroupContext = createContext<{
   openId: string | null
   setOpenId: Dispatch<SetStateAction<string | null>>
 } | null>(null)
-
-/** Validates the untrusted tree a plugin returns before rendering it. */
-export function validPluginMenuItems(items: unknown): items is PluginMenuItem[] {
-  if (!Array.isArray(items) || items.length > 100) return false
-  const ids = new Set<string>()
-  for (const item of items) {
-    if (!item || typeof item !== 'object') return false
-    const node = item as Record<string, unknown>
-    if (
-      typeof node.id !== 'string' ||
-      !/^[\w.-]{1,80}$/.test(node.id) ||
-      ids.has(node.id) ||
-      typeof node.title !== 'string' ||
-      node.title.length > 128 ||
-      !['action', 'submenu', 'separator'].includes(String(node.kind)) ||
-      ('parentId' in node && typeof node.parentId !== 'string')
-    ) {
-      return false
-    }
-    ids.add(node.id)
-  }
-  const byId = new Map(items.map((item) => [item.id, item as PluginMenuItem]))
-  for (const item of items as PluginMenuItem[]) {
-    let depth = 1
-    let current = item
-    const seen = new Set<string>([item.id])
-    while (current.parentId) {
-      const parent = byId.get(current.parentId)
-      if (!parent || parent.kind !== 'submenu' || seen.has(parent.id) || ++depth > 4) return false
-      seen.add(parent.id)
-      current = parent
-    }
-  }
-  return true
-}
 
 /** One row of a plugin menu. Submenus expand on hover or click and may lazily
  *  ask the plugin for their children the first time they open. */

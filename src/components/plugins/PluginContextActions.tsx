@@ -98,7 +98,7 @@ export function PluginContextActions({
     if (requestedSubmenus.current.has(key)) return
     requestedSubmenus.current.add(key)
     try {
-      const response = await call<{ items: unknown }>('plugin_context_menu_children', {
+      const response = await call('plugin_context_menu_children', {
         menuSessionId: menu.menuSessionId,
         parentId: submenuId,
       })
@@ -129,7 +129,7 @@ export function PluginContextActions({
     try {
       // No content permission is handed out during resolve; executing a real
       // click enters the operation with its exact selected paths.
-      const response = await call<unknown>('plugin_context_menu_execute', {
+      const response = await call('plugin_context_menu_execute', {
         menuSessionId: menu.menuSessionId,
         itemId: item.id,
         onProgress: quietProgressChannel(),

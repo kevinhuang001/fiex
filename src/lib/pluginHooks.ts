@@ -10,7 +10,7 @@ export interface BeforeOpenOutcome {
  * A broken hook must never stop the user from opening the file. */
 export async function runBeforeOpenHooks(entry: Entry): Promise<BeforeOpenOutcome> {
   try {
-    const result = await call<BeforeOpenOutcome>('plugin_before_open', { path: entry.path })
+    const result = await call('plugin_before_open', { path: entry.path })
     return result?.handled ? { handled: true } : { handled: false }
   } catch {
     return { handled: false }

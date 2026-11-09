@@ -91,7 +91,7 @@ export function PluginPreviewFrame({
         },
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get') {
-            const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+            const settings = await call('plugin_settings', {
               pluginId,
             }).catch(() => ({}))
             return {
@@ -123,7 +123,7 @@ export function PluginPreviewFrame({
             const p = params as { method?: unknown; params?: unknown } | null
             if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
               throw new Error('Invalid plugin method')
-            return call<JsonValue>('plugin_invoke', {
+            return call('plugin_invoke', {
               pluginId,
               method: p.method,
               params: p.params ?? null,
@@ -134,7 +134,7 @@ export function PluginPreviewFrame({
             const p = params as { taskId?: unknown } | null
             if (!p || typeof p.taskId !== 'string' || !p.taskId)
               throw new Error('Invalid plugin task id')
-            return call<JsonValue | null>('plugin_task', {
+            return call('plugin_task', {
               pluginId,
               taskId: p.taskId,
             })

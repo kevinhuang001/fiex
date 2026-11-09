@@ -36,7 +36,7 @@ export function PluginSettingsSheet({
   useEffect(() => {
     if (!fields.some((field) => field.type === 'font')) return
     let alive = true
-    void call<string[]>('system_fonts')
+    void call('system_fonts')
       .then((values) => {
         if (alive) setFonts(values)
       })

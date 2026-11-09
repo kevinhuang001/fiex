@@ -1,0 +1,93 @@
+import { parseResourceContext } from '../../sdk/ui/src/resources.js'
+import type { StateGetArgs } from './tauriCommandMap'
+import { objectResult, parseJsonValue } from './ipcValidation/json'
+import {
+  parseConnectionOpenResult,
+  parseStateGetResult,
+  parseListing,
+  parseEntry,
+  parseOperationResult,
+  parseLocations,
+} from './ipcValidation/entries'
+import { parseInfoOpenResult, parseInfoFieldDelta } from './ipcValidation/info'
+import { parsePluginMenuResult, parseConnectionMenus } from './ipcValidation/menus'
+import {
+  parseEntryDecorations,
+  parseThemes,
+  parseProviderCatalog,
+  parseProviderPreferences,
+  parseInstallPreview,
+  parseRemoteConnectionConfig,
+} from './ipcValidation/providers'
+import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/previews'
+
+export * from './ipcValidation/json'
+export * from './ipcValidation/entries'
+export * from './ipcValidation/info'
+export * from './ipcValidation/directory'
+export * from './ipcValidation/menus'
+export * from './ipcValidation/providers'
+export * from './ipcValidation/previews'
+
+export function decodeDynamicIpcResult(
+  command: string,
+  args: Record<string, unknown>,
+  value: unknown,
+): unknown {
+  if (command === 'connection_open') return parseConnectionOpenResult(value)
+  if (command === 'state_get') return parseStateGetResult(args as StateGetArgs, value)
+  if (command === 'list_directory') return parseListing(value)
+  if (command === 'file_info') return parseEntry(parseJsonValue(value))
+  if (command === 'file_info_open') return parseInfoOpenResult(value)
+  if (command === 'file_info_compute') return parseInfoFieldDelta(value)
+  if (command === 'transfer' || command === 'recycle') return parseOperationResult(value)
+  if (command === 'locations') return parseLocations(parseJsonValue(value))
+  if (command === 'plugin_context_menu_resolve') {
+    const source = args.source
+    if (source !== 'core' && source !== 'plugins')
+      throw new TypeError('Missing context menu source')
+    return source === 'core'
+      ? parsePluginMenuResult(value, 'core')
+      : parsePluginMenuResult(value, 'plugins')
+  }
+  if (command === 'plugin_context_menu_children') {
+    const result = objectResult(value)
+    if (!Array.isArray(result.items)) throw new TypeError('Invalid context submenu response')
+    return { items: result.items }
+  }
+  if (
+    command === 'plugin_context_menu_execute' ||
+    command === 'plugin_connection_menu_execute' ||
+    command === 'plugin_invoke' ||
+    command === 'plugin_task' ||
+    command === 'plugin_storage_get'
+  )
+    return parseJsonValue(value)
+  if (command === 'plugin_settings') return objectResult(value)
+  if (command === 'provider_catalog') return parseProviderCatalog(value)
+  if (
+    command === 'provider_preferences' ||
+    command === 'set_provider_preference' ||
+    command === 'reset_provider_preference'
+  )
+    return parseProviderPreferences(value)
+  if (command === 'plugin_prepare_install' || command === 'plugin_prepare_local_install')
+    return parseInstallPreview(value)
+  if (command === 'plugin_connection_menu_resolve') return parseConnectionMenus(value)
+  if (command === 'plugin_decorations') return parseEntryDecorations(value)
+  if (command === 'plugin_themes') return parseThemes(value)
+  if (command === 'preview_candidates') return parsePreviewCandidates(value)
+  if (command === 'preview_open') return parseResolvedPreview(value)
+  if (command === 'plugin_before_open') {
+    const result = objectResult(value)
+    if (typeof result.handled !== 'boolean') throw new TypeError('Invalid before-open result')
+    return { handled: result.handled }
+  }
+  if (command === 'plugin_describe_resources') {
+    if (!Array.isArray(value)) throw new TypeError('Invalid resource context list')
+    return value.map(parseResourceContext)
+  }
+  if (command === 'plugin_toolbar_invoke') return parseJsonValue(value)
+  if (command === 'remote_connection_config') return parseRemoteConnectionConfig(value)
+  return value === undefined ? undefined : parseJsonValue(value)
+}

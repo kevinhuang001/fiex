@@ -69,11 +69,14 @@ function isSort(value: unknown): value is Sort {
   return value === 'name' || value === 'modified' || value === 'size' || value === 'kind'
 }
 
-function load(input?: Partial<Preferences>): Preferences {
+function load(input?: unknown): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored = input ?? {}
+    const stored =
+      input && typeof input === 'object' && !Array.isArray(input)
+        ? (input as Partial<Preferences>)
+        : {}
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const previousDefaults =
       stored.group === 'none' && stored.sort === 'name' && stored.descending === false
@@ -199,7 +202,7 @@ export function usePreferences() {
     let active = true
     void (async () => {
       try {
-        const saved = await call<Partial<Preferences> | null>('state_get', {
+        const saved = await call('state_get', {
           namespace: 'explorer',
           key: 'preferences',
         })

@@ -10,7 +10,7 @@ export function createActions({ x, run }: FileOpsContext) {
   const renameCreatedEntry = async (path: string) => {
     let entry: Entry
     try {
-      entry = await call<Entry>('file_info', { path })
+      entry = await call('file_info', { path })
     } catch (cause) {
       const message = String(cause)
       if (!reportFilesystemPermissionError(message, `stat\n${path}`)) x.setError(message)
@@ -29,7 +29,7 @@ export function createActions({ x, run }: FileOpsContext) {
     )
     const path = await run(
       t('正在新建文件夹…'),
-      () => call<string>('create_entry', { path: x.path, name }),
+      () => call('create_entry', { path: x.path, name }),
       undefined,
       false,
       undefined,
@@ -56,7 +56,7 @@ export function createActions({ x, run }: FileOpsContext) {
     )
     const path = await run(
       t('正在新建文件…'),
-      () => call<string>('create_file_entry', { path: x.path, name }),
+      () => call('create_file_entry', { path: x.path, name }),
       undefined,
       false,
       undefined,
