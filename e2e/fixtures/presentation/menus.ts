@@ -66,14 +66,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
                   !entries[0]?.isDir &&
                   !trashView &&
                   !paths[0].startsWith('applications://')
-                    ? [
-                        {
-                          id: 'openWith',
-                          title: t('打开方式'),
-                          icon: 'application',
-                          kind: 'submenu' as const,
-                        },
-                      ]
+                    ? [item('openWith-choose', '打开方式', 'application-search')]
                     : []),
                 ]
               : []),
@@ -152,7 +145,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   const providerForAction: Record<string, string> = {
     open: 'builtin:open',
-    openWith: 'builtin:open-with',
+    'openWith-choose': 'builtin:open-with',
     preview: 'builtin:preview',
     info: 'builtin:info',
     tags: 'builtin:tags',
@@ -178,14 +171,6 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
     const submenus = new Set(items.filter((item) => item.kind === 'submenu').map((item) => item.id))
     const children = new Map<string, CoreMenuItem[]>()
-    if (submenus.has('openWith')) {
-      children.set('openWith', [
-        { id: 'openWith-markdown', title: 'Markdown Viewer', kind: 'action' },
-        { id: 'openWith-plain-text', title: 'Plain Text Editor', kind: 'action' },
-        { id: 'openWith-separator', title: ' ', kind: 'separator' },
-        { id: 'openWith-choose', title: t('选择其他应用…'), kind: 'action' },
-      ])
-    }
     sessions.set(menuSessionId, {
       paths: [...paths],
       directory,

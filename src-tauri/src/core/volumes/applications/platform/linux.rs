@@ -1,4 +1,4 @@
-use super::super::{decode, encode, entry, URI};
+use super::super::{URI, decode, encode, entry};
 use crate::core::files::Entry;
 use std::path::{Path, PathBuf};
 
@@ -12,14 +12,13 @@ pub(super) fn launch_desktop(path: &Path) -> Result<(), String> {
     {
         return Ok(());
     }
-    if let Some(stem) = path.file_stem().and_then(|value| value.to_str()) {
-        if std::process::Command::new("gtk-launch")
+    if let Some(stem) = path.file_stem().and_then(|value| value.to_str())
+        && std::process::Command::new("gtk-launch")
             .arg(stem)
             .status()
             .is_ok_and(|status| status.success())
-        {
-            return Ok(());
-        }
+    {
+        return Ok(());
     }
     Err(crate::i18n::t("无法启动应用").into())
 }
@@ -174,14 +173,13 @@ pub(in crate::core::volumes::applications) fn platform_open(encoded: &str) -> Re
     {
         return Ok(());
     }
-    if let Some(stem) = path.file_stem().and_then(|value| value.to_str()) {
-        if std::process::Command::new("gtk-launch")
+    if let Some(stem) = path.file_stem().and_then(|value| value.to_str())
+        && std::process::Command::new("gtk-launch")
             .arg(stem)
             .status()
             .is_ok_and(|status| status.success())
-        {
-            return Ok(());
-        }
+    {
+        return Ok(());
     }
     Err(crate::i18n::t("无法启动应用").into())
 }

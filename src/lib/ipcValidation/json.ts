@@ -24,6 +24,18 @@ export function parseJsonValue(value: unknown, seen = new Set<object>()): JsonVa
   }
 }
 
+/** Mirrors the JSON serialization performed by Tauri before invoking a command. */
+export function serializeIpcJson(value: unknown): JsonValue {
+  let serialized: string | undefined
+  try {
+    serialized = JSON.stringify(value)
+  } catch {
+    throw new TypeError('Invalid JSON IPC value')
+  }
+  if (serialized === undefined) throw new TypeError('Invalid JSON IPC value')
+  return parseJsonValue(JSON.parse(serialized) as unknown)
+}
+
 export function objectResult(value: unknown): Record<string, JsonValue> {
   const json = parseJsonValue(value)
   if (json === null || Array.isArray(json) || typeof json !== 'object')

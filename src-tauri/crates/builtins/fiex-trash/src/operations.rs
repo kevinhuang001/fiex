@@ -1,4 +1,4 @@
-use crate::{is_recycle_bin_uri, system_recycle_bin, system_trash_directory, RECYCLE_BIN_URI};
+use crate::{RECYCLE_BIN_URI, is_recycle_bin_uri, system_recycle_bin, system_trash_directory};
 use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -96,12 +96,11 @@ fn restore_items(
         let destination = free_destination(destination);
         move_entry(&source, &destination)?;
         remove_trash_metadata(&source);
-        if let Some(root) = trash_path() {
-            if source.parent() == Some(root.as_path()) {
-                if let Some(name) = source.file_name() {
-                    journal::forget_locked(&name.to_string_lossy());
-                }
-            }
+        if let Some(root) = trash_path()
+            && source.parent() == Some(root.as_path())
+            && let Some(name) = source.file_name()
+        {
+            journal::forget_locked(&name.to_string_lossy());
         }
         restored += 1;
     }
@@ -185,12 +184,11 @@ fn original_location(trashed: &Path) -> Option<String> {
         let info = trash.join("info").join(format!("{name}.trashinfo"));
         if let Ok(text) = std::fs::read_to_string(info) {
             for line in text.lines() {
-                if let Some(value) = line.strip_prefix("Path=") {
-                    if let Ok(decoded) = urlencoding::decode(value) {
-                        if Path::new(decoded.as_ref()).is_absolute() {
-                            return Some(decoded.into_owned());
-                        }
-                    }
+                if let Some(value) = line.strip_prefix("Path=")
+                    && let Ok(decoded) = urlencoding::decode(value)
+                    && Path::new(decoded.as_ref()).is_absolute()
+                {
+                    return Some(decoded.into_owned());
                 }
             }
         }

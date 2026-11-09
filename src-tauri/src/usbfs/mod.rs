@@ -3,8 +3,8 @@
 mod tree;
 
 pub use fiex_usb_fs::{
-    copy_file_to, detect, ensure_access, generation, invalidate_generation, list, probe, read,
-    read_at, route, validate_child, virtual_root, FsKind, Route, UsbEntry,
+    FsKind, Route, UsbEntry, copy_file_to, detect, ensure_access, generation,
+    invalidate_generation, list, probe, read, read_at, route, validate_child, virtual_root,
 };
 pub use tree::{copy_to_local, entry, listing, read_path, search};
 

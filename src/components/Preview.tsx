@@ -97,9 +97,6 @@ export function Preview({
         () =>
           call('preview_candidates', {
             path: entry.path,
-            extension: entry.extension,
-            mime: entry.mime,
-            isDir: entry.isDir,
           }),
       )
       .then((values) => {

@@ -5,7 +5,7 @@ use crate::{
     plugins::resource::fs_access,
     usbfs::{self, Route},
 };
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use fiex_provider_contracts::{FsRead, FsWrite, ProviderError};
 use std::{
     io::{self, Read, Write},

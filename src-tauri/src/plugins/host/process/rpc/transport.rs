@@ -1,12 +1,13 @@
-use super::{actor::Operation, RpcFailure, Running};
+use super::{RpcFailure, Running, actor::Operation};
 use crate::plugin_sdk;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     io::{BufReader, Read, Write},
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc,
     },
     thread,
     time::Duration,
@@ -124,10 +125,10 @@ impl Running {
                 .cloned()
                 .ok_or_else(|| RpcFailure::fatal("plugin response missing result"))
         };
-        if let Ok(mut pending) = self.pending.lock() {
-            if let Some(sender) = pending.remove(&id) {
-                let _ = sender.send(result);
-            }
+        if let Ok(mut pending) = self.pending.lock()
+            && let Some(sender) = pending.remove(&id)
+        {
+            let _ = sender.send(result);
         }
     }
 

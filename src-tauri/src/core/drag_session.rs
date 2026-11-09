@@ -142,9 +142,11 @@ mod tests {
         assert!(sessions.resolve(&paths, true).is_none());
         sessions.begin("source", &paths, &paths, true).unwrap();
         sessions.end("other");
-        assert!(sessions
-            .resolve(&[t.path().to_string_lossy().into_owned()], true)
-            .is_none());
+        assert!(
+            sessions
+                .resolve(&[t.path().to_string_lossy().into_owned()], true)
+                .is_none()
+        );
         assert!(sessions.resolve(&paths, false).unwrap().moving);
         assert!(sessions.resolve(&paths, true).unwrap().moving);
         assert!(sessions.resolve(&paths, true).is_none());

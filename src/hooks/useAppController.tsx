@@ -299,10 +299,10 @@ export function useAppController() {
     }
   }, [menu])
   const control = (action: 'close' | 'minimize' | 'toggleMaximize') => {
-    if (native)
-      void getCurrentWindow()
-        [action]()
-        .catch((e) => x.setError(String(e)))
+    if (native) {
+      const window = getCurrentWindow()
+      void window[action]().catch((e) => x.setError(String(e)))
+    }
   }
   return {
     sidebar,

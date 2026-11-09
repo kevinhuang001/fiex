@@ -68,12 +68,14 @@ mod tests {
         append_private_fields(&json!({"credentials":["refreshToken"]}), &mut fields).unwrap();
         assert_eq!(fields[1], ("refreshToken".into(), "secret".into()));
         let mut settings = Map::new();
-        assert!(apply_validation(
-            &mut settings,
-            &["refreshToken".into()],
-            json!({"credentials":{"refreshToken":"token","unknown":"bad"}})
-        )
-        .is_err());
+        assert!(
+            apply_validation(
+                &mut settings,
+                &["refreshToken".into()],
+                json!({"credentials":{"refreshToken":"token","unknown":"bad"}})
+            )
+            .is_err()
+        );
         assert!(settings.is_empty());
         apply_validation(
             &mut settings,

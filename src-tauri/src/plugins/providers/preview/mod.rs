@@ -26,8 +26,8 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
-pub use session::session_scope;
 use session::UNSUPPORTED;
+pub use session::session_scope;
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
@@ -97,10 +97,10 @@ fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
         .iter()
         .map(|provider| {
             let mut value = provider.json();
-            if let Some(plugin) = provider.plugin.as_deref() {
-                if crate::plugins::host::preview_loading_entry(&plugin.extensions).is_some() {
-                    value["loading"] = Value::Bool(true);
-                }
+            if let Some(plugin) = provider.plugin.as_deref()
+                && crate::plugins::host::preview_loading_entry(&plugin.extensions).is_some()
+            {
+                value["loading"] = Value::Bool(true);
             }
             value
         })
@@ -242,14 +242,13 @@ fn resolve_preview(
             // "unsupported" answer may fall through to the next provider (the
             // label-only builtin included); a crash or transport failure is
             // surfaced as an error so the UI never silently swaps providers.
-            if let Some(id) = preferred_id.as_deref() {
-                if let Some((provider, Err(error))) =
+            if let Some(id) = preferred_id.as_deref()
+                && let Some((provider, Err(error))) =
                     outcomes.iter().find(|(provider, _)| provider.id == id)
-                {
-                    if provider.plugin.is_some() && error != UNSUPPORTED {
-                        return Err(format!("{} preview failed: {error}", provider.name));
-                    }
-                }
+                && provider.plugin.is_some()
+                && error != UNSUPPORTED
+            {
+                return Err(format!("{} preview failed: {error}", provider.name));
             }
             let (provider, view) = outcomes
                 .into_iter()

@@ -1,7 +1,7 @@
 //! Connection-cache menu group. Remote selections only; the action set is
 //! owned by the connection adapter and unchanged by capability gating.
 
-use super::file_ops::{item, Selection};
+use super::file_ops::{Selection, item};
 use fiex_provider_contracts::{MenuActivity, MenuActivityKind, MenuItem};
 use fiex_resource::FileCapabilities;
 

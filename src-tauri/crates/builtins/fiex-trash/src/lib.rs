@@ -19,7 +19,7 @@ pub use operations::{
     empty_trash, move_to_trash, restore_from_trash, restore_needs_folder, trash_path,
 };
 pub use path_trash::TrashDirectory;
-pub use recycle_bin::{RecycleBin, RECYCLE_BIN_URI};
+pub use recycle_bin::{RECYCLE_BIN_URI, RecycleBin};
 
 pub const TRASH_URI: &str = "trash://";
 pub const PROVIDER_ID: &str = "core:trash";

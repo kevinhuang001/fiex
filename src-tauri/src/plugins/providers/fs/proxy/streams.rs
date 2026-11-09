@@ -24,7 +24,7 @@ impl RemoteReader {
 
 impl std::io::Read for RemoteReader {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+        use base64::{Engine, engine::general_purpose::STANDARD};
         if buffer.is_empty() || self.eof {
             return Ok(0);
         }
@@ -95,7 +95,7 @@ impl RemoteWriter {
 
 impl std::io::Write for RemoteWriter {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+        use base64::{Engine, engine::general_purpose::STANDARD};
         if bytes.is_empty() {
             return Ok(0);
         }

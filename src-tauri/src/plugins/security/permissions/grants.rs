@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::model::{declaration_approved, ActivationConsent, PluginGrant};
+use super::model::{ActivationConsent, PluginGrant, declaration_approved};
 use super::store::{clear, mutate};
 use super::targets::{validate_commands, validate_network_domains};
 

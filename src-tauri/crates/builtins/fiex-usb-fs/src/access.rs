@@ -67,9 +67,9 @@ pub(super) fn lock(device: &str) -> Result<DeviceGuard, String> {
                         .read(true)
                         .custom_flags(libc::O_EXCL)
                         .open(&path)
-                        .map_err(|_| {
-                            "PermissionDenied: raw device is mounted, busy or not granted"
-                        })?,
+                        .map_err(
+                            |_| "PermissionDenied: raw device is mounted, busy or not granted",
+                        )?,
                 );
             }
         }

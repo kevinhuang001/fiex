@@ -1,6 +1,6 @@
 //! Read-only listing, lookup, search and copy-out operations.
 
-use super::{copy_file_to, ensure_access, list, read, Route};
+use super::{Route, copy_file_to, ensure_access, list, read};
 use std::path::{Path, PathBuf};
 
 fn join_rel(rel: &str, name: &str) -> String {

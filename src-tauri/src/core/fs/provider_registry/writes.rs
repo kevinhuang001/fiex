@@ -1,14 +1,13 @@
 use super::{
-    plugin, require,
-    routing::{resolve, Route},
-    FsError, ProviderWriteHandle, ResourceBroker, WriteHandle,
+    FsError, ProviderWriteHandle, ResourceBroker, WriteHandle, plugin, require,
+    routing::{Route, resolve},
 };
 use crate::core::fs::handles::StagedWriteHandle;
 use crate::core::volumes::native_vfs;
 use fiex_provider_contracts::{
     FsOperation, FsWrite, PreflightOperation, PreflightPhase, PreflightRequest,
 };
-use serde_json::{to_value, Value};
+use serde_json::{Value, to_value};
 
 pub(in crate::core::fs) fn write_stream(
     resource: &ResourceBroker,

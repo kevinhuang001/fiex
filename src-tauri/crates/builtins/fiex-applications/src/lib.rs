@@ -1,5 +1,5 @@
 //! Applications module state types and virtual-tree identity rules.
-use fiex_storage::{native::NativeScopedStorage, CoreOwnerKey};
+use fiex_storage::{CoreOwnerKey, native::NativeScopedStorage};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
@@ -15,7 +15,7 @@ mod icon_cache;
 pub use icon_cache::cached_icon_with;
 mod catalog;
 pub use catalog::{
-    system_id, ApplicationCatalog, ApplicationsBackend, CatalogApplication, InstalledApplication,
+    ApplicationCatalog, ApplicationsBackend, CatalogApplication, InstalledApplication, system_id,
 };
 mod tree;
 pub use tree::{parent_uri, validate_child_in};

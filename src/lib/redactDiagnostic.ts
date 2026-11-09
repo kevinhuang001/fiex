@@ -11,7 +11,7 @@ export function redactDiagnostic(input: string, limit = 4000): string {
       '$1[REDACTED]',
     )
     .replace(/(\b(?:bearer|basic)\s+)[a-z0-9+/=_\-.]+/gi, '$1[REDACTED]')
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '') // eslint-disable-line no-control-regex -- strips terminal controls from displayed diagnostics
     .slice(0, limit)
     .trim()
 }

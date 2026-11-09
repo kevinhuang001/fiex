@@ -1,9 +1,9 @@
 use super::{
-    endpoint, proxy, types, FsEntry, FsListing, FsStream, FsWriteStream, Mount, Source,
-    WriteRequest, MAX_ENTRIES, MAX_PAGES, PAGE_LIMIT,
+    FsEntry, FsListing, FsStream, FsWriteStream, MAX_ENTRIES, MAX_PAGES, Mount, PAGE_LIMIT, Source,
+    WriteRequest, endpoint, proxy, types,
 };
 use fiex_provider_contracts::FsOperation;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 impl Mount {
     fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
@@ -88,10 +88,10 @@ impl Mount {
                         warnings,
                         truncated,
                         ..Default::default()
-                    })
+                    });
                 }
                 Some(next) if !cursors.insert(next.clone()) => {
-                    return Err("provider pagination cursor did not advance".into())
+                    return Err("provider pagination cursor did not advance".into());
                 }
                 Some(next) => cursor = Some(next),
             }
@@ -181,7 +181,7 @@ impl Mount {
             match next {
                 None => return Ok(truncated),
                 Some(next) if !seen.insert(next.clone()) => {
-                    return Err("search pagination cursor did not advance".into())
+                    return Err("search pagination cursor did not advance".into());
                 }
                 Some(next) => cursor = Some(next),
             }

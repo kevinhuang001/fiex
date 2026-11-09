@@ -133,7 +133,9 @@ pub(super) fn macos_profile(policy: &Policy) -> String {
                 .replace('"', "\\\"")
         )
     };
-    let mut profile = String::from("(version 1)(deny default)(allow process-info* (target self))(allow sysctl-read)(allow signal (target self))(allow file-read* (literal \"/\"))");
+    let mut profile = String::from(
+        "(version 1)(deny default)(allow process-info* (target self))(allow sysctl-read)(allow signal (target self))(allow file-read* (literal \"/\"))",
+    );
     profile.push_str(&format!(
         "(allow process-exec (literal {}))",
         quote(&policy.executable)
@@ -249,7 +251,7 @@ mod windows_tests {
 
 #[cfg(test)]
 mod policy_tests {
-    use super::{macos_profile, Policy};
+    use super::{Policy, macos_profile};
 
     #[test]
     fn macos_profile_only_grants_runtime_paths_and_initial_executable() {

@@ -21,7 +21,7 @@ mod locale;
 mod state;
 mod tray;
 use locale::locale_set;
-use tray::{setup_tray, QUITTING};
+use tray::{QUITTING, setup_tray};
 mod scheduler;
 #[macro_use]
 mod plugins;
@@ -227,12 +227,13 @@ pub fn run() {
             native_icon
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" && !QUITTING.load(Ordering::SeqCst) {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    return;
-                }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == "main"
+                && !QUITTING.load(Ordering::SeqCst)
+            {
+                api.prevent_close();
+                let _ = window.hide();
+                return;
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 crate::plugins::mounts::forget_window(window.label());

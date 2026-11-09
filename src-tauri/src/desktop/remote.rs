@@ -1,6 +1,6 @@
 //! Remote connection commands and the volume locations survey.
 
-use super::files::{byte_progress_emitter, progress_emitter, OperationProgress};
+use super::files::{OperationProgress, byte_progress_emitter, progress_emitter};
 use crate::{core::operations::OperationCancel, core::terminals, core::volumes, remote};
 use tauri::ipc::Channel;
 

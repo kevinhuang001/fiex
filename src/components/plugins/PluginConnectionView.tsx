@@ -5,6 +5,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { LoaderCircle } from 'lucide-react'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
+import { parseJsonValue } from '@/lib/ipcValidation'
 import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
@@ -125,7 +126,7 @@ export function PluginConnectionView({
             return call('plugin_invoke', {
               pluginId: view.pluginId,
               method: input.method,
-              params: input.params ?? null,
+              params: parseJsonValue(input.params ?? null),
             })
           }
           if (method === 'navigation.open') {

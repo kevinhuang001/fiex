@@ -36,15 +36,17 @@ fn store_validates_updates_and_advances_revision_once() {
     let unchanged = store.update(|_| Ok(())).unwrap();
     assert_eq!(unchanged, updated);
 
-    assert!(store
-        .update(|state| {
-            state.folders.insert(
-                "orphan-folder".into(),
-                folder("orphan-folder", Some("missing-parent")),
-            );
-            Ok(())
-        })
-        .is_err());
+    assert!(
+        store
+            .update(|state| {
+                state.folders.insert(
+                    "orphan-folder".into(),
+                    folder("orphan-folder", Some("missing-parent")),
+                );
+                Ok(())
+            })
+            .is_err()
+    );
     assert_eq!(store.snapshot().unwrap(), updated);
     storage.delete("state").unwrap();
 }

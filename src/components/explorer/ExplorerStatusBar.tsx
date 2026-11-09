@@ -46,7 +46,7 @@ export function ExplorerStatusBar({
             aria-label={t('打开终端')}
             onClick={() =>
               window.dispatchEvent(
-                new CustomEvent('fiex:show-terminal-panel', {
+                new CustomEvent('fiex:toggle-terminal-panel', {
                   detail: { cwd: terminalWorkingDirectory(x.path) },
                 }),
               )

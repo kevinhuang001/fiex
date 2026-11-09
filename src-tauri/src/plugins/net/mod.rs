@@ -10,7 +10,7 @@
 //! handle immediately while a worker thread pulls chunks from a bounded pipe.
 mod tcp;
 use crate::plugins::security::policy::PermissionPolicy;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::{self, Read};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};

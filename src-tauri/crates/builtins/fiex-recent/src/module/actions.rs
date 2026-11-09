@@ -1,5 +1,5 @@
 //! Recent's after-open hook and remove-from-Recent menu providers.
-use super::{recent_record, store, RecentModuleServices, ROOT};
+use super::{ROOT, RecentModuleServices, recent_record, store};
 use fiex_provider_contracts::{
     ContextMenuProvider, HookProvider, HookResult, MenuExecuteResult, MenuItem, MenuPlacement,
     ProviderError, ProviderInput, ProviderInvocation,

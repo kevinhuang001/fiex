@@ -145,20 +145,24 @@ fn native_vfs_operations_reject_invalid_mutations() {
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Write, true).is_ok());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false).is_err());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Read, false).is_err());
-    assert!(require(
-        "trash://not-a-valid-node",
-        "core:test",
-        FsOperation::Remove,
-        false
-    )
-    .is_err());
-    assert!(require(
-        "trash://not-a-valid-node",
-        "core:test",
-        FsOperation::Write,
-        true
-    )
-    .is_err());
+    assert!(
+        require(
+            "trash://not-a-valid-node",
+            "core:test",
+            FsOperation::Remove,
+            false
+        )
+        .is_err()
+    );
+    assert!(
+        require(
+            "trash://not-a-valid-node",
+            "core:test",
+            FsOperation::Write,
+            true
+        )
+        .is_err()
+    );
 }
 
 #[test]

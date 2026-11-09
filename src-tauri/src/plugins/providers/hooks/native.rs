@@ -99,9 +99,10 @@ mod tests {
             "owner-binding-test",
         )
         .unwrap();
-        assert!(hook
-            .compare_and_set("shared-key", None, Some(serde_json::json!("recent")))
-            .unwrap());
+        assert!(
+            hook.compare_and_set("shared-key", None, Some(serde_json::json!("recent")))
+                .unwrap()
+        );
         assert_eq!(
             vfs.get("shared-key").unwrap(),
             Some(serde_json::json!("recent"))

@@ -11,7 +11,7 @@ use std::{path::Path, sync::Arc};
 mod providers;
 
 pub use providers::{
-    SearchModule, SearchModuleServices, SearchProviderRegistration, MODULE_ID, PROVIDER_ID,
+    MODULE_ID, PROVIDER_ID, SearchModule, SearchModuleServices, SearchProviderRegistration,
 };
 
 pub const CONTENT_FILE_LIMIT: u64 = 2 * 1024 * 1024;

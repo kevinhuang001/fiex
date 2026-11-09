@@ -1,4 +1,4 @@
-use crate::core::tags::{read_tags, Tag};
+use crate::core::tags::{Tag, read_tags};
 use fiex_resource::StorageProjection;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -203,10 +203,12 @@ mod tests {
         }];
         crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
         let entry = super::entry(&file).unwrap();
-        assert!(entry
-            .tags
-            .iter()
-            .any(|tag| tag.name == "TestTag" && tag.color == 6));
+        assert!(
+            entry
+                .tags
+                .iter()
+                .any(|tag| tag.name == "TestTag" && tag.color == 6)
+        );
         crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
         assert!(super::entry(&file).unwrap().tags.is_empty());
     }

@@ -49,9 +49,11 @@ fn main() {
         let root = &test_directory;
         let secret = root.path().join("secret.txt");
         std::fs::write(&secret, "host-only").unwrap();
-        assert!(plugin_host::global()
-            .invoke(&id, "mock.readFile", json!({"path":"secret.txt"}))
-            .is_err());
+        assert!(
+            plugin_host::global()
+                .invoke(&id, "mock.readFile", json!({"path":"secret.txt"}))
+                .is_err()
+        );
         let read = plugin_host::global()
             .invoke_selected(
                 &id,

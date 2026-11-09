@@ -146,7 +146,7 @@ fn search_modes(contribution: &serde_json::Value) -> Vec<&str> {
 /// Installed providers per feature plus the Core builtins. Locked entries are
 /// shown but cannot be reordered or disabled by the settings surface.
 pub fn catalog() -> serde_json::Value {
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
     let mut features = Map::new();
     for feature in FEATURES {
         features.insert(feature.into(), Value::Array(builtin_entries(feature)));

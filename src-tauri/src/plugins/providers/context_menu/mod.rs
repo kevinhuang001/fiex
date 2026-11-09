@@ -7,7 +7,7 @@ mod file_ops;
 mod native_views;
 pub(crate) mod open_with;
 #[cfg(feature = "desktop")]
-pub(crate) use open_with::{open_picker_choice, picker_candidates, PickerResponse};
+pub(crate) use open_with::{PickerResponse, open_picker_choice, picker_candidates};
 mod proxy;
 mod session;
 pub use actions::execute_remote;
@@ -37,10 +37,10 @@ use crate::plugins::{
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[cfg(test)]
 use session::session_ids;
-use session::{allowed, register, sessions, MenuScope};
+use session::{MenuScope, allowed, register, sessions};
 use std::{
     collections::HashMap,
     sync::{Arc, Condvar, Mutex, OnceLock},

@@ -31,12 +31,14 @@ fn uploaded_requires_cached_or_pinned_copy_and_unknown_status_is_ignored() {
     value.uploaded = true;
     let result = query_with_plugins("applications://", vec![value], false);
     assert_eq!(result[0].native_badges.len(), 1);
-    assert!(query_with_plugins(
-        "applications://",
-        vec![entry_at("applications://unknown", "invented")],
-        false
-    )
-    .is_empty());
+    assert!(
+        query_with_plugins(
+            "applications://",
+            vec![entry_at("applications://unknown", "invented")],
+            false
+        )
+        .is_empty()
+    );
 }
 #[test]
 fn tags_and_conflict_survive_collection_without_badge_truncation() {

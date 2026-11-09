@@ -71,9 +71,11 @@ mod tests {
             .unwrap();
         let plugin = OwnerId::plugin("org.example.module");
         let value = json!({"owner":"applications"});
-        assert!(applications
-            .compare_and_set("key", None, Some(value.clone()))
-            .unwrap());
+        assert!(
+            applications
+                .compare_and_set("key", None, Some(value.clone()))
+                .unwrap()
+        );
         assert_eq!(applications.get("key").unwrap(), Some(value));
         assert_eq!(recent.get("key").unwrap(), None);
         assert_eq!(engine::get(&plugin, "owner-test", "key").unwrap(), None);

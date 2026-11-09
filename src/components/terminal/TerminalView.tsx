@@ -145,7 +145,7 @@ export function TerminalView({
     }
     window.addEventListener('fiex:theme-changed', applyTheme)
 
-    let channel: Channel<unknown> | null = null
+    const channel = new Channel<unknown>()
     terminal.onData((data) => {
       if (sessionId)
         void call('terminal_write', {
@@ -190,7 +190,6 @@ export function TerminalView({
       return true
     })
     setStatus('connecting')
-    channel = new Channel<unknown>()
     const events = terminalEvents(
       (data) => terminal.write(data),
       setStatus,

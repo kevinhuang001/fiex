@@ -52,8 +52,32 @@ pub(crate) fn ui_error_report(
     window: tauri::WebviewWindow,
     message: String,
     detail: Option<String>,
+    plugin_id: Option<String>,
+    source: Option<String>,
 ) -> Result<(), String> {
-    let source = format!("ui:{}", window.label());
+    let origin = [
+        source.filter(|value| {
+            value.len() <= 80
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c))
+        }),
+        plugin_id.filter(|value| {
+            value.len() <= 128
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(":");
+    let source = if origin.is_empty() {
+        format!("ui:{}", window.label())
+    } else {
+        format!("ui:{}:{origin}", window.label())
+    };
     crate::infrastructure::logging::record_core("error", &source, &message);
     // The initiating UI already presents this error. Recording it must not enqueue it twice.
     if let Some(detail) = detail {

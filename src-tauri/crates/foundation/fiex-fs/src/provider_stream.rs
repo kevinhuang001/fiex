@@ -1,5 +1,5 @@
 //! Adapters from provider-owned streams to the shared filesystem stream API.
-use crate::{FsError, FsErrorKind, ReadHandle, WriteHandle, CHUNK};
+use crate::{CHUNK, FsError, FsErrorKind, ReadHandle, WriteHandle};
 use fiex_provider_contracts::{FsRead, FsReadAt, FsWrite};
 use serde_json::Value;
 use std::io::{Read, Seek, SeekFrom, Write};

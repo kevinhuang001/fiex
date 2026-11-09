@@ -1,4 +1,4 @@
-use super::super::{decode, encode, entry, URI};
+use super::super::{URI, decode, encode, entry};
 use crate::core::files::Entry;
 use std::path::PathBuf;
 

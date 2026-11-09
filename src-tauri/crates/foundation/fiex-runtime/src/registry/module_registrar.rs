@@ -1,7 +1,7 @@
 //! Module-scoped registration API for typed providers.
 use super::{
-    types::{ModuleDescriptor, RegistrationRequest},
     TypedProviderRegistry,
+    types::{ModuleDescriptor, RegistrationRequest},
 };
 use fiex_provider_contracts::ProviderMatchRule;
 use std::sync::Arc;

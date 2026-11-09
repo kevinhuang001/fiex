@@ -53,9 +53,11 @@ pub(super) fn leases() -> &'static Mutex<HashMap<String, Lease>> {
     // Otherwise the staged data remains on disk until Fiex exits.
     static CLEANUP: OnceLock<()> = OnceLock::new();
     CLEANUP.get_or_init(|| {
-        std::thread::spawn(|| loop {
-            std::thread::sleep(Duration::from_secs(60));
-            prune_leases();
+        std::thread::spawn(|| {
+            loop {
+                std::thread::sleep(Duration::from_secs(60));
+                prune_leases();
+            }
         });
     });
     registry

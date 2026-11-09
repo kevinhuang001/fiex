@@ -1,4 +1,4 @@
-use crate::{TrashModuleServices, RECYCLE_BIN_URI, TRASH_URI};
+use crate::{RECYCLE_BIN_URI, TRASH_URI, TrashModuleServices};
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
     ProviderInvocation,

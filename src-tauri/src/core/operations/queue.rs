@@ -1,10 +1,10 @@
 //! The operation queue: the undo stack and the `Operations` API that feeds it.
 
-use super::{exists, fs_ops, OperationResult, Undo};
+use super::{OperationResult, Undo, exists, fs_ops};
 use std::{
     fs,
     path::PathBuf,
-    sync::{atomic::AtomicBool, Mutex},
+    sync::{Mutex, atomic::AtomicBool},
 };
 
 #[derive(Default)]
@@ -162,7 +162,7 @@ impl Operations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::operations::{OperationCancel, CANCELLED};
+    use crate::core::operations::{CANCELLED, OperationCancel};
 
     #[test]
     fn transfers_never_overwrite() {
@@ -205,11 +205,12 @@ mod tests {
     fn recursive_and_traversal_rejected() {
         let t = tempfile::tempdir().unwrap();
         let op = Operations::default();
-        assert!(op
-            .create(t.path().to_str().unwrap(), "../escape", true)
-            .is_err());
-        assert!(op
-            .transfer(
+        assert!(
+            op.create(t.path().to_str().unwrap(), "../escape", true)
+                .is_err()
+        );
+        assert!(
+            op.transfer(
                 &[t.path().to_string_lossy().into()],
                 t.path().to_str().unwrap(),
                 false,
@@ -217,7 +218,8 @@ mod tests {
                 &[],
                 &AtomicBool::new(false)
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]

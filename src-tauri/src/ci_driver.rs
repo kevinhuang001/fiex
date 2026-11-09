@@ -1,13 +1,14 @@
 //! Opt-in loopback UI driver, compiled only into the separate CI test binary.
 //! Release installers are built without `ci-driver` and never start a server.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
+        Mutex,
         atomic::{AtomicU64, Ordering},
-        mpsc, Mutex,
+        mpsc,
     },
     time::Duration,
 };
@@ -143,7 +144,11 @@ pub fn start(app: tauri::AppHandle) -> Result<(), String> {
                 Err(e) => ("400 Bad Request", json!({"error": e})),
             };
             let body = body.to_string();
-            let _ = write!(stream, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
         }
     });
     Ok(())

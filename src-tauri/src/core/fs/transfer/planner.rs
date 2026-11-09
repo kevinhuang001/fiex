@@ -1,7 +1,7 @@
-use super::{binding, model::Step, FsOperation};
+use super::{FsOperation, binding, model::Step};
 use crate::core::{
     fs::ResourceBroker,
-    operations::{check_cancelled, OperationResult},
+    operations::{OperationResult, check_cancelled},
     transfers::{Action, Conflict, FileVersion, Resolution},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;

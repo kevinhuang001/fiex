@@ -5,8 +5,8 @@ use std::{collections::HashMap, fs, path::PathBuf};
 
 use super::{
     config::{connection_for_path, ensure_provider_access, local_for, rel_string},
-    files::{download_dir_inner, download_inner, TransferOptions},
-    store::{fiex_dir, StoredConnection},
+    files::{TransferOptions, download_dir_inner, download_inner},
+    store::{StoredConnection, fiex_dir},
 };
 
 type SelectedConnection = (StoredConnection, Vec<(String, String)>);

@@ -162,30 +162,36 @@ fn explicit_open_actions_may_create_results_next_to_the_selection() {
 
 #[test]
 fn info_compute_rejects_invalid_field_results() {
-    assert!(validate_result(
-        "info.compute",
-        &json!({"fields":[{"sectionId":"basic","fieldId":"size","value":3}]})
-    )
-    .is_err());
-    assert!(validate_result(
-        "info.compute",
-        &json!({"fields":[
-            {"sectionId":"basic","fieldId":"size","value":"1 KiB"},
-            {"sectionId":"basic","fieldId":"size","value":"2 KiB"}
-        ]})
-    )
-    .is_err());
+    assert!(
+        validate_result(
+            "info.compute",
+            &json!({"fields":[{"sectionId":"basic","fieldId":"size","value":3}]})
+        )
+        .is_err()
+    );
+    assert!(
+        validate_result(
+            "info.compute",
+            &json!({"fields":[
+                {"sectionId":"basic","fieldId":"size","value":"1 KiB"},
+                {"sectionId":"basic","fieldId":"size","value":"2 KiB"}
+            ]})
+        )
+        .is_err()
+    );
 }
 
 #[test]
 fn connection_validation_rejects_untyped_or_unknown_fields() {
     assert!(validate_result("connection.validate", &json!({"valid": true})).is_ok());
     assert!(validate_result("connection.validate", &json!({"valid": "true"})).is_err());
-    assert!(validate_result(
-        "connection.validate",
-        &json!({"valid": true, "credentials": {}, "unexpected": true})
-    )
-    .is_err());
+    assert!(
+        validate_result(
+            "connection.validate",
+            &json!({"valid": true, "credentials": {}, "unexpected": true})
+        )
+        .is_err()
+    );
 }
 
 #[test]

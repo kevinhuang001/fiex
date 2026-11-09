@@ -1,5 +1,5 @@
 //! Search-provider selection, VFS snapshot reconciliation, and accessible roots.
-use super::{adapter_content, BatchSink, SearchBatch, SearchEngine, SearchMode, SearchRequest};
+use super::{BatchSink, SearchBatch, SearchEngine, SearchMode, SearchRequest, adapter_content};
 use crate::core::files::Entry;
 use std::{path::PathBuf, sync::Mutex};
 

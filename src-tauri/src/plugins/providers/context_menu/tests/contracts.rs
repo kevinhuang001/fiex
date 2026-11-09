@@ -2,12 +2,14 @@ use super::*;
 
 #[test]
 fn menu_rejects_unknown_fields_and_unknown_parent() {
-    assert!(menu_response_valid(&json!({"items": [
-        {"id":"root","kind":"submenu","title":"Root"},
-        {"id":"open","kind":"action","title":"Open","parentId":"root"}
-    ]}))
-    .unwrap()
-    .contains("open"));
+    assert!(
+        menu_response_valid(&json!({"items": [
+            {"id":"root","kind":"submenu","title":"Root"},
+            {"id":"open","kind":"action","title":"Open","parentId":"root"}
+        ]}))
+        .unwrap()
+        .contains("open")
+    );
     for invalid in [
         json!({"items":[{"id":"a","title":"A","kind":"action","when":"true"}]}),
         json!({"items":[{"id":"a","title":"A","kind":"action","children":[]}]}),
@@ -65,10 +67,12 @@ fn disabled_actions_are_not_authorized_in_root_or_lazy_menus() {
         serde_json::json!({"id":"delete","kind":"action","title":"Delete","disabled":true});
     let response = serde_json::json!({"items":[action]});
     assert!(root_menu_valid(&response).unwrap().is_empty());
-    assert!(validated_submenu(&response, "parent", 1)
-        .unwrap()
-        .actions
-        .is_empty());
+    assert!(
+        validated_submenu(&response, "parent", 1)
+            .unwrap()
+            .actions
+            .is_empty()
+    );
     let invalid = serde_json::json!({"items":[{"id":"delete","kind":"action","title":"Delete","disabled":"yes"}]});
     assert!(root_menu_valid(&invalid).is_err());
 }

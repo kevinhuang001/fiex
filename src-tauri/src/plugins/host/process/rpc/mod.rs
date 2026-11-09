@@ -6,8 +6,9 @@ use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     io::Write,
     sync::{
+        Mutex,
         atomic::{AtomicBool, AtomicU64},
-        mpsc, Mutex,
+        mpsc,
     },
     time::Duration,
 };

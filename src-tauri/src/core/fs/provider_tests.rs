@@ -231,7 +231,7 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
 
 #[test]
 fn selected_local_path_cannot_be_relabelled_with_a_forged_reference() {
-    use crate::plugins::resource::resource_context::{bind_selected, ResourceBinding};
+    use crate::plugins::resource::resource_context::{ResourceBinding, bind_selected};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("selected.txt");
     std::fs::write(&path, b"selected").unwrap();
@@ -242,14 +242,16 @@ fn selected_local_path_cannot_be_relabelled_with_a_forged_reference() {
     )
     .reference;
     reference.mount_id = "forged-mount".into();
-    assert!(bind_selected(
-        &mut scope,
-        &[ResourceBinding {
-            reference,
-            path: path.to_string_lossy().into_owned()
-        }]
-    )
-    .is_err());
+    assert!(
+        bind_selected(
+            &mut scope,
+            &[ResourceBinding {
+                reference,
+                path: path.to_string_lossy().into_owned()
+            }]
+        )
+        .is_err()
+    );
 }
 
 #[test]

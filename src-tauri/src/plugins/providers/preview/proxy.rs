@@ -1,5 +1,5 @@
 //! Persistent PreviewProvider IPC identity with invocation-scoped resources.
-use super::session::{open_plugin_resource, UNSUPPORTED};
+use super::session::{UNSUPPORTED, open_plugin_resource};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     PreviewProvider, PreviewView, ProviderDescriptor, ProviderError, ProviderInput,

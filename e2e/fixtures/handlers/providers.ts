@@ -1,5 +1,5 @@
 import { notHandled } from './shared'
-let preferences: Record<string, { order: string[]; disabled: string[] }> = {}
+const preferences: Record<string, { order: string[]; disabled: string[] }> = {}
 const plugin = (id: string, name: string, modes?: string[]) => ({
   id,
   name,

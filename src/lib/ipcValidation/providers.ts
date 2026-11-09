@@ -125,8 +125,11 @@ export function parseRemoteConnectionConfig(value: unknown): {
 }
 
 export function parseInstallPreview(value: unknown): InstallPreview
-export function parseInstallPreview(value: unknown): LocalPreview
-export function parseInstallPreview(value: unknown): InstallPreview | LocalPreview {
+export function parseInstallPreview(value: unknown, local: true): LocalPreview
+export function parseInstallPreview(
+  value: unknown,
+  local?: boolean,
+): InstallPreview | LocalPreview {
   const preview = objectResult(value)
   if (
     typeof preview.ticket !== 'string' ||
@@ -135,16 +138,20 @@ export function parseInstallPreview(value: unknown): InstallPreview | LocalPrevi
     typeof preview.version !== 'string' ||
     !Array.isArray(preview.permissions) ||
     !preview.permissions.every((permission) => typeof permission === 'string') ||
-    typeof preview.requestedNetworkAll !== 'boolean' ||
     !Array.isArray(preview.requestedNetworkDomains) ||
     !preview.requestedNetworkDomains.every((domain) => typeof domain === 'string') ||
     !Array.isArray(preview.commands) ||
     !preview.commands.every((command) => typeof command === 'string') ||
     typeof preview.signed !== 'boolean' ||
-    typeof preview.trusted !== 'boolean' ||
-    typeof preview.isUpdate !== 'boolean' ||
-    typeof preview.permissionsChanged !== 'boolean' ||
-    typeof preview.repository !== 'string'
+    typeof preview.trusted !== 'boolean'
+  )
+    throw new TypeError('Invalid plugin installation preview')
+  if (
+    !local &&
+    (typeof preview.requestedNetworkAll !== 'boolean' ||
+      typeof preview.isUpdate !== 'boolean' ||
+      typeof preview.permissionsChanged !== 'boolean' ||
+      typeof preview.repository !== 'string')
   )
     throw new TypeError('Invalid plugin installation preview')
   return preview as unknown as InstallPreview | LocalPreview

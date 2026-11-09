@@ -1,11 +1,10 @@
 use super::{
-    plugin, require,
-    routing::{resolve, Route},
-    FsError, ProviderReadHandle, ReadHandle, ResourceBroker,
+    FsError, ProviderReadHandle, ReadHandle, ResourceBroker, plugin, require,
+    routing::{Route, resolve},
 };
 use crate::core::volumes::native_vfs;
 use fiex_provider_contracts::FsOperation;
-use serde_json::{to_value, Value};
+use serde_json::{Value, to_value};
 
 pub(in crate::core::fs) fn stat(resource: &ResourceBroker) -> Result<Value, FsError> {
     let entry = match resolve(&resource.path)? {

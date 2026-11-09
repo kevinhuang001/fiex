@@ -186,9 +186,11 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert!(candidates_for(std::slice::from_ref(&recent))
-            .iter()
-            .any(|provider| provider.id == "builtin:image"));
+        assert!(
+            candidates_for(std::slice::from_ref(&recent))
+                .iter()
+                .any(|provider| provider.id == "builtin:image")
+        );
         assert!(fallback_matches(std::slice::from_ref(&recent)));
         let trash = MatchResource {
             view: Some(fiex_provider_contracts::ResourceLocation {
@@ -198,9 +200,11 @@ mod tests {
             }),
             ..recent.clone()
         };
-        assert!(candidates_for(std::slice::from_ref(&trash))
-            .iter()
-            .any(|provider| provider.id == "builtin:image"));
+        assert!(
+            candidates_for(std::slice::from_ref(&trash))
+                .iter()
+                .any(|provider| provider.id == "builtin:image")
+        );
         assert!(fallback_matches(std::slice::from_ref(&trash)));
         let ordinary = MatchResource {
             metadata: Some(ResourceMetadata {

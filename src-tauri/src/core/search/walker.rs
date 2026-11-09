@@ -1,10 +1,10 @@
 //! Application adapter around the standalone bounded filesystem walker.
-use super::{BatchSink, SearchBatch, SearchMode, RESULT_LIMIT};
+use super::{BatchSink, RESULT_LIMIT, SearchBatch, SearchMode};
 use crate::core::{
-    files::{entry, Entry},
+    files::{Entry, entry},
     ignores::IgnoreSet,
 };
-use fiex_search::{walk, SearchWalkStats};
+use fiex_search::{SearchWalkStats, walk};
 use std::{
     path::Path,
     sync::{Arc, Mutex},

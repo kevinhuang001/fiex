@@ -4,12 +4,15 @@ use super::*;
 fn router_resolves_builtin_selection_and_execute_uses_its_snapshot() {
     let (_temp, directory, paths) = temp_selection();
     let many = super::query(&directory, &paths).unwrap();
-    assert!(many
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:batch-rename"));
-    assert!(!many
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:rename"));
+    assert!(
+        many.iter()
+            .any(|menu| menu["providerId"] == "builtin:batch-rename")
+    );
+    assert!(
+        !many
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:rename")
+    );
     let menu = action(&many, "batchRename");
     let session = menu["menuSessionId"].as_str().unwrap();
     let result = super::execute(session, "batchRename").unwrap();
@@ -17,12 +20,16 @@ fn router_resolves_builtin_selection_and_execute_uses_its_snapshot() {
     assert_eq!(result["paths"], json!(paths));
     assert!(super::execute(session, "batchRename").is_err());
     let single = super::query(&directory, &paths[..1]).unwrap();
-    assert!(single
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:rename"));
-    assert!(!single
-        .iter()
-        .any(|menu| menu["providerId"] == "builtin:batch-rename"));
+    assert!(
+        single
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:rename")
+    );
+    assert!(
+        !single
+            .iter()
+            .any(|menu| menu["providerId"] == "builtin:batch-rename")
+    );
 }
 
 #[test]
@@ -112,12 +119,16 @@ fn trash_and_permanent_delete_are_independent_core_actions() {
         .map(|provider| provider.id)
         .collect::<Vec<_>>();
     assert!(registered.iter().any(|id| id == "builtin:move-to-trash"));
-    assert!(registered
-        .iter()
-        .any(|id| id == "builtin:delete-permanently"));
-    assert!(!super::builtin::providers(&ctx)
-        .iter()
-        .any(|provider| provider.id == "builtin:pin"));
+    assert!(
+        registered
+            .iter()
+            .any(|id| id == "builtin:delete-permanently")
+    );
+    assert!(
+        !super::builtin::providers(&ctx)
+            .iter()
+            .any(|provider| provider.id == "builtin:pin")
+    );
 }
 
 #[test]

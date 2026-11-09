@@ -8,6 +8,7 @@ import type { JsonValue } from '../../../../sdk/ui/src/index'
 import { themeSnapshot } from '@/lib/themes'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
+import { parseJsonValue } from '@/lib/ipcValidation'
 import { openFilePicker } from '@/lib/filePicker'
 import {
   beginActivity,
@@ -376,7 +377,7 @@ export function usePanelBridge({
               return await call('plugin_invoke', {
                 pluginId: current.pluginId,
                 method: p.method,
-                params: baseParams,
+                params: parseJsonValue(baseParams),
                 directory: current.directory,
                 selectedPaths: resources.bindings(baseParams).map((binding) => binding.path),
                 resourceBindings: resources.bindings(baseParams),

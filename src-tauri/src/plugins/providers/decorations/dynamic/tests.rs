@@ -9,18 +9,22 @@ fn rejects_unsafe_values() {
     assert!(allowed_color("#fff"));
     assert!(allowed_color("orange"));
     assert!(!allowed_color("red; background:url(x)"));
-    assert!(safe_badge(DecorationBadge {
-        text: "M".into(),
-        color: "orange".into(),
-        tooltip: None
-    })
-    .is_some());
-    assert!(safe_badge(DecorationBadge {
-        text: "TOOLONG".into(),
-        color: "orange".into(),
-        tooltip: None
-    })
-    .is_none());
+    assert!(
+        safe_badge(DecorationBadge {
+            text: "M".into(),
+            color: "orange".into(),
+            tooltip: None
+        })
+        .is_some()
+    );
+    assert!(
+        safe_badge(DecorationBadge {
+            text: "TOOLONG".into(),
+            color: "orange".into(),
+            tooltip: None
+        })
+        .is_none()
+    );
 }
 
 #[test]

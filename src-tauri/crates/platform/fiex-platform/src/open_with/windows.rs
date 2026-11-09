@@ -2,25 +2,25 @@ use super::OpenWithCandidate;
 use std::{
     ffi::c_void,
     path::Path,
-    sync::{mpsc, OnceLock},
+    sync::{OnceLock, mpsc},
 };
 use windows::{
-    core::{Interface, PCWSTR, PWSTR},
     Win32::{
         Storage::EnhancedStorage::{PKEY_AppUserModel_ID, PKEY_Link_TargetParsingPath},
         System::Com::{
-            CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, IDataObject,
             CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+            CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, IDataObject,
         },
         UI::Shell::{
+            ASSOC_FILTER_NONE, ASSOCF_INIT_DEFAULTTOSTAR, ASSOCSTR_PROGID,
             ApplicationActivationManager, AssocQueryStringW, BHID_EnumItems, FOLDERID_AppsFolder,
             IApplicationActivationManager, IAssocHandler, IEnumAssocHandlers, IEnumShellItems,
-            IShellItem, IShellItem2, SHAssocEnumHandlers, SHCreateDataObject,
+            IShellItem, IShellItem2, KF_FLAG_DEFAULT, SHAssocEnumHandlers, SHCreateDataObject,
             SHCreateShellItemArrayFromIDLists, SHGetKnownFolderItem, SHParseDisplayName,
-            ASSOCF_INIT_DEFAULTTOSTAR, ASSOCSTR_PROGID, ASSOC_FILTER_NONE, KF_FLAG_DEFAULT,
             SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_FILESYSPATH, SIGDN_NORMALDISPLAY,
         },
     },
+    core::{Interface, PCWSTR, PWSTR},
 };
 
 pub(super) struct AppsFolderItem {

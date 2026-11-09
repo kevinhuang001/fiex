@@ -1,5 +1,5 @@
 use super::OpenWithCandidate;
-use objc2::rc::{autoreleasepool, Retained};
+use objc2::rc::{Retained, autoreleasepool};
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSString, NSURL};
 use std::{

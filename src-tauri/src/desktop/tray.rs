@@ -1,9 +1,9 @@
 //! Locale-aware tray menu; action identities stay stable across languages.
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
+    Manager,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
 };
 pub(super) static QUITTING: AtomicBool = AtomicBool::new(false);
 

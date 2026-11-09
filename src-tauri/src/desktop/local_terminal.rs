@@ -1,7 +1,7 @@
 //! Local shell discovery and profile-aware PTY startup.
 use super::{
     shell_profile::startup_args,
-    terminal::{home, start_session, TerminalEvent},
+    terminal::{TerminalEvent, home, start_session},
 };
 #[cfg(not(windows))]
 use crate::core::shells::order_shells;

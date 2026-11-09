@@ -139,18 +139,24 @@ mod tests {
             },
         );
         assert_eq!(candidates(&directory).len(), 1);
-        assert!(!candidates(&directory)
-            .iter()
-            .any(|provider| provider.id == "core.media"));
+        assert!(
+            !candidates(&directory)
+                .iter()
+                .any(|provider| provider.id == "core.media")
+        );
         let descriptions = sections("core.metadata", &directory).unwrap();
         assert!(descriptions.iter().any(|section| section.id == "basic"));
-        assert!(descriptions
-            .iter()
-            .any(|section| section.id == "directoryStats"));
-        assert!(!descriptions
-            .iter()
-            .flat_map(|section| &section.fields)
-            .any(|field| matches!(field.id.as_str(), "extension" | "mime" | "size")));
+        assert!(
+            descriptions
+                .iter()
+                .any(|section| section.id == "directoryStats")
+        );
+        assert!(
+            !descriptions
+                .iter()
+                .flat_map(|section| &section.fields)
+                .any(|field| matches!(field.id.as_str(), "extension" | "mime" | "size"))
+        );
     }
 
     #[test]
@@ -170,12 +176,16 @@ mod tests {
                 ..Default::default()
             };
             let candidates = registry().matched_candidates(&[target], None, 1);
-            assert!(candidates
-                .iter()
-                .any(|provider| provider.id == "core.metadata"));
-            assert!(candidates
-                .iter()
-                .any(|provider| provider.id == "core.media"));
+            assert!(
+                candidates
+                    .iter()
+                    .any(|provider| provider.id == "core.metadata")
+            );
+            assert!(
+                candidates
+                    .iter()
+                    .any(|provider| provider.id == "core.media")
+            );
         }
     }
 }

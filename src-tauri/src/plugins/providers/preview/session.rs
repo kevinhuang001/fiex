@@ -86,14 +86,13 @@ pub(super) fn open_plugin_resource(
         .lock()
         .map_err(|_| "preview session registry unavailable")?;
     values.retain(|_, session| session.created.elapsed() < SESSION_TTL);
-    if values.len() >= MAX_SESSIONS {
-        if let Some(oldest) = values
+    if values.len() >= MAX_SESSIONS
+        && let Some(oldest) = values
             .iter()
             .min_by_key(|(_, session)| session.created)
             .map(|(id, _)| id.clone())
-        {
-            values.remove(&oldest);
-        }
+    {
+        values.remove(&oldest);
     }
     values.insert(
         session_id.clone(),

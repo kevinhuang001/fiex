@@ -37,9 +37,11 @@ mod unit_tests {
         let value = hooks.get("core:recent.hook").unwrap();
         assert_eq!(value.call(), 7);
         assert_eq!(hooks.owner("core:recent.hook"), Some(owner));
-        assert!(hooks
-            .event_candidates("beforeOpen", &[], None, 1)
-            .is_empty());
+        assert!(
+            hooks
+                .event_candidates("beforeOpen", &[], None, 1)
+                .is_empty()
+        );
         let candidates = hooks.event_candidates("afterOpen", &[], None, 1);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].module_id, "core:recent");
@@ -66,14 +68,16 @@ mod unit_tests {
                     Arc::new(TestHandler(1)),
                 )
                 .unwrap();
-            assert!(module
-                .register(
-                    "builtin:test",
-                    2,
-                    ProviderMatchRule::default(),
-                    Arc::new(TestHandler(2))
-                )
-                .is_err());
+            assert!(
+                module
+                    .register(
+                        "builtin:test",
+                        2,
+                        ProviderMatchRule::default(),
+                        Arc::new(TestHandler(2))
+                    )
+                    .is_err()
+            );
         }
         info.module(ModuleDescriptor::new(
             "core:test-info",
@@ -111,9 +115,11 @@ mod unit_tests {
                 )
                 .unwrap();
             module.register_vfs_uri("core:recent", "recent").unwrap();
-            assert!(module
-                .register_vfs_uri("core:recent", "bad/scheme")
-                .is_err());
+            assert!(
+                module
+                    .register_vfs_uri("core:recent", "bad/scheme")
+                    .is_err()
+            );
         }
         assert_eq!(vfs.route_uri("recent://item"), Some("core:recent"));
         assert_eq!(vfs.route_uri("unknown://item"), None);

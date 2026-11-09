@@ -1,6 +1,6 @@
 //! Plugin-facing facade: logs and user-visible errors are separate sinks.
 pub use crate::infrastructure::logging::{
-    clear, list, report_log_limited, LogRecord as PluginError,
+    LogRecord as PluginError, clear, list, report_log_limited,
 };
 pub fn report(
     plugin_id: &str,

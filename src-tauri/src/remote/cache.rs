@@ -5,7 +5,7 @@ use serde::Serialize;
 use super::{
     config::{local_for, navigation_path},
     store::StoredConnection,
-    sync::{dirty, in_tree, RemoteMeta},
+    sync::{RemoteMeta, dirty, in_tree},
 };
 
 /// A cache or pin transition detected by background reconciliation. The

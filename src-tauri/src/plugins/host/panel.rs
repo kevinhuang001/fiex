@@ -1,6 +1,6 @@
 //! Panel document lookup, CSP injection and asset serving.
 use super::catalog::{canonical_under, discover};
-use super::manifest::{declared, preview_loading_entry, valid_package_entry, PluginManifest};
+use super::manifest::{PluginManifest, declared, preview_loading_entry, valid_package_entry};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -244,9 +244,11 @@ mod tests {
         let without_loading = manifest(json!({
             "preview": {"panel": {"entry": "ui/preview.html"}}
         }));
-        assert!(preview_loading_source(&without_loading, directory.path())
-            .unwrap()
-            .is_none());
+        assert!(
+            preview_loading_source(&without_loading, directory.path())
+                .unwrap()
+                .is_none()
+        );
         let escaping = manifest(json!({
             "preview": {"loading": {"entry": "../escape.html"}}
         }));

@@ -15,4 +15,4 @@ mod spawn;
 mod windows_stdio;
 
 pub use rules::Policy;
-pub use spawn::{run_wrapper_if_requested, spawn, KillHandle, SandboxChild};
+pub use spawn::{KillHandle, SandboxChild, run_wrapper_if_requested, spawn};

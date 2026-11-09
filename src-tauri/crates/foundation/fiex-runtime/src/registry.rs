@@ -6,6 +6,6 @@ mod typed_registry;
 mod types;
 
 pub use module_registrar::ModuleRegistrar;
-pub use runtime::{global_runtime_registry, RuntimeRegistry};
+pub use runtime::{RuntimeRegistry, global_runtime_registry};
 pub use typed_registry::TypedProviderRegistry;
 pub use types::{ModuleDescriptor, ProviderCandidate};

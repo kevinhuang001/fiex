@@ -2,8 +2,8 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU8, Ordering},
         LazyLock,
+        atomic::{AtomicU8, Ordering},
     },
 };
 static LOCALE: AtomicU8 = AtomicU8::new(0);

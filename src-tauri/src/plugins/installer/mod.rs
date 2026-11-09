@@ -17,7 +17,7 @@ mod package;
 
 mod signing;
 
-pub use marketplace::{marketplace, release_assets, MarketplacePlugin};
+pub use marketplace::{MarketplacePlugin, marketplace, release_assets};
 
 pub use package::install_root;
 

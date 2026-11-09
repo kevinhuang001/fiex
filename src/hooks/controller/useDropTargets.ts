@@ -1,11 +1,10 @@
 import type { Explorer } from '@/hooks/useExplorer'
+import type { DropPlan } from '@/lib/types'
 import { call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
 import type { ConflictState, Transfer } from './types'
-
-export type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
 
 /** Native drag-and-drop: dropping onto a sidebar bookmark or the workspace
  *  keeps a reference, dropping onto a folder (or the pane itself) transfers. */

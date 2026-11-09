@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn directory_statistics_compute_requested_fields_from_one_walk() {
-        use std::sync::{atomic::AtomicBool, Arc};
+        use std::sync::{Arc, atomic::AtomicBool};
 
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("top.txt"), b"abc").unwrap();

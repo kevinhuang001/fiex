@@ -4,7 +4,7 @@
 //! SHA-256 digest for every other file in the package, so verifying the
 //! signature and then every file proves the complete package was signed.
 use crate::plugins::host::{PluginManifest, PluginPublisher};
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -1,5 +1,6 @@
 import { getLocale, subscribeLocale, t } from '@/i18n'
 import { reportError } from '@/lib/errorCenter'
+import { parseJsonValue } from '@/lib/ipcValidation'
 import { useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
@@ -126,7 +127,7 @@ export function PluginPreviewFrame({
             return call('plugin_invoke', {
               pluginId,
               method: p.method,
-              params: p.params ?? null,
+              params: parseJsonValue(p.params ?? null),
               previewSessionId: sessionId,
             })
           }

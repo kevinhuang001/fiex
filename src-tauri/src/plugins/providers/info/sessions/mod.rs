@@ -5,8 +5,8 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -14,8 +14,8 @@ use std::{
 mod cache;
 mod compute;
 mod initialize;
-pub(super) use cache::{cache_core_results, read_core_cache, ComputePermit};
-pub(crate) use compute::{compute_fields, compute_session, ComputeTrigger};
+pub(super) use cache::{ComputePermit, cache_core_results, read_core_cache};
+pub(crate) use compute::{ComputeTrigger, compute_fields, compute_session};
 pub(crate) use initialize::initialize_session;
 
 const SESSION_TTL: Duration = Duration::from_secs(900);
@@ -229,22 +229,21 @@ pub(crate) fn mark_fields_error(
 }
 
 pub(crate) fn cancel_session_task(session_id: &str, task_id: &str) {
-    if let Ok(store) = sessions().lock() {
-        if let Some(cancelled) = store
+    if let Ok(store) = sessions().lock()
+        && let Some(cancelled) = store
             .get(session_id)
             .and_then(|session| session.tasks.get(task_id))
-        {
-            cancelled.store(true, Ordering::Release);
-        }
+    {
+        cancelled.store(true, Ordering::Release);
     }
 }
 
 pub(crate) fn close_session(session_id: &str) {
-    if let Ok(mut store) = sessions().lock() {
-        if let Some(session) = store.remove(session_id) {
-            for cancelled in session.tasks.values() {
-                cancelled.store(true, Ordering::Release);
-            }
+    if let Ok(mut store) = sessions().lock()
+        && let Some(session) = store.remove(session_id)
+    {
+        for cancelled in session.tasks.values() {
+            cancelled.store(true, Ordering::Release);
         }
     }
 }

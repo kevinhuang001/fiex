@@ -1,7 +1,7 @@
 //! The same typed predicate gates discovery and scope preparation before native IPC.
-use super::{event, ResourceSnapshot};
+use super::{ResourceSnapshot, event};
 use fiex_provider_contracts::{FsOperation, MatchResource, ResourceCapabilities};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(crate) fn matches(
     method: &str,
@@ -79,12 +79,14 @@ pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
                 .map(|metadata| serde_json::to_value(metadata).unwrap_or_else(|_| json!({})))
                 .filter(Value::is_object)
                 .unwrap_or_else(|| json!({}));
-            value["operations"] = json!(target
-                .capabilities
-                .operations
-                .iter()
-                .map(|operation| operation.as_str())
-                .collect::<Vec<_>>());
+            value["operations"] = json!(
+                target
+                    .capabilities
+                    .operations
+                    .iter()
+                    .map(|operation| operation.as_str())
+                    .collect::<Vec<_>>()
+            );
             if let Some(view) = target.view {
                 value["view"] = serde_json::to_value(view).unwrap_or(Value::Null);
             }

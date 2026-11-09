@@ -6,6 +6,7 @@ import { TerminalView } from '@/components/terminal/TerminalView'
 import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
+import { terminalWorkingDirectory } from '@/lib/terminalPath'
 
 interface TerminalTab {
   id: string
@@ -70,30 +71,13 @@ export function TerminalPanel({
   }, [shellMenu, settingsMenu])
 
   useEffect(() => {
-    const handler = (event: Event) => {
+    const openPanel = (event: Event, toggle: boolean) => {
       const detail = (event as CustomEvent<{ cwd?: string }>).detail
-      const cwd = typeof detail?.cwd === 'string' ? detail.cwd : lastCwd.current
-      lastCwd.current = cwd
-      const id = crypto.randomUUID()
-      const number = nextNumber.current++
-      setTabs((values) => [
-        ...values,
-        { id, number, cwd, shell: shells[0]?.path, shellName: shells[0]?.name },
-      ])
-      setActive(id)
-      setOpen(true)
-    }
-    window.addEventListener('fiex:open-builtin-terminal', handler)
-    return () => window.removeEventListener('fiex:open-builtin-terminal', handler)
-  }, [shells])
-
-  useEffect(() => {
-    const show = (event: Event) => {
-      const detail = (event as CustomEvent<{ cwd?: string }>).detail
-      const cwd = typeof detail?.cwd === 'string' ? detail.cwd : lastCwd.current
-      lastCwd.current = cwd
+      const requestedCwd = typeof detail?.cwd === 'string' ? detail.cwd : lastCwd.current
+      const cwd = terminalWorkingDirectory(requestedCwd)
+      if (cwd) lastCwd.current = cwd
       if (tabs.length) {
-        setOpen(true)
+        setOpen((value) => (toggle ? !value : true))
         setShellMenu(false)
         setSettingsMenu(false)
         if (!active || !tabs.some((tab) => tab.id === active)) setActive(tabs[tabs.length - 1].id)
@@ -112,8 +96,16 @@ export function TerminalPanel({
       setActive(id)
       setOpen(true)
     }
+    const show = (event: Event) => openPanel(event, false)
+    const toggle = (event: Event) => openPanel(event, true)
+    window.addEventListener('fiex:open-builtin-terminal', show)
     window.addEventListener('fiex:show-terminal-panel', show)
-    return () => window.removeEventListener('fiex:show-terminal-panel', show)
+    window.addEventListener('fiex:toggle-terminal-panel', toggle)
+    return () => {
+      window.removeEventListener('fiex:open-builtin-terminal', show)
+      window.removeEventListener('fiex:show-terminal-panel', show)
+      window.removeEventListener('fiex:toggle-terminal-panel', toggle)
+    }
   }, [tabs, active, shells])
 
   if (!tabs.length) return null

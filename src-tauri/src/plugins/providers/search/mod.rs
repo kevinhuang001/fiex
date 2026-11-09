@@ -12,7 +12,7 @@ use crate::core::search::SearchMode;
 use crate::plugins::events::Resolver;
 use fiex_provider_contracts::{SearchEntry, SearchProvider, SearchTag};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 pub use stream::{run, run_stream};
 
@@ -67,11 +67,12 @@ impl SearchEngineInfo {
     pub fn json(&self) -> Value {
         let mut value = self.resolver.json();
         value["builtin"] = Value::Bool(self.is_builtin());
-        value["modes"] = json!(self
-            .modes
-            .iter()
-            .map(|mode| mode.as_str())
-            .collect::<Vec<_>>());
+        value["modes"] = json!(
+            self.modes
+                .iter()
+                .map(|mode| mode.as_str())
+                .collect::<Vec<_>>()
+        );
         value
     }
 }

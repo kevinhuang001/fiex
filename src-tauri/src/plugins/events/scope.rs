@@ -24,16 +24,18 @@ pub fn prepare(
         }
         let paths = scope.selected_paths();
         if params.get("targets").is_none() {
-            params["targets"] = json!(paths
-                .iter()
-                .map(
-                    |path| crate::plugins::resource::resource_context::new_resource_snapshot(
-                        &path.to_string_lossy(),
-                        path
+            params["targets"] = json!(
+                paths
+                    .iter()
+                    .map(
+                        |path| crate::plugins::resource::resource_context::new_resource_snapshot(
+                            &path.to_string_lossy(),
+                            path
+                        )
+                        .project(plugin, "", true, false)
                     )
-                    .project(plugin, "", true, false)
-                )
-                .collect::<Vec<_>>());
+                    .collect::<Vec<_>>()
+            );
         }
         let targets = params["targets"]
             .as_array_mut()
@@ -131,15 +133,17 @@ pub fn resource_scope(
     ) && (policy.allowed(crate::plugins::security::policy::Capability::FilesRead)
         || method == "contextMenu.execute"
         || method == "toolbar.invoke");
-    params["targets"] = json!(resources
-        .iter()
-        .map(|r| r.project(
-            &plugin.id,
-            "",
-            policy.allowed(crate::plugins::security::policy::Capability::Metadata),
-            false
-        ))
-        .collect::<Vec<_>>());
+    params["targets"] = json!(
+        resources
+            .iter()
+            .map(|r| r.project(
+                &plugin.id,
+                "",
+                policy.allowed(crate::plugins::security::policy::Capability::Metadata),
+                false
+            ))
+            .collect::<Vec<_>>()
+    );
     // The trusted target count is separate from the metadata projection so
     // blank-canvas actions and multi-selection policies keep exact semantics.
     params["selectionCount"] = json!(resources.len());
@@ -226,21 +230,20 @@ pub fn resource_scope(
         }
     }
     // Directory events explicitly authorize their requested root, not an unrelated current pane.
-    if matches!(method, "decorations.resolve" | "search.query") {
-        if let Some(dir) = host_directory {
-            scope = crate::plugins::resource::fs_access::Scope::new(Path::new(dir))?;
-            for ((resource, target), access) in resources
-                .iter()
-                .zip(params["targets"].as_array().unwrap())
-                .zip(&access)
-            {
-                let local = (*access
-                    == crate::core::fs::provider_registry::ResourceAccess::HostPath)
-                    .then_some(resource.local.as_path());
-                scope.bind_resource(target, local)?;
-                if *access == crate::core::fs::provider_registry::ResourceAccess::Provider {
-                    scope.bind_remote(target, resource)?;
-                }
+    if matches!(method, "decorations.resolve" | "search.query")
+        && let Some(dir) = host_directory
+    {
+        scope = crate::plugins::resource::fs_access::Scope::new(Path::new(dir))?;
+        for ((resource, target), access) in resources
+            .iter()
+            .zip(params["targets"].as_array().unwrap())
+            .zip(&access)
+        {
+            let local = (*access == crate::core::fs::provider_registry::ResourceAccess::HostPath)
+                .then_some(resource.local.as_path());
+            scope.bind_resource(target, local)?;
+            if *access == crate::core::fs::provider_registry::ResourceAccess::Provider {
+                scope.bind_remote(target, resource)?;
             }
         }
     }

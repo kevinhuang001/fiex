@@ -1,7 +1,7 @@
 //! Filesystem-driver listing and bounded read operations.
 
 use super::mount::{btrfs_fs, ensure_access};
-use super::util::{clean_path, FsKind, Route, UsbEntry};
+use super::util::{FsKind, Route, UsbEntry, clean_path};
 use std::path::Path;
 
 mod drivers;

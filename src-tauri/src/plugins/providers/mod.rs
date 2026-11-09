@@ -88,11 +88,13 @@ mod tests {
     fn central_bootstrap_registers_all_core_provider_kinds() {
         initialize_native_providers();
 
-        assert!(NativeProviderRegistry::<
-            dyn crate::core::volumes::native_vfs::RegisteredNativeVfsProvider,
-        >::shared(ProviderKind::Vfs)
-        .get("core:recent")
-        .is_some());
+        assert!(
+            NativeProviderRegistry::<
+                dyn crate::core::volumes::native_vfs::RegisteredNativeVfsProvider,
+            >::shared(ProviderKind::Vfs)
+            .get("core:recent")
+            .is_some()
+        );
         assert!(
             NativeProviderRegistry::<dyn HookProvider>::shared(ProviderKind::Hook)
                 .get("core:recent.hook")
@@ -118,11 +120,11 @@ mod tests {
                 .get("builtin:tags")
                 .is_some()
         );
-        assert!(NativeProviderRegistry::<dyn ContextMenuProvider>::shared(
-            ProviderKind::ContextMenu
-        )
-        .get("builtin:open")
-        .is_some());
+        assert!(
+            NativeProviderRegistry::<dyn ContextMenuProvider>::shared(ProviderKind::ContextMenu)
+                .get("builtin:open")
+                .is_some()
+        );
         assert!(
             NativeProviderRegistry::<dyn ConnectionContextMenuProvider>::shared(
                 ProviderKind::ConnectionContextMenu

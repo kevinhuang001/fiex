@@ -1,5 +1,5 @@
 //! OS adapter implementing the Applications module's injected platform contract.
-use super::super::{decode, encode, URI};
+use super::super::{URI, decode, encode};
 use super::{
     classify_host_application as classify_host, is_user_application as is_user_app, platform_list,
     platform_open,
@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 struct CoreApplicationsBackend;
 
-pub(in crate::core::volumes::applications) fn backend(
-) -> Arc<dyn fiex_applications::ApplicationsBackend> {
+pub(in crate::core::volumes::applications) fn backend()
+-> Arc<dyn fiex_applications::ApplicationsBackend> {
     Arc::new(CoreApplicationsBackend)
 }
 

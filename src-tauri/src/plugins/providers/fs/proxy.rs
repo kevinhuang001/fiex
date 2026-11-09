@@ -13,7 +13,7 @@ use fiex_provider_contracts::{
 use invocation::MountInvocation;
 pub(super) use registry::forget_plugin;
 use registry::provider;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 pub(super) use stream_routes::{begin_write, open_read};
 use streams::{RemoteReader, RemoteWriter};
@@ -192,7 +192,8 @@ impl VfsProvider for IpcVfsProvider {
 pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value, String> {
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), method, params.clone());
-    let result = match method {
+
+    match method {
         "vfs.list" => {
             let request = FsRequest::new(&invocation, FsOperation::List)
                 .map_err(|error| error.to_string())?;
@@ -264,6 +265,5 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
         "vfs.openRead" | "vfs.beginWrite" | "vfs.readStream" | "vfs.closeRead"
         | "vfs.writeStream" | "vfs.commit" | "vfs.abort" => mount.invoke_remote(method, params),
         _ => Err("unsupported VfsProvider method".into()),
-    };
-    result
+    }
 }

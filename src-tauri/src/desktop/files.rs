@@ -6,7 +6,7 @@ use crate::{
     core::files,
     core::operations::{self, OperationCancel, OperationResult, Operations},
     core::search::{
-        SearchBatch, SearchEngine, SearchMode, SearchRequest, SearchState, RESULT_LIMIT,
+        RESULT_LIMIT, SearchBatch, SearchEngine, SearchMode, SearchRequest, SearchState,
     },
     core::transfers::Resolution,
     core::volumes,
@@ -14,7 +14,7 @@ use crate::{
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
-use tauri::{ipc::Channel, Emitter, Manager};
+use tauri::{Emitter, Manager, ipc::Channel};
 
 #[macro_use]
 mod directory_open;

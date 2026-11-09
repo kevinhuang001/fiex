@@ -3,8 +3,8 @@
 //! Operation groups are separate modules; plugin mount adaptation is isolated
 //! in `plugin`, and owner/identity classification in `routing`.
 use super::{
-    handles::{ProviderReadHandle, ProviderWriteHandle},
     FsError, FsErrorKind, ReadHandle, ResourceBroker, WriteHandle,
+    handles::{ProviderReadHandle, ProviderWriteHandle},
 };
 
 mod access;
@@ -22,6 +22,6 @@ pub(super) use writes::{
 };
 
 pub(crate) use routing::{
-    child_path, identity, is_plugin_mount, owner, parent_path, reference_mount_id, resource_access,
-    resource_entry, validate_child, ChildKind, ResourceAccess, ResourceOwner,
+    ChildKind, ResourceAccess, ResourceOwner, child_path, identity, is_plugin_mount, owner,
+    parent_path, reference_mount_id, resource_access, resource_entry, validate_child,
 };

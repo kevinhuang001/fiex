@@ -19,7 +19,7 @@ pub(crate) use binding::{create, move_to_trash, rename_path};
 pub(crate) use export::export as export_for_external_drag;
 #[cfg(feature = "desktop")]
 pub(crate) use export::initialize as initialize_exports;
-pub use fiex_fs::{FsError, FsErrorKind, ReadHandle, WriteHandle, CHUNK};
+pub use fiex_fs::{CHUNK, FsError, FsErrorKind, ReadHandle, WriteHandle};
 pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;

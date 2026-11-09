@@ -146,7 +146,7 @@ for (let i = 0; i < bulkCount; i++)
     ),
   )
 
-export let fixtureGitEntries: Record<string, string> = {
+export const fixtureGitEntries: Record<string, string> = {
   '/Users/kevin/Documents/Notes.md': ' M',
 }
 

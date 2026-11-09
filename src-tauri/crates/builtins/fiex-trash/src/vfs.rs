@@ -1,6 +1,6 @@
 use crate::{
-    is_recycle_bin_uri, system_recycle_bin, system_trash_directory, TrashModuleServices,
-    RECYCLE_BIN_URI, TRASH_URI,
+    RECYCLE_BIN_URI, TRASH_URI, TrashModuleServices, is_recycle_bin_uri, system_recycle_bin,
+    system_trash_directory,
 };
 use fiex_provider_contracts::{
     FsEntry, FsListing, FsOperation, FsRequest, ProviderError, ProviderInvocation,

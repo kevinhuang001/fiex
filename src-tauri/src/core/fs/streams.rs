@@ -1,7 +1,7 @@
 //! Actor-owned bounded stream handles. Registry locks are never held across
 //! provider IPC; each stream serializes only its own operations.
 use super::*;
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use std::{
     collections::HashMap,

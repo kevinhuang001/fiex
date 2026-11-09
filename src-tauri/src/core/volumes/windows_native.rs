@@ -5,24 +5,25 @@ use std::{
     mem::{size_of, size_of_val},
 };
 use windows::{
-    core::PCWSTR,
     Win32::{
         Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE},
         Storage::FileSystem::{
-            CreateFileW, FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceExW,
-            GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, SetVolumeMountPointW,
-            FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+            CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceExW,
+            GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, OPEN_EXISTING,
+            SetVolumeMountPointW,
         },
         System::{
-            Ioctl::{
-                PropertyStandardQuery, StorageDeviceProperty, FSCTL_DISMOUNT_VOLUME,
-                FSCTL_LOCK_VOLUME, IOCTL_STORAGE_EJECT_MEDIA, IOCTL_STORAGE_GET_DEVICE_NUMBER,
-                IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
-                STORAGE_PROPERTY_QUERY,
-            },
             IO::DeviceIoControl,
+            Ioctl::{
+                FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME, IOCTL_STORAGE_EJECT_MEDIA,
+                IOCTL_STORAGE_GET_DEVICE_NUMBER, IOCTL_STORAGE_QUERY_PROPERTY,
+                PropertyStandardQuery, STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
+                STORAGE_PROPERTY_QUERY, StorageDeviceProperty,
+            },
         },
     },
+    core::PCWSTR,
 };
 
 #[derive(Clone, Debug)]

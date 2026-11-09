@@ -9,16 +9,17 @@ export function ConnectionSetupHelp({
   factory: { description?: string; setupUrl?: string }
   busy: boolean
 }) {
+  const setupUrl = factory.setupUrl
   return (
     <>
       {factory.description && <p className="sidebar-hint">{factory.description}</p>}
-      {factory.setupUrl && (
+      {setupUrl && (
         <Button
           type="button"
           variant="outline"
           disabled={busy}
           onClick={() =>
-            void call('open_external_url', { url: factory.setupUrl }).catch((cause) =>
+            void call('open_external_url', { url: setupUrl }).catch((cause) =>
               reportError(cause, 'connections:setup'),
             )
           }

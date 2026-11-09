@@ -4,8 +4,9 @@ use std::{
     io,
     net::{SocketAddr, ToSocketAddrs},
     sync::{
+        Mutex, MutexGuard, TryLockError,
         atomic::{AtomicUsize, Ordering},
-        mpsc, Mutex, MutexGuard, TryLockError,
+        mpsc,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };

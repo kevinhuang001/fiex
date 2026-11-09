@@ -7,7 +7,7 @@ use crate::plugins::{
 use fiex_provider_contracts::{
     HookProvider, HookResult, ProviderError, ProviderInvocation, ProviderRequest,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 mod native;
@@ -193,10 +193,12 @@ mod tests {
 
     #[test]
     fn hook_result_rejects_removed_preview_field() {
-        assert!(serde_json::from_value::<HookResult>(json!({
-            "handled": true,
-            "preview": false
-        }))
-        .is_err());
+        assert!(
+            serde_json::from_value::<HookResult>(json!({
+                "handled": true,
+                "preview": false
+            }))
+            .is_err()
+        );
     }
 }

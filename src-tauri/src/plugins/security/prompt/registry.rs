@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use super::{emit, PermissionPromptEvent, PermissionPromptRequest, PromptKind, WAIT_TIMEOUT};
+use super::{PermissionPromptEvent, PermissionPromptRequest, PromptKind, WAIT_TIMEOUT, emit};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct Key {

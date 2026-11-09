@@ -219,10 +219,10 @@ pub fn validate_child(parent_uri: &str, child_uri: &str) -> Result<(), String> {
     if !parent_uri_matches(&state, parent_uri) {
         return Err("StaleRef: Applications parent moved".into());
     }
-    if let Some(pending) = pending_target(child_uri) {
-        if pending.parent_uri == parent_uri {
-            return Ok(());
-        }
+    if let Some(pending) = pending_target(child_uri)
+        && pending.parent_uri == parent_uri
+    {
+        return Ok(());
     }
     fiex_applications::validate_child_in(&state, parent_uri, child_uri)
 }

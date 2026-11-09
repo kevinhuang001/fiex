@@ -1,9 +1,9 @@
 //! The builtin walker implements the same shared SearchProvider trait as
 //! plugin proxies. Core invokes it directly and keeps cancellation and result
 //! streaming inside the process.
-use super::SearchMode;
 #[cfg(test)]
 use super::BUILTIN_SEARCH;
+use super::SearchMode;
 use crate::plugins::{
     events::Resolver, native_invocation::NativeProviderInvocation,
     provider_registry::native::NativeProviderRegistry,

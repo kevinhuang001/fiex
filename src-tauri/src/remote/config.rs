@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::store::{connection_plugin_id, fiex_dir, load_stored, StoredConnection};
+use super::store::{StoredConnection, connection_plugin_id, fiex_dir, load_stored};
 
 fn drives_dir() -> PathBuf {
     fiex_dir().join("drives")
@@ -116,10 +116,9 @@ pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
         }
         if let Ok(value) =
             crate::plugins::storage::secret_get(&connection_plugin_id(conn), &scope, field)
+            && !value.is_empty()
         {
-            if !value.is_empty() {
-                config.insert(field.clone(), serde_json::Value::String(value));
-            }
+            config.insert(field.clone(), serde_json::Value::String(value));
         }
     }
     // This is a Core-owned policy projection, never user-editable connection

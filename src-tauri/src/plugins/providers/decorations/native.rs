@@ -180,12 +180,16 @@ mod tests {
         assert_eq!(local.len(), 1);
         assert_eq!(local[0].id, "builtin:tags");
         let applications = providers(&[], crate::core::volumes::applications::URI);
-        assert!(applications
-            .iter()
-            .any(|provider| provider.id == "builtin:application-icon"));
-        assert!(!applications
-            .iter()
-            .any(|provider| provider.id == "builtin:tags"));
+        assert!(
+            applications
+                .iter()
+                .any(|provider| provider.id == "builtin:application-icon")
+        );
+        assert!(
+            !applications
+                .iter()
+                .any(|provider| provider.id == "builtin:tags")
+        );
     }
 
     #[test]
@@ -208,10 +212,12 @@ mod tests {
         };
         let mut entries = HashMap::new();
         entries.insert(path.clone(), entry.clone());
-        assert!(resolve("builtin:tags", "/", &entries).unwrap()[0]
-            .native_badges
-            .iter()
-            .all(|badge: &NativeBadge| badge.dot));
+        assert!(
+            resolve("builtin:tags", "/", &entries).unwrap()[0]
+                .native_badges
+                .iter()
+                .all(|badge: &NativeBadge| badge.dot)
+        );
         assert_eq!(
             resolve("builtin:connection-status", "/", &entries).unwrap()[0].native_badges[0]
                 .status

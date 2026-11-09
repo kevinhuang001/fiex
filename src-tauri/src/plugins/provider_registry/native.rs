@@ -8,7 +8,7 @@ use crate::plugins::events::Resolver;
 use fiex_provider_contracts::ProviderDescriptor;
 use fiex_provider_contracts::{MatchResource, ProviderKind};
 use fiex_runtime::{ModuleDescriptor, ProviderCandidate, TypedProviderRegistry};
-use fiex_storage::{native::OwnerBoundStorage, CoreOwnerKey};
+use fiex_storage::{CoreOwnerKey, native::OwnerBoundStorage};
 use std::sync::Arc;
 
 pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync + 'static> {
@@ -176,22 +176,26 @@ mod tests {
                     Arc::new(First),
                 )
                 .unwrap();
-            assert!(module
-                .register(
-                    "core.example",
-                    90,
-                    ProviderMatchRule::default(),
-                    Arc::new(First)
-                )
-                .is_err());
-            assert!(module
-                .register(
-                    "invalid/id",
-                    10,
-                    ProviderMatchRule::default(),
-                    Arc::new(First)
-                )
-                .is_err());
+            assert!(
+                module
+                    .register(
+                        "core.example",
+                        90,
+                        ProviderMatchRule::default(),
+                        Arc::new(First)
+                    )
+                    .is_err()
+            );
+            assert!(
+                module
+                    .register(
+                        "invalid/id",
+                        10,
+                        ProviderMatchRule::default(),
+                        Arc::new(First)
+                    )
+                    .is_err()
+            );
         }
         assert_eq!(entries.len(), 1);
         assert_eq!(entries.get("core.example").unwrap().call(), 7);

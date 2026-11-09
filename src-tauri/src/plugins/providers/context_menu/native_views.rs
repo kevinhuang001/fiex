@@ -12,9 +12,9 @@ use fiex_provider_contracts::{
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
 #[cfg(test)]
-use serde_json::json;
-#[cfg(test)]
 use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 use std::sync::Arc;
 
 mod implementations;

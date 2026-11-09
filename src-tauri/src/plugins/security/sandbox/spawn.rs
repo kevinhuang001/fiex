@@ -51,12 +51,12 @@ pub struct KillHandle(std::sync::Arc<(u32, std::sync::atomic::AtomicBool)>);
 
 impl KillHandle {
     pub fn terminate(&self) {
-        if self.0 .1.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        if self.0.1.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return;
         }
         #[cfg(unix)]
         unsafe {
-            libc::kill(self.0 .0 as i32, libc::SIGKILL);
+            libc::kill(self.0.0 as i32, libc::SIGKILL);
         }
         #[cfg(windows)]
         unsafe {
@@ -66,7 +66,7 @@ impl KillHandle {
                 fn TerminateProcess(handle: *mut std::ffi::c_void, code: u32) -> i32;
                 fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
             }
-            let handle = OpenProcess(1, 0, self.0 .0);
+            let handle = OpenProcess(1, 0, self.0.0);
             if !handle.is_null() {
                 TerminateProcess(handle, 1);
                 CloseHandle(handle);

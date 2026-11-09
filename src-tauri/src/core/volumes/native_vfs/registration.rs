@@ -3,7 +3,7 @@ use super::application_provider::ApplicationView;
 use super::provider_handlers::*;
 use super::{recent_provider, storage_provider::StorageProvider, trash_provider};
 use crate::{
-    core::{files::Entry, fs::provider_registry::ChildKind, fs::ResourceBroker},
+    core::{files::Entry, fs::ResourceBroker, fs::provider_registry::ChildKind},
     plugins::provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{

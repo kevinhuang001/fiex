@@ -1,7 +1,7 @@
 [package]
 name = "fiex-recent"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.90"
 publish = false
 
@@ -13,4 +13,3 @@ globset = "0.4"
 hex = "0.4"
 serde = { workspace = true }
 serde_json = { workspace = true }
-urlencoding = "2"

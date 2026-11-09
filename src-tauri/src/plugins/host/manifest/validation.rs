@@ -79,12 +79,13 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         match enabled {
             Value::Bool(_) => {}
             Value::Object(object) => {
-                if let Some(priority) = object.get("priority") {
-                    if !priority.is_i64() && !priority.is_u64() {
-                        return Err(
-                            "extensions.connectionContextMenus.priority must be an integer".into(),
-                        );
-                    }
+                if let Some(priority) = object.get("priority")
+                    && !priority.is_i64()
+                    && !priority.is_u64()
+                {
+                    return Err(
+                        "extensions.connectionContextMenus.priority must be an integer".into(),
+                    );
                 }
                 crate::plugins::match_rules::validate(object.get("match"), false, false)?;
                 if object
@@ -161,27 +162,27 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "info" {
             validate_info_registration(object)?;
         }
-        if key == "preview" {
-            if let Some(loading) = object.get("loading") {
-                let loading = loading
-                    .as_object()
-                    .ok_or("extensions.preview.loading must be an object")?;
-                for field in loading.keys() {
-                    if field != "entry" {
-                        return Err(format!(
-                            "extensions.preview.loading.{field} is not supported"
-                        ));
-                    }
+        if key == "preview"
+            && let Some(loading) = object.get("loading")
+        {
+            let loading = loading
+                .as_object()
+                .ok_or("extensions.preview.loading must be an object")?;
+            for field in loading.keys() {
+                if field != "entry" {
+                    return Err(format!(
+                        "extensions.preview.loading.{field} is not supported"
+                    ));
                 }
-                let entry = loading
-                    .get("entry")
-                    .and_then(Value::as_str)
-                    .ok_or("extensions.preview.loading.entry is required")?;
-                if !valid_package_entry(entry) {
-                    return Err(
-                        "extensions.preview.loading.entry must be a package-relative path".into(),
-                    );
-                }
+            }
+            let entry = loading
+                .get("entry")
+                .and_then(Value::as_str)
+                .ok_or("extensions.preview.loading.entry is required")?;
+            if !valid_package_entry(entry) {
+                return Err(
+                    "extensions.preview.loading.entry must be a package-relative path".into(),
+                );
             }
         }
     }

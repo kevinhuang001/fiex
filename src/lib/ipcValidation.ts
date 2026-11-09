@@ -71,8 +71,8 @@ export function decodeDynamicIpcResult(
     command === 'reset_provider_preference'
   )
     return parseProviderPreferences(value)
-  if (command === 'plugin_prepare_install' || command === 'plugin_prepare_local_install')
-    return parseInstallPreview(value)
+  if (command === 'plugin_prepare_install') return parseInstallPreview(value)
+  if (command === 'plugin_prepare_local_install') return parseInstallPreview(value, true)
   if (command === 'plugin_connection_menu_resolve') return parseConnectionMenus(value)
   if (command === 'plugin_decorations') return parseEntryDecorations(value)
   if (command === 'plugin_themes') return parseThemes(value)

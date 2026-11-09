@@ -37,9 +37,11 @@ fn directory_listing_uses_name_paths_and_node_capabilities() {
         .find(|entry| entry.name == "Folder")
         .unwrap();
     assert_eq!(file.node_id, "trash://notes.txt");
-    assert!(!file
-        .node_id
-        .contains(root.path().to_string_lossy().as_ref()));
+    assert!(
+        !file
+            .node_id
+            .contains(root.path().to_string_lossy().as_ref())
+    );
     assert!(file.allows(FsOperation::Remove));
     assert!(!file.allows(FsOperation::List));
     assert!(folder.allows(FsOperation::List));

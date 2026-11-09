@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::plugins::security::permissions::{self as plugin_permissions, PluginGrant};
 
 use super::capability::Capability;
-use super::decision::{decide, decide_command, decide_domain, Decision};
+use super::decision::{Decision, decide, decide_command, decide_domain};
 
 /// A permission view for one plugin instance. Decision failures are closed:
 /// an unreadable policy store, an unknown capability name, or a revoked grant

@@ -1,5 +1,13 @@
 use super::*;
 use serde_json::json;
+
+mod references;
+fn assert_paths_resolve_to_same_location(actual: &str, expected: &std::path::Path) {
+    assert_eq!(
+        std::fs::canonicalize(actual).unwrap(),
+        std::fs::canonicalize(expected).unwrap()
+    );
+}
 fn binding(dir: &std::path::Path, path: &std::path::Path) -> (Scope, Value) {
     let mut scope = Scope::selected(dir, &[path.to_path_buf()]).unwrap();
     let snapshot = crate::plugins::resource::resource_context::new_resource_snapshot(
@@ -42,7 +50,7 @@ fn stream_ownership_seek_and_cleanup_are_enforced() {
 }
 #[test]
 fn transactional_writes_abort_and_commit_without_exposing_paths() {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a");
     std::fs::write(&path, b"before").unwrap();
@@ -56,9 +64,11 @@ fn transactional_writes_abort_and_commit_without_exposing_paths() {
     let handle = broker.begin_write(false).unwrap();
     let params = json!({"handle":handle,"base64":STANDARD.encode(b"after")});
     stream_call("write-test", "host.fs.writeChunk", &params).unwrap();
-    assert!(stream_call("write-test", "host.fs.commit", &params)
-        .unwrap()
-        .is_null());
+    assert!(
+        stream_call("write-test", "host.fs.commit", &params)
+            .unwrap()
+            .is_null()
+    );
     assert_eq!(std::fs::read(&path).unwrap(), b"after");
 }
 #[test]
@@ -72,32 +82,12 @@ fn readonly_view_rejects_stream_mutation_and_unrelated_destinations() {
     assert!(scope.authorize_method("host.fs.seekWrite").is_err());
     assert!(scope.authorize_method("fs.beginWrite").is_err());
     let other = dir.path().join("b");
-    assert!(scope
-        .issue_child(&reference, other.to_str().unwrap(), None)
-        .is_err());
-}
-#[test]
-fn resource_identity_is_stable_across_fresh_snapshots() {
-    let dir = tempfile::tempdir().unwrap();
-    let a = dir.path().join("a");
-    let b = dir.path().join("b");
-    std::fs::write(&a, b"a").unwrap();
-    std::fs::write(&b, b"b").unwrap();
-    assert_eq!(
-        crate::plugins::resource::resource_context::new_resource_snapshot(a.to_str().unwrap(), &a)
-            .reference,
-        crate::plugins::resource::resource_context::resolve(a.to_str().unwrap())
-            .unwrap()
-            .reference
-    );
-    assert_ne!(
-        crate::plugins::resource::resource_context::new_resource_snapshot(a.to_str().unwrap(), &a)
-            .reference,
-        crate::plugins::resource::resource_context::new_resource_snapshot(b.to_str().unwrap(), &b)
-            .reference
+    assert!(
+        scope
+            .issue_child(&reference, other.to_str().unwrap(), None)
+            .is_err()
     );
 }
-
 #[test]
 fn application_user_children_cannot_create_files() {
     let root = crate::core::volumes::applications::URI;
@@ -175,13 +165,10 @@ fn keep_both_copy_in_source_parent_creates_a_suffixed_sibling() {
     .unwrap();
 
     assert!(result.errors.is_empty(), "{:?}", result.errors);
-    assert_eq!(
-        result.paths,
-        vec![directory
-            .path()
-            .join("report (2).txt")
-            .to_string_lossy()
-            .into_owned()]
+    assert_eq!(result.paths.len(), 1);
+    assert_paths_resolve_to_same_location(
+        &result.paths[0],
+        &directory.path().join("report (2).txt"),
     );
     assert_eq!(
         std::fs::read(directory.path().join("report.txt")).unwrap(),
@@ -216,14 +203,8 @@ fn duplicate_directory_in_source_parent_creates_a_suffixed_sibling() {
     .unwrap();
 
     assert!(result.errors.is_empty(), "{:?}", result.errors);
-    assert_eq!(
-        result.paths,
-        vec![parent
-            .path()
-            .join("assets (2)")
-            .to_string_lossy()
-            .into_owned()]
-    );
+    assert_eq!(result.paths.len(), 1);
+    assert_paths_resolve_to_same_location(&result.paths[0], &parent.path().join("assets (2)"));
     assert!(source.join("nested/image.png").is_file());
     assert_eq!(
         std::fs::read(parent.path().join("assets (2)/nested/image.png")).unwrap(),

@@ -1,7 +1,8 @@
 //! Dispatch optional native provider behavior through the registered instance.
 use super::{
+    RegisteredNativeVfsProvider,
     identity::{provider_id, shared_provider_id},
-    opaque, registry, RegisteredNativeVfsProvider,
+    opaque, registry,
 };
 use crate::core::files::Entry;
 use std::{
@@ -16,13 +17,12 @@ pub(crate) fn validate_child_with_scope(
 ) -> Result<(), String> {
     let provider_id =
         shared_provider_id(parent).ok_or("Unsupported: provider is not registered")?;
-    if let Some(provider) = registry().get(provider_id) {
-        if let Some(result) = provider
+    if let Some(provider) = registry().get(provider_id)
+        && let Some(result) = provider
             .behavior()
             .validate_scoped_child(scope, parent, child)
-        {
-            return result;
-        }
+    {
+        return result;
     }
     validate_child(parent, child)
 }
@@ -166,13 +166,12 @@ pub(crate) fn child_path(
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
-    if let Some(provider) = shared_provider_id(path) {
-        if let Some(parent_path) = registry()
+    if let Some(provider) = shared_provider_id(path)
+        && let Some(parent_path) = registry()
             .get(provider)
             .and_then(|view| view.behavior().parent_path(path))
-        {
-            return parent_path;
-        }
+    {
+        return parent_path;
     }
     if opaque(path) {
         return Err("view has no writable parent".into());

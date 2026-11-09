@@ -1,6 +1,6 @@
 //! Core event pipeline: discover → dispatch → validate → collect.
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
@@ -8,7 +8,7 @@ mod registry;
 mod router;
 mod scope;
 mod validation;
-use fiex_provider_contracts::{event, Dispatch};
+use fiex_provider_contracts::{Dispatch, event};
 pub use registry::Resolver;
 pub use router::{EventRouter, ProviderCandidate};
 #[cfg(test)]

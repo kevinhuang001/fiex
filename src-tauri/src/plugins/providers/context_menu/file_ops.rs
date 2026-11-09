@@ -11,9 +11,9 @@ use fiex_provider_contracts::{ProviderError, ProviderInvocation};
 #[cfg(test)]
 use fiex_resource::FileCapabilities;
 use rayon::prelude::*;
+use serde_json::Value;
 #[cfg(test)]
 use serde_json::json;
-use serde_json::Value;
 use std::sync::{Arc, OnceLock};
 
 mod providers;
@@ -119,11 +119,11 @@ pub(super) fn preflight_availability(
     if context.paths.is_empty() {
         let check_file = capabilities.write && matched.contains("builtin:new-file");
         let check_folder = capabilities.create && matched.contains("builtin:new-folder");
-        if check_file || check_folder {
-            if let Ok(parent) = crate::core::fs::trusted(&context.directory, "core:context-menu") {
-                result.new_file = check_file && parent.review_create_available(false);
-                result.new_folder = check_folder && parent.review_create_available(true);
-            }
+        if (check_file || check_folder)
+            && let Ok(parent) = crate::core::fs::trusted(&context.directory, "core:context-menu")
+        {
+            result.new_file = check_file && parent.review_create_available(false);
+            result.new_folder = check_folder && parent.review_create_available(true);
         }
         return result;
     }
@@ -285,9 +285,11 @@ mod registry_tests {
             .collect::<Vec<_>>();
         assert_eq!(sorted[0].id, "builtin:open");
         assert_eq!(sorted.last().unwrap().id, "builtin:empty-trash");
-        assert!(sorted
-            .windows(2)
-            .all(|pair| pair[0].priority >= pair[1].priority));
+        assert!(
+            sorted
+                .windows(2)
+                .all(|pair| pair[0].priority >= pair[1].priority)
+        );
         assert!(registered.get("builtin:nonexistent").is_none());
     }
 

@@ -202,8 +202,8 @@ pub(crate) fn relaunch_elevated(app: tauri::AppHandle) -> Result<(), String> {
     {
         use std::os::windows::ffi::OsStrExt;
         use windows::{
-            core::PCWSTR,
             Win32::{UI::Shell::ShellExecuteW, UI::WindowsAndMessaging::SW_SHOWNORMAL},
+            core::PCWSTR,
         };
 
         let exe = std::env::current_exe().map_err(|error| error.to_string())?;

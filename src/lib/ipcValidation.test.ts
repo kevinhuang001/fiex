@@ -5,6 +5,7 @@ import {
   parseDirectoryViewUpdate,
   parseInfoFieldDelta,
   parseJsonValue,
+  serializeIpcJson,
   parsePluginMenuResult,
   parseRemoteConnectionConfig,
   parseSearchBatch,
@@ -22,6 +23,13 @@ describe('IPC boundary validation', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
     expect(() => parseJsonValue(cyclic)).toThrow('Invalid JSON IPC value')
+  })
+
+  it('normalizes command arguments the same way as the JSON wire format', () => {
+    expect(serializeIpcJson({ optional: undefined, nested: [undefined] })).toEqual({
+      nested: [null],
+    })
+    expect(() => serializeIpcJson(undefined)).toThrow('Invalid JSON IPC value')
   })
 
   it('validates both connection navigation variants', () => {

@@ -1,5 +1,5 @@
 //! Core's filesystem DTO projection for the Applications VFS adapter.
-use super::super::{applications, storage, APPLICATIONS_URI};
+use super::super::{APPLICATIONS_URI, applications, storage};
 use crate::core::files::Entry;
 use fiex_provider_contracts::FsOperation;
 

@@ -43,8 +43,8 @@ pub use config::{connection_for_path, is_remote};
 #[cfg(feature = "desktop")]
 pub use files::is_cached;
 pub use files::{
-    cached_path, download, download_dir, eject, ensure_downloaded, list_listing, provider_list,
-    stat, ProgressFn, TransferOptions,
+    ProgressFn, TransferOptions, cached_path, download, download_dir, eject, ensure_downloaded,
+    list_listing, provider_list, stat,
 };
 pub(crate) use files::{
     observe_provider_listing, offline_provider_listing, provider_node, record_provider_mutation,
@@ -52,7 +52,7 @@ pub(crate) use files::{
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub(crate) use store::load_stored_public;
 pub use store::{
-    connection_config, list_connections, open_navigation, remove_connection, save_connection,
-    update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,
+    ConnectionInfo, ConnectionInput, StoredConnection, connection_config, list_connections,
+    open_navigation, remove_connection, save_connection, update_connection_session,
 };
 pub use sync::{sync, sync_one, uncache, unpin};

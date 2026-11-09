@@ -1,4 +1,4 @@
-use super::session::{validate, UNSUPPORTED};
+use super::session::{UNSUPPORTED, validate};
 use super::*;
 
 #[test]
@@ -34,9 +34,11 @@ fn preview_rejects_non_package_view_sources_before_asset_resolution() {
 fn builtins_are_ordered_and_fallback_is_last() {
     let values = candidates("md", "text/markdown", false);
     assert_eq!(values[0].id, "builtin:text");
-    assert!(!values
-        .iter()
-        .any(|provider| provider.id == "builtin:fallback"));
+    assert!(
+        !values
+            .iter()
+            .any(|provider| provider.id == "builtin:fallback")
+    );
     let pdf = candidates("pdf", "application/pdf", false);
     assert!(pdf.iter().any(|provider| provider.id == "builtin:pdf"));
     let unknown = candidates("xyz", "application/octet-stream", false);

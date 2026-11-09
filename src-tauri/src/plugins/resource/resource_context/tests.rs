@@ -57,9 +57,11 @@ fn projected_context_carries_trusted_view_storage_and_effective_operations() {
             .map(|location| location.provider_id.as_str()),
         Some("core:applications")
     );
-    assert!(projected
-        .capabilities
-        .allows(crate::plugins::provider_registry::FsOperation::Mkdir));
+    assert!(
+        projected
+            .capabilities
+            .allows(crate::plugins::provider_registry::FsOperation::Mkdir)
+    );
     let wire = serde_json::to_value(&projected).unwrap();
     assert!(wire.get("path").is_none());
 

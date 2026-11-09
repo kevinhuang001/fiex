@@ -7,6 +7,6 @@
 mod registry;
 
 pub use registry::{
-    global_runtime_registry, ModuleDescriptor, ModuleRegistrar, ProviderCandidate, RuntimeRegistry,
-    TypedProviderRegistry,
+    ModuleDescriptor, ModuleRegistrar, ProviderCandidate, RuntimeRegistry, TypedProviderRegistry,
+    global_runtime_registry,
 };

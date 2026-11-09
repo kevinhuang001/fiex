@@ -1,5 +1,5 @@
 use super::*;
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, mpsc};
 
 fn serial() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -44,14 +44,16 @@ fn concurrent_requests_share_one_prompt_and_a_denial_fails_the_batch() {
         assert!(thread.join().unwrap().is_err());
     }
     // A retry inside the cooldown fails without opening another dialog.
-    assert!(request(
-        &plugin,
-        "files.read",
-        PromptKind::Permission,
-        None,
-        Box::new(|| Ok(())),
-    )
-    .is_err());
+    assert!(
+        request(
+            &plugin,
+            "files.read",
+            PromptKind::Permission,
+            None,
+            Box::new(|| Ok(())),
+        )
+        .is_err()
+    );
     assert!(receiver.try_recv().is_err());
 }
 

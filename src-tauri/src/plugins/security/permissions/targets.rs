@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::model::{declaration_approved, PluginGrant};
+use super::model::{PluginGrant, declaration_approved};
 use super::store::{mutate, status};
 
 pub fn valid_command(name: &str) -> bool {

@@ -2,8 +2,8 @@ use super::*;
 /// Read-only exports for external applications. No tree snapshots or persistent
 /// blob cache: temp directories live until process exit, independently of tabs,
 /// so closing one tab cannot invalidate another consumer's export.
-pub(super) fn exports(
-) -> &'static std::sync::Mutex<std::collections::HashMap<String, tempfile::TempDir>> {
+pub(super) fn exports()
+-> &'static std::sync::Mutex<std::collections::HashMap<String, tempfile::TempDir>> {
     static EXPORTS: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashMap<String, tempfile::TempDir>>,
     > = std::sync::OnceLock::new();

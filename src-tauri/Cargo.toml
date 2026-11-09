@@ -12,7 +12,7 @@ name = "fiex"
 version = "0.7.11"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.92"
 license = "GPL-3.0-or-later"
 
@@ -47,7 +47,6 @@ tauri-plugin-single-instance = ["dep:tauri-plugin-single-instance"]
 tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
-futures = "0.3"
 fiex-storage = { path = "crates/foundation/fiex-storage" }
 fiex-resource = { path = "crates/foundation/fiex-resource" }
 fiex-runtime = { path = "crates/foundation/fiex-runtime" }
@@ -75,7 +74,6 @@ fontdb = "0.23"
 keyring = { version = "4.2", default-features = false, features = ["v1"] }
 dunce = "1"
 cap-std = "3"
-ignore = "0.4"
 grep-regex = "0.1"
 regex = "1"
 grep-matcher = "0.1"

@@ -11,7 +11,7 @@ use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 use fiex_provider_contracts::{
     ProviderError, ProviderInvocation, ProviderRequest, ToolbarProvider, ToolbarResult,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 struct FailedToolbarProvider(String);

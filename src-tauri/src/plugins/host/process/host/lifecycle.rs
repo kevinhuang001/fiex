@@ -2,11 +2,11 @@ use super::*;
 
 impl PluginHost {
     pub fn stop(&self, id: &str) {
-        if let Ok(mut processes) = self.children.lock() {
-            if let Some(instance) = processes.remove(id) {
-                instance.running.stop();
-                instance.kill.terminate();
-            }
+        if let Ok(mut processes) = self.children.lock()
+            && let Some(instance) = processes.remove(id)
+        {
+            instance.running.stop();
+            instance.kill.terminate();
         }
     }
 

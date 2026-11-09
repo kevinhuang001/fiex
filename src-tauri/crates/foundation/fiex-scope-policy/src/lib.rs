@@ -1,5 +1,8 @@
 //! Pure permission policy for plugin filesystem and view scopes.
 
+mod derived;
+pub use derived::DerivedReferenceGrants;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MethodDenial {
     UnsupportedFilesystemNamespace,
@@ -68,7 +71,7 @@ pub fn method_denial(method: &str, metadata_only: bool, read_only: bool) -> Opti
 #[cfg(test)]
 mod tests {
     use super::{
-        method_denial, MethodDenial, METADATA_ONLY_DENIED_METHODS, READ_ONLY_DENIED_METHODS,
+        METADATA_ONLY_DENIED_METHODS, MethodDenial, READ_ONLY_DENIED_METHODS, method_denial,
     };
 
     #[test]
@@ -123,7 +126,7 @@ mod tests {
 #[cfg(kani)]
 mod verification {
     use super::{
-        method_denial, MethodDenial, METADATA_ONLY_DENIED_METHODS, READ_ONLY_DENIED_METHODS,
+        METADATA_ONLY_DENIED_METHODS, MethodDenial, READ_ONLY_DENIED_METHODS, method_denial,
     };
 
     #[kani::proof]

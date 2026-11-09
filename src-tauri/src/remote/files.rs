@@ -5,7 +5,7 @@ use super::{
         connection_for_path, ensure_provider_access, local_for, provider_config, rel_string,
         safe_child_name,
     },
-    store::{load_stored, StoredConnection},
+    store::{StoredConnection, load_stored},
     sync::{load_meta, save_meta},
 };
 use crate::plugins::provider_registry::FsOperation;
@@ -13,8 +13,8 @@ use std::{
     fs,
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 

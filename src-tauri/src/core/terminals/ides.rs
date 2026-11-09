@@ -33,8 +33,8 @@ pub(super) const IDES: &[(&str, &str, &str, &str)] = &[
 #[cfg(target_os = "windows")]
 fn windows_ide_executable(id: &str) -> Option<std::path::PathBuf> {
     use winreg::{
-        enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
         RegKey,
+        enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
     };
 
     let executable = match id {

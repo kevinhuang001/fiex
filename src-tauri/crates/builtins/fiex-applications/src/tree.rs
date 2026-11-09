@@ -1,7 +1,7 @@
 //! Applications virtual-tree relationship and relocation rules.
 use crate::{
-    app_id, app_uri_in, folder_id, folder_uri_in, parent_uri_matches, ApplicationsState,
-    ApplicationsStore, URI,
+    ApplicationsState, ApplicationsStore, URI, app_id, app_uri_in, folder_id, folder_uri_in,
+    parent_uri_matches,
 };
 use std::collections::HashSet;
 

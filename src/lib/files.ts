@@ -60,7 +60,7 @@ export function normalizeAddress(input: string): string {
   const match = /^(recent|applications|trash|recyclebin):[\\/]*(.*)$/i.exec(text)
   if (!match) return text
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
-  let payload = match[2].replace(/^[\\/]+/, '')
+  const payload = match[2].replace(/^[\\/]+/, '')
   if (root === 'applications://' || root === 'trash://')
     return virtualHref(
       root,
@@ -104,7 +104,7 @@ export function corePath(path: string): CorePath | null {
           !decoded ||
           decoded.length > 1024 ||
           ['.', '..'].includes(decoded) ||
-          /[/\\\0:\x00-\x1f\x7f]/.test(decoded) ||
+          /[/\\\0:\x00-\x1f\x7f]/.test(decoded) || // eslint-disable-line no-control-regex -- rejects control characters in decoded VFS segments
           /%(?:2e|2f|5c|00|25)/i.test(decoded)
         )
           throw new Error('InvalidVfsUri')
@@ -210,13 +210,12 @@ export function pathCrumbs(
     })
 }
 export function basename(path: string): string {
-  let core: CorePath | null = null
   try {
-    core = corePath(path)
+    const core = corePath(path)
+    if (core) return core.parts.at(-1) || t('虚拟文件系统')
   } catch {
     return path
   }
-  if (core) return core.parts.at(-1) || t('虚拟文件系统')
   const virtual = virtualPath(path)
   if (virtual) {
     if (!virtual.payload) return virtualRootName(virtual.root)

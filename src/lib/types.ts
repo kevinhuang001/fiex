@@ -1,6 +1,8 @@
 import type { ShortcutMap, ShortcutStyle } from './shortcuts'
 import type { ListColumns } from './listColumns'
 
+export type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */

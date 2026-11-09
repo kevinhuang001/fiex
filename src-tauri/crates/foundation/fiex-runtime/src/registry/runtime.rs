@@ -54,20 +54,20 @@ impl RuntimeRegistry {
             .state
             .write()
             .unwrap_or_else(|error| error.into_inner());
-        if let Some(existing) = state.modules.get(&module.id) {
-            if existing.owner != module.owner || existing.version != module.version {
-                return Err(format!("conflicting module descriptor: {}", module.id));
-            }
+        if let Some(existing) = state.modules.get(&module.id)
+            && (existing.owner != module.owner || existing.version != module.version)
+        {
+            return Err(format!("conflicting module descriptor: {}", module.id));
         }
 
         let key = (kind, descriptor.id.clone());
         if state.providers.contains_key(&key) {
             return Err(format!("duplicate provider ID for {kind:?}: {id}"));
         }
-        if let Some((scheme, _)) = uri_route {
-            if state.uri_routes.contains_key(scheme) {
-                return Err(format!("duplicate VFS URI scheme: {scheme}"));
-            }
+        if let Some((scheme, _)) = uri_route
+            && state.uri_routes.contains_key(scheme)
+        {
+            return Err(format!("duplicate VFS URI scheme: {scheme}"));
         }
 
         let mut events = BTreeSet::new();

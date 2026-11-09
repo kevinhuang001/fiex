@@ -92,10 +92,10 @@ pub fn http_open(
     // Environment/system proxies mirror the marketplace client; a proxy
     // scheme reqwest cannot build (for example SOCKS without the feature)
     // falls back to reqwest's own system-proxy detection.
-    if let Some(proxy) = crate::platform::system_proxy::proxy_url() {
-        if let Ok(proxy) = reqwest::Proxy::all(proxy) {
-            builder = builder.proxy(proxy);
-        }
+    if let Some(proxy) = crate::platform::system_proxy::proxy_url()
+        && let Ok(proxy) = reqwest::Proxy::all(proxy)
+    {
+        builder = builder.proxy(proxy);
     }
     let client = builder.build().map_err(|e| e.to_string())?;
     let mut headers = reqwest::header::HeaderMap::new();

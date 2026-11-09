@@ -7,7 +7,7 @@ use fiex_provider_contracts::{
     ProviderInput, ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule,
     ProviderRequestContext,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     any::Any,
     sync::{Arc, Mutex, OnceLock},

@@ -177,13 +177,12 @@ impl PluginHost {
             .as_ref()
             .is_some_and(|instance| instance.running.is_closed())
         {
-            if let Ok(mut guard) = self.children.lock() {
-                if guard
+            if let Ok(mut guard) = self.children.lock()
+                && guard
                     .get(plugin_id)
                     .is_some_and(|current| Arc::ptr_eq(current, existing.as_ref().unwrap()))
-                {
-                    guard.remove(plugin_id);
-                }
+            {
+                guard.remove(plugin_id);
             }
             existing = None;
         }
@@ -222,13 +221,12 @@ impl PluginHost {
                 if failure.fatal {
                     instance.running.stop();
                     instance.kill.terminate();
-                    if let Ok(mut guard) = self.children.lock() {
-                        if guard
+                    if let Ok(mut guard) = self.children.lock()
+                        && guard
                             .get(plugin_id)
                             .is_some_and(|current| Arc::ptr_eq(current, &instance))
-                        {
-                            guard.remove(plugin_id);
-                        }
+                    {
+                        guard.remove(plugin_id);
                     }
                 }
                 Err(failure.message)

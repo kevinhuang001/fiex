@@ -6,4 +6,4 @@ mod stream;
 
 pub use error::{FsError, FsErrorKind};
 pub use provider_stream::{ProviderReadHandle, ProviderWriteHandle};
-pub use stream::{ReadHandle, WriteHandle, CHUNK};
+pub use stream::{CHUNK, ReadHandle, WriteHandle};

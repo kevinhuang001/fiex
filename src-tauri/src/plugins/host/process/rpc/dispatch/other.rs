@@ -2,7 +2,7 @@
 //! previews, buffers, private storage, diagnostics and command execution.
 use super::super::super::spawn::run_command;
 use super::Context;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
@@ -11,11 +11,13 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         "host.vfs.openView" => {
             let scope = ctx.scope()?;
             let mut params = ctx.params.clone();
-            params["resourceRoot"] = json!(scope.resolve_reference(
-                ctx.params
-                    .get("resourceRoot")
-                    .ok_or("missing resource ref")?
-            )?);
+            params["resourceRoot"] = json!(
+                scope.resolve_reference(
+                    ctx.params
+                        .get("resourceRoot")
+                        .ok_or("missing resource ref")?
+                )?
+            );
             crate::plugins::mounts::open_view(&plugin_id, &params, &scope)
         }
         "host.buffer.create" => {
@@ -149,10 +151,10 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             } else {
                 ctx.scope_path()
             };
-            if ctx.params.get("cwd").is_some() {
-                if let Some(directory) = &directory {
-                    scope.authorize(&directory.to_string_lossy())?;
-                }
+            if ctx.params.get("cwd").is_some()
+                && let Some(directory) = &directory
+            {
+                scope.authorize(&directory.to_string_lossy())?;
             }
             run_command(
                 &plugin_id,

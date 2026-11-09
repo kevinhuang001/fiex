@@ -133,10 +133,10 @@ fn resources(manifest: &PluginManifest, folder: &Path) -> Vec<Resource> {
                 _ => return None,
             };
             let (path, media) = resolve_file(folder, path)?;
-            if let Some(declared) = declared {
-                if media_type(&path, Some(declared)) != Some(media.as_str()) {
-                    return None;
-                }
+            if let Some(declared) = declared
+                && media_type(&path, Some(declared)) != Some(media.as_str())
+            {
+                return None;
             }
             Some(Resource {
                 id: id.clone(),
@@ -197,10 +197,10 @@ pub fn validate(manifest: &PluginManifest, folder: &Path) -> Result<(), String> 
         };
         let (resolved, media) = resolve_file(folder, path)
             .ok_or_else(|| format!("resource {id} is missing or unsafe"))?;
-        if let Some(declared) = declared {
-            if media_type(&resolved, Some(declared)) != Some(media.as_str()) {
-                return Err(format!("resource {id} has an unsupported media type"));
-            }
+        if let Some(declared) = declared
+            && media_type(&resolved, Some(declared)) != Some(media.as_str())
+        {
+            return Err(format!("resource {id} has an unsupported media type"));
         }
     }
     Ok(())
@@ -254,11 +254,13 @@ mod tests {
             resolve(&manifest, dir.path(), "fiex-resource://org.test.icons/rust").unwrap();
         assert_eq!(namespace, "fiex-resource://org.test.icons/rust");
         assert!(path.ends_with("assets/rust.svg"));
-        assert!(resolve(
-            &manifest,
-            dir.path(),
-            "fiex-resource://org.other.icons/rust"
-        )
-        .is_none());
+        assert!(
+            resolve(
+                &manifest,
+                dir.path(),
+                "fiex-resource://org.other.icons/rust"
+            )
+            .is_none()
+        );
     }
 }
