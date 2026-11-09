@@ -4,6 +4,9 @@ export interface PluginMenuItem {
   kind: 'action' | 'submenu' | 'separator'
   parentId?: string
   icon?: string
+  disabled?: boolean
+  danger?: boolean
+  shortcut?: string
 }
 
 export interface PluginMenu {
@@ -27,7 +30,10 @@ export function validPluginMenuItems(items: unknown): items is PluginMenuItem[] 
       node.title.length > 128 ||
       !['action', 'submenu', 'separator'].includes(String(node.kind)) ||
       ('parentId' in node && typeof node.parentId !== 'string') ||
-      ('icon' in node && typeof node.icon !== 'string')
+      ('icon' in node && typeof node.icon !== 'string') ||
+      ('disabled' in node && typeof node.disabled !== 'boolean') ||
+      ('danger' in node && typeof node.danger !== 'boolean') ||
+      ('shortcut' in node && typeof node.shortcut !== 'string')
     )
       return false
     ids.add(node.id)

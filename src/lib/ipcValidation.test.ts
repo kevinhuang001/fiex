@@ -3,6 +3,7 @@ import {
   parseConnectionMenus,
   parseConnectionOpenResult,
   parseDirectoryViewUpdate,
+  parseEntryDecorations,
   parseInfoFieldDelta,
   parseJsonValue,
   serializeIpcJson,
@@ -49,6 +50,30 @@ describe('IPC boundary validation', () => {
     expect(() => parseConnectionOpenResult({ kind: 'vfs', path: 42 })).toThrow(
       'Invalid connection navigation response',
     )
+  })
+
+  it('normalizes absent optional decoration fields serialized as null by Rust', () => {
+    expect(
+      parseEntryDecorations([
+        {
+          path: 'applications://Utilities/Editor.app',
+          nativeBadges: [],
+          label: null,
+          description: null,
+          fields: {},
+          icon: null,
+          iconPath: null,
+          providers: [],
+        },
+      ]),
+    ).toEqual([
+      {
+        path: 'applications://Utilities/Editor.app',
+        nativeBadges: [],
+        fields: {},
+        providers: [],
+      },
+    ])
   })
 
   it('validates remote connection settings as scalar JSON values', () => {

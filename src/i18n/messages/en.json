@@ -234,6 +234,7 @@
   "关闭窗口": "Close window",
   "工作区": "Workspace",
   "添加到工作区": "Add to workspace",
+  "移出工作区": "Remove from workspace",
   "调整工作区高度": "Resize workspace",
   "打开 {0}": "Open {0}",
   "移出工作区 {0}": "Remove {0} from workspace",

@@ -1,3 +1,9 @@
+# Fiex 0.7.12
+
+- Fix invalid decoration labels when opening the Applications directory by normalizing absent Rust option values.
+- Open a new second pane in the previously visited directory, and support folder copy, cut and duplicate actions with capability checks.
+- Group duplicate, workspace and permanent-delete actions under More; add workspace removal from the workspace item's context menu.
+
 # Fiex 0.7.11
 
 - Complete the unified typed Provider migration across Core and official plugins, using shared contracts and removing superseded filesystem adapters and virtual-directory special cases.

@@ -1,6 +1,5 @@
 //! Atomic Core context-menu providers and their shared trusted selection data.
 use super::builtin::Context;
-use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::ContextMenuProvider;
@@ -17,6 +16,8 @@ use serde_json::json;
 use std::sync::{Arc, OnceLock};
 
 mod providers;
+mod selection;
+pub(super) use selection::Selection;
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     providers::register(values);
 }
@@ -28,20 +29,6 @@ pub(super) fn item(
     shortcut: &str,
 ) -> fiex_provider_contracts::MenuItem {
     providers::item(id, title, icon, shortcut)
-}
-
-/// The selection a menu is resolved for.
-pub(super) struct Selection<'a> {
-    pub(super) paths: &'a [String],
-    pub(super) entries: &'a [Entry],
-    pub(super) all_local: bool,
-    pub(super) preflight: super::builtin::MenuPreflightAvailability,
-}
-
-impl Selection<'_> {
-    fn many(&self) -> bool {
-        self.paths.len() > 1
-    }
 }
 
 fn registry() -> NativeProviderRegistry<dyn ContextMenuProvider> {

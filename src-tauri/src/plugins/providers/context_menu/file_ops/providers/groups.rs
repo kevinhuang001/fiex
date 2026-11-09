@@ -2,8 +2,8 @@ use super::super::{Context, Selection};
 use super::item;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
-    ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
-    ProviderInvocation,
+    ContextMenuProvider, FsOperation, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
+    ProviderInput, ProviderInvocation,
 };
 use fiex_resource::FileCapabilities;
 use std::sync::Arc;
@@ -11,6 +11,38 @@ use std::sync::Arc;
 use fiex_actions::Action;
 
 pub(super) struct AtomicMenuAction(pub(super) Action);
+
+fn can_copy_sources(selection: &Selection<'_>) -> bool {
+    !selection.paths.is_empty()
+        && selection.paths.len() == selection.entries.len()
+        && selection.paths.len() == selection.entry_capabilities.len()
+        && selection
+            .entries
+            .iter()
+            .zip(selection.entry_capabilities)
+            .all(|(entry, capabilities)| {
+                capabilities.allows(if entry.is_dir {
+                    FsOperation::List
+                } else {
+                    FsOperation::Read
+                })
+            })
+}
+
+fn can_cut_sources(selection: &Selection<'_>) -> bool {
+    can_copy_sources(selection)
+        && selection
+            .entry_capabilities
+            .iter()
+            .all(|capabilities| capabilities.remove)
+}
+
+fn can_duplicate_to_directory(selection: &Selection<'_>) -> bool {
+    let needs_folder = selection.entries.iter().any(|entry| entry.is_dir);
+    let needs_file = selection.entries.iter().any(|entry| !entry.is_dir);
+    (!needs_folder || selection.directory_capabilities.create)
+        && (!needs_file || selection.directory_capabilities.write)
+}
 
 fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
     !selection.paths.is_empty()
@@ -64,13 +96,17 @@ impl AtomicMenuAction {
             {
                 vec![item("batchRename", "批量重命名…", "pencil", "")]
             }
-            Action::Copy if nonzero && caps.read => vec![item("copy", "复制", "copy", "copy")],
+            Action::Copy if can_copy_sources(selection) => {
+                vec![item("copy", "复制", "copy", "copy")]
+            }
             // Cut records references only. Import/Export/Move authorization is
             // checked when Paste or drag-and-drop actually performs a transfer.
-            Action::Cut if nonzero && caps.read && caps.remove => {
+            Action::Cut if can_cut_sources(selection) => {
                 vec![item("cut", "剪切", "scissors", "cut")]
             }
-            Action::Duplicate if nonzero && caps.read && caps.write => {
+            Action::Duplicate
+                if can_copy_sources(selection) && can_duplicate_to_directory(selection) =>
+            {
                 vec![item("duplicate", "创建副本", "copy", "duplicate")]
             }
             Action::CopyPath if nonzero => vec![item("copyPath", "复制路径", "copy", "")],
@@ -206,6 +242,8 @@ mod tests {
         Selection {
             paths,
             entries: &[],
+            entry_capabilities: &[],
+            directory_capabilities: FileCapabilities::default(),
             all_local: true,
             preflight,
         }

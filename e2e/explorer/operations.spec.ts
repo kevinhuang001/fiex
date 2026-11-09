@@ -97,6 +97,17 @@ test('multi-select and select all', async ({ page }) => {
   await page.keyboard.press('Escape')
 })
 
+test('folders offer copy, cut and duplicate in their correct context menu sections', async ({
+  page,
+}) => {
+  await page.locator('[data-path="/Users/kevin/Documents/Research"]').click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '复制', exact: true })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '剪切', exact: true })).toBeVisible()
+  await page.getByRole('menuitem', { name: '更多', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: '创建副本', exact: true })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '彻底删除', exact: true })).toBeVisible()
+})
+
 test('complete a move into a folder and bookmark the folder', async ({ page }) => {
   const notes = page.locator('[data-path="/Users/kevin/Documents/Notes.md"]')
   const folder = page.locator('[data-path="/Users/kevin/Documents/Research"]')

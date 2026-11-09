@@ -2,9 +2,22 @@ import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { parentDirectoryOf } from '@/lib/listing'
-import type { ConflictResolution } from '@/lib/types'
+import type { ConflictResolution, Entry } from '@/lib/types'
 import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
+
+export function canDuplicateEntries(
+  entries: Array<Entry | undefined>,
+  allowedOps: string[],
+): boolean {
+  if (!entries.length || entries.some((entry) => !entry)) return false
+  const needsDirectory = entries.some((entry) => entry?.isDir)
+  const needsFile = entries.some((entry) => !entry?.isDir)
+  return (
+    (!needsDirectory || allowedOps.includes('mkdir')) &&
+    (!needsFile || allowedOps.includes('write'))
+  )
+}
 
 /** Copying, moving and duplicating entries, including conflict resolution. */
 export function transferActions({ x, conflict, setConflict, setClipboard, run }: FileOpsContext) {
@@ -119,7 +132,8 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     if (paths.length) setClipboard({ paths: [...paths], moving })
   }
   const duplicate = (paths = x.selected) => {
-    if (!x.directoryAllowedOps.includes('write')) {
+    const entries = paths.map((path) => x.entries.find((entry) => entry.path === path))
+    if (!canDuplicateEntries(entries, x.directoryAllowedOps)) {
       x.setError(t('此位置不支持该操作'))
       return
     }

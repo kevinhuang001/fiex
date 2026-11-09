@@ -103,6 +103,12 @@ pub fn definitions() -> Vec<ActionDefinition> {
     let mut open_with = required("single", &[FsOperation::Read]);
     open_with.kinds = vec!["file".into()];
     open_with.exclude = Some(exclude_views(&["core:trash", "core:applications"]));
+    // Copy and transfer eligibility depends on resource kind: a file needs
+    // Read, while a directory needs List. Core checks those capabilities per
+    // selected entry after this selection-only candidate match.
+    let copy = excluding_trash(selection("nonzero"));
+    let cut = excluding_trash(selection("nonzero"));
+    let duplicate = excluding_trash(selection("nonzero"));
     let mut tags = ProviderMatchRule {
         selection: Some("nonzero".into()),
         storage: Some(LocationMatch {
@@ -138,30 +144,9 @@ pub fn definitions() -> Vec<ActionDefinition> {
             excluding_trash(required("multi", &[FsOperation::Rename])),
             Action::BatchRename,
         ),
-        (
-            "builtin:copy",
-            103,
-            excluding_trash(required("nonzero", &[FsOperation::Read])),
-            Action::Copy,
-        ),
-        (
-            "builtin:cut",
-            102,
-            excluding_trash(required(
-                "nonzero",
-                &[FsOperation::Read, FsOperation::Remove],
-            )),
-            Action::Cut,
-        ),
-        (
-            "builtin:duplicate",
-            101,
-            excluding_trash(required(
-                "nonzero",
-                &[FsOperation::Read, FsOperation::Write],
-            )),
-            Action::Duplicate,
-        ),
+        ("builtin:copy", 103, copy, Action::Copy),
+        ("builtin:cut", 102, cut, Action::Cut),
+        ("builtin:duplicate", 101, duplicate, Action::Duplicate),
         ("builtin:copy-path", 100, copy_path, Action::CopyPath),
         ("builtin:pin", 90, storage_vfs("nonzero"), Action::Pin),
         ("builtin:unpin", 89, storage_vfs("nonzero"), Action::Unpin),

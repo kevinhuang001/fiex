@@ -13,7 +13,6 @@ import {
   Eye,
   Info,
   AppWindow,
-  ListPlus,
   Pencil,
   PinOff,
   RotateCcw,
@@ -31,6 +30,7 @@ import { MenuLayer } from '@/components/ui/MenuLayer'
 import { OpenWithPicker } from './OpenWithPicker'
 import { useContextMenu } from './useContextMenu'
 import { hasTopLevelMenuActions } from './menuVisibility'
+import { buildMoreMenuPlan, isMoreAction } from './moreMenu'
 import { executeCoreMenu } from './execute'
 import type { CoreMenu, CoreMenuItem } from './useContextMenu'
 import type { ContextMenuProps } from './types'
@@ -79,7 +79,42 @@ export function FileContextMenu(props: ContextMenuProps) {
   const setError = x.setError
   const hasCoreActions = hasTopLevelMenuActions(menus)
   const hasPluginActions = hasTopLevelMenuActions(pluginMenus)
-  const hasWorkspaceAction = paths.length > 0
+  const morePlan = buildMoreMenuPlan(
+    menus,
+    paths,
+    props.workspace.items.map((entry) => entry.path),
+  )
+  const hasWorkspaceAction = Boolean(morePlan.workspaceAction)
+  const moreMenuTrigger: PluginMenuItem = {
+    id: 'more',
+    kind: 'submenu',
+    title: t('更多'),
+    icon: 'more',
+  }
+  const moreMenuItems: PluginMenuItem[] = [
+    moreMenuTrigger,
+    ...morePlan.coreActions.map(({ item }) => ({
+      id: item.id,
+      kind: 'action' as const,
+      parentId: 'more',
+      title: item.title,
+      icon: item.icon,
+      disabled: item.disabled,
+      danger: item.danger,
+      shortcut: item.shortcut ? props.hint(item.shortcut) : undefined,
+    })),
+    ...(morePlan.workspaceAction
+      ? [
+          {
+            id: 'workspace',
+            kind: 'action' as const,
+            parentId: 'more',
+            title: morePlan.workspaceAction.kind === 'remove' ? t('移出工作区') : t('添加到工作区'),
+            icon: morePlan.workspaceAction.kind === 'remove' ? 'list-minus' : 'list-plus',
+          },
+        ]
+      : []),
+  ]
   useEffect(() => {
     if (
       menu &&
@@ -179,21 +214,36 @@ export function FileContextMenu(props: ContextMenuProps) {
           >
             {menus.flatMap((group) =>
               group.items
-                .filter((item) => !item.parentId && item.placement !== 'tail')
+                .filter(
+                  (item) => !item.parentId && item.placement !== 'tail' && !isMoreAction(item.id),
+                )
                 .map((item) => render(group, item)),
             )}
           </SubmenuGroupContext.Provider>
-          {hasWorkspaceAction && (
-            <button
-              role="menuitem"
-              onClick={() => {
+          {moreMenuItems.length > 1 && (
+            <PluginMenuNode
+              item={moreMenuTrigger}
+              items={moreMenuItems}
+              onAction={(selected) => {
+                const action = morePlan.coreActions.find(({ item }) => item.id === selected.id)
+                if (action) {
+                  setMenu(null)
+                  void executeCoreMenu(action.group, action.item, props, setOpenWithPath)
+                  return
+                }
+                const workspaceAction = morePlan.workspaceAction
+                if (selected.id !== 'workspace' || !workspaceAction) return
                 setMenu(null)
-                void props.addWorkspace(paths).then(() => props.workspace.setOpen(true))
+                if (workspaceAction.kind === 'remove') {
+                  workspaceAction.paths.forEach((path) => props.workspace.remove(path))
+                } else {
+                  void props
+                    .addWorkspace(workspaceAction.paths)
+                    .then(() => props.workspace.setOpen(true))
+                }
               }}
-            >
-              <ListPlus />
-              {t('添加到工作区')}
-            </button>
+              onExpand={() => {}}
+            />
           )}
           {(pluginLoading || pluginError || hasPluginActions) && (
             <PluginContextActions
@@ -212,7 +262,9 @@ export function FileContextMenu(props: ContextMenuProps) {
           >
             {menus.flatMap((group) =>
               group.items
-                .filter((item) => !item.parentId && item.placement === 'tail')
+                .filter(
+                  (item) => !item.parentId && item.placement === 'tail' && !isMoreAction(item.id),
+                )
                 .map((item) => render(group, item)),
             )}
           </SubmenuGroupContext.Provider>

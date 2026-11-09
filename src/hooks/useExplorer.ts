@@ -12,6 +12,7 @@ export function useExplorer(
   const listing = useListing(prefs, nav, enabled, pane, startOverride)
   return {
     path: nav.path,
+    previousPath: nav.previousPath,
     referencedPaths: nav.referencedPaths,
     entries: listing.entries,
     decorations: listing.decorations,

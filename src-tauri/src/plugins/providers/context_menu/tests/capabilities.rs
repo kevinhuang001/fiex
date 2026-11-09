@@ -188,3 +188,50 @@ fn trash_view_reuses_generic_remove_and_recent_never_inherits_source_delete() {
     assert!(action_items(&recent, "builtin:delete-permanently").is_empty());
     assert!(action_items(&recent, "builtin:move-to-trash").is_empty());
 }
+
+#[test]
+fn folder_selections_offer_copy_cut_and_sibling_duplicate() {
+    let destination = tempfile::tempdir().unwrap();
+    let folder = destination
+        .path()
+        .join("folder")
+        .to_string_lossy()
+        .into_owned();
+    let entry = crate::core::files::Entry {
+        path: folder.clone(),
+        is_dir: true,
+        ..Default::default()
+    };
+    let context = super::builtin::Context::for_test(
+        destination.path().to_str().unwrap(),
+        vec![folder],
+        vec![entry],
+    );
+
+    for (provider_id, item_id) in [
+        ("builtin:copy", "copy"),
+        ("builtin:cut", "cut"),
+        ("builtin:duplicate", "duplicate"),
+    ] {
+        assert_eq!(action_items(&context, provider_id)[0]["id"], item_id);
+    }
+}
+
+#[test]
+fn folder_duplicate_is_hidden_when_the_destination_cannot_create_directories() {
+    let folder = "/tmp/fiex-folder-duplicate-source";
+    let context = super::builtin::Context::for_test_caps(
+        "/tmp",
+        vec![folder.into()],
+        vec![mount_entry(folder, true)],
+        fiex_resource::FileCapabilities {
+            list: true,
+            remove: true,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(action_items(&context, "builtin:copy").len(), 1);
+    assert_eq!(action_items(&context, "builtin:cut").len(), 1);
+    assert!(action_items(&context, "builtin:duplicate").is_empty());
+}

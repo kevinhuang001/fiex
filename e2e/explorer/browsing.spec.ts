@@ -94,12 +94,46 @@ test('each tab keeps its own one or two panes', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('Research')
 })
 
+test('a new second pane starts in the directory visited immediately before the current one', async ({
+  page,
+}) => {
+  await page.getByText('Research', { exact: true }).dblclick()
+  await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('Research')
+  await page.getByRole('button', { name: '双面板' }).click()
+
+  const secondPath = page.getByRole('navigation', { name: '第二个面板的路径' })
+  await expect(secondPath).toBeVisible()
+  await expect(secondPath).not.toContainText('Research')
+})
+
 test('workspace opens as a compact dock and can be collapsed', async ({ page }) => {
   await page.getByRole('button', { name: '工作区' }).click()
   const dock = page.getByRole('region', { name: '工作区' })
   await expect(dock.getByText('工作区为空')).toBeVisible()
   await page.getByRole('button', { name: '工作区' }).click()
   await expect(dock).toHaveCount(0)
+})
+
+test('workspace items can be added and removed from both context menus', async ({ page }) => {
+  const notes = page.locator('[data-path="/Users/kevin/Documents/Notes.md"]')
+  await notes.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '添加到工作区', exact: true }).click()
+
+  const chip = page.locator('.workspace-chip').filter({ hasText: 'Notes.md' })
+  await expect(chip).toBeVisible()
+  await notes.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '移出工作区', exact: true }).click()
+  await expect(chip).toHaveCount(0)
+
+  await notes.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '添加到工作区', exact: true }).click()
+  await expect(chip).toBeVisible()
+  await chip.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '移出工作区 Notes.md', exact: true }).click()
+  await expect(chip).toHaveCount(0)
 })
 
 test('address bar selects the whole path for copying', async ({ page }) => {

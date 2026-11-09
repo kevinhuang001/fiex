@@ -1,5 +1,8 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
+import { ListMinus } from 'lucide-react'
+import { MenuLayer } from '@/components/ui/MenuLayer'
+import { useMenuPosition } from '@/lib/menuPosition'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
 
@@ -18,8 +21,32 @@ export function WorkspaceBar({
   onTerminal: () => void
 }) {
   const [height, setHeight] = useState(108)
+  const [context, setContext] = useState<{
+    path: string
+    name: string
+    x: number
+    y: number
+  } | null>(null)
   const panel = useRef<HTMLElement>(null)
   const itemsRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuPosition = useMenuPosition(context?.x ?? 0, context?.y ?? 0, menuRef, Boolean(context))
+
+  useEffect(() => {
+    if (!context) return
+    const dismiss = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setContext(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContext(null)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [context])
 
   useEffect(() => {
     const main = panel.current?.parentElement
@@ -99,7 +126,20 @@ export function WorkspaceBar({
       <div className="workspace-items" ref={itemsRef}>
         {items.length ? (
           items.map((entry) => (
-            <div className="workspace-chip" key={entry.path}>
+            <div
+              className="workspace-chip"
+              key={entry.path}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setContext({
+                  path: entry.path,
+                  name: entry.name,
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+              }}
+            >
               <button
                 className="workspace-open"
                 title={t('打开 {0}', entry.name)}
@@ -121,6 +161,23 @@ export function WorkspaceBar({
           <div className="workspace-empty">{t('工作区为空')}</div>
         )}
       </div>
+      {context && (
+        <MenuLayer>
+          <div ref={menuRef} role="menu" className="context-menu" style={menuPosition}>
+            <button
+              role="menuitem"
+              className="context-danger"
+              onClick={() => {
+                onRemove(context.path)
+                setContext(null)
+              }}
+            >
+              <ListMinus size={15} />
+              {t('移出工作区 {0}', context.name)}
+            </button>
+          </div>
+        </MenuLayer>
+      )}
     </section>
   )
 }

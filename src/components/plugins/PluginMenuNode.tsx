@@ -9,10 +9,27 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { AppWindow, ChevronRight } from 'lucide-react'
+import {
+  AppWindow,
+  ChevronRight,
+  Copy,
+  ListMinus,
+  ListPlus,
+  MoreHorizontal,
+  Trash2,
+} from 'lucide-react'
 export { validPluginMenuItems } from '@/lib/pluginMenu'
 export type { PluginMenu, PluginMenuItem } from '@/lib/pluginMenu'
 import type { PluginMenuItem } from '@/lib/pluginMenu'
+
+const icons = {
+  application: AppWindow,
+  copy: Copy,
+  'list-minus': ListMinus,
+  'list-plus': ListPlus,
+  more: MoreHorizontal,
+  trash: Trash2,
+}
 
 /** Sibling submenus share one open id so moving to the next level closes the
  *  previous panel immediately instead of leaving two panels side by side. */
@@ -44,6 +61,7 @@ export function PluginMenuNode({
   const [localExpanded, setLocalExpanded] = useState(false)
   const [childOpen, setChildOpen] = useState<string | null>(null)
   const expanded = group ? group.openId === item.id : localExpanded
+  const Icon = item.icon ? icons[item.icon as keyof typeof icons] : undefined
   const [openUp, setOpenUp] = useState(false)
   const [openLeft, setOpenLeft] = useState(parentLeft)
   const submenu = useRef<HTMLDivElement>(null)
@@ -107,6 +125,7 @@ export function PluginMenuNode({
             else setExpanded(false)
           }}
         >
+          {Icon && <Icon size={15} />}
           <span className="context-submenu-label">{item.title}</span>
           <ChevronRight size={13} className="submenu-arrow" />
         </button>
@@ -145,12 +164,15 @@ export function PluginMenuNode({
   return (
     <button
       role="menuitem"
+      disabled={item.disabled}
+      className={item.danger ? 'context-danger' : undefined}
       title={item.title}
       onMouseEnter={() => group?.setOpenId(null)}
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
     >
-      {item.icon === 'application' && <AppWindow size={15} />}
+      {Icon && <Icon size={15} />}
       <span className="context-submenu-label">{item.title}</span>
+      {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
     </button>
   )
 }
