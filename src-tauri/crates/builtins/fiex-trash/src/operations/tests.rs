@@ -48,10 +48,7 @@ fn finder_item_put_back_does_not_request_fallback_without_fiex_journal() {
     assert!(crate::journal::original(&name).is_none());
 
     let mut store = include_bytes!("../../tests/data/putback_types.DS_Store").to_vec();
-    let from: Vec<u8> = "a.jpg"
-        .encode_utf16()
-        .flat_map(u16::to_be_bytes)
-        .collect();
+    let from: Vec<u8> = "a.jpg".encode_utf16().flat_map(u16::to_be_bytes).collect();
     let to: Vec<u8> = name.encode_utf16().flat_map(u16::to_be_bytes).collect();
     assert_eq!(from.len(), to.len());
     let positions: Vec<_> = store

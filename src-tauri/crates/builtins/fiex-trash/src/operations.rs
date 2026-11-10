@@ -1,6 +1,5 @@
 use crate::{
-    RECYCLE_BIN_URI, TrashDirectory, is_recycle_bin_uri, system_recycle_bin,
-    system_trash_directory,
+    RECYCLE_BIN_URI, TrashDirectory, is_recycle_bin_uri, system_recycle_bin, system_trash_directory,
 };
 use std::{
     path::{Path, PathBuf},
