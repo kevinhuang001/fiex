@@ -26,7 +26,7 @@ export function handleProviders(command: string, args: Record<string, unknown>):
             fallback('core:search', 'Fiex'),
           ],
           preview: [
-            plugin('org.fiex.office-preview', 'Office Preview'),
+            plugin('org.fiex.office-preview', 'Office'),
             plugin('org.fiex.data-preview', 'Data Preview'),
             fallback('core:preview', 'Fiex'),
           ],

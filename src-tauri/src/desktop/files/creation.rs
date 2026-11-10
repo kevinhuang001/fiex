@@ -26,9 +26,18 @@ pub(crate) async fn create_entry(
 }
 
 #[tauri::command]
-pub(crate) async fn create_file_entry(path: String, name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::core::fs::create(&path, &name, false, "core:create")
+pub(crate) async fn create_file_entry(
+    path: String,
+    name: String,
+    template: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || match template.as_deref() {
+        Some(template_id) => {
+            let bytes = super::templates::bytes(template_id)
+                .ok_or_else(|| format!("Unknown file template: {template_id}"))?;
+            crate::core::fs::create_file_with_bytes(&path, &name, bytes, "core:create")
+        }
+        None => crate::core::fs::create(&path, &name, false, "core:create"),
     })
     .await
     .map_err(|error| error.to_string())?

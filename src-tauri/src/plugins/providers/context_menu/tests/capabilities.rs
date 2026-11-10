@@ -129,7 +129,14 @@ fn blank_canvas_actions_use_independent_capabilities_and_view_excludes() {
         action_items(&local, "builtin:new-folder")[0]["id"],
         "newFolder"
     );
-    assert_eq!(action_items(&local, "builtin:new-file")[0]["id"], "newFile");
+    let new_file = action_items(&local, "builtin:new-file");
+    assert_eq!(new_file[0]["id"], "newFile");
+    assert_eq!(new_file[0]["kind"], "submenu");
+    assert_eq!(new_file[1]["id"], "newFile.empty");
+    assert_eq!(new_file[2]["id"], "newFile.office");
+    assert_eq!(new_file[3]["id"], "newFile.docx");
+    assert_eq!(new_file[4]["id"], "newFile.xlsx");
+    assert_eq!(new_file[5]["id"], "newFile.pptx");
 
     let apps = super::builtin::Context::for_test_caps(
         "applications://",

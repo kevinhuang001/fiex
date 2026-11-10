@@ -69,8 +69,17 @@ export function applyCoreAction(
     case 'newFolder':
       props.create()
       break
-    case 'newFile':
+    case 'newFile.empty':
       props.createFile()
+      break
+    case 'newFile.docx':
+      props.createFile('docx')
+      break
+    case 'newFile.xlsx':
+      props.createFile('xlsx')
+      break
+    case 'newFile.pptx':
+      props.createFile('pptx')
       break
     case 'restore':
       props.restoreFromTrash(effect.paths)

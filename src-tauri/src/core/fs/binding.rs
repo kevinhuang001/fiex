@@ -56,6 +56,18 @@ pub(crate) fn create(
 }
 
 #[cfg(any(feature = "desktop", test))]
+pub(crate) fn create_file_with_bytes(
+    path: &str,
+    name: &str,
+    bytes: &[u8],
+    owner: &str,
+) -> Result<String, String> {
+    trusted(path, owner)?
+        .create_file_with_bytes(name, bytes)
+        .map_err(String::from)
+}
+
+#[cfg(any(feature = "desktop", test))]
 pub(crate) fn rename_path(path: &str, name: &str, owner: &str) -> Result<String, String> {
     if crate::core::fs::provider_registry::resource_access(path).map_err(String::from)?
         == crate::core::fs::provider_registry::ResourceAccess::HostPath

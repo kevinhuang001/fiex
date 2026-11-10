@@ -5,6 +5,8 @@ import { uniqueName } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 import type { FileOpsContext } from './types'
 
+export type OfficeFileTemplate = 'docx' | 'xlsx' | 'pptx'
+
 /** Creating the next entry, then handing it straight to the inline rename. */
 export function createActions({ x, run }: FileOpsContext) {
   const renameCreatedEntry = async (path: string) => {
@@ -45,18 +47,23 @@ export function createActions({ x, run }: FileOpsContext) {
   }
   /** An empty file goes through the provider's write stream with a name; the
    * menu only offers it when the directory declares `write`. */
-  const createFile = async () => {
+  const createFile = async (template?: OfficeFileTemplate) => {
     if (!x.directoryAllowedOps.includes('write')) {
       x.setError(t('此位置不支持新建文件'))
       return
     }
+    const templateNames: Record<OfficeFileTemplate, string> = {
+      docx: t('未命名文档.docx'),
+      xlsx: t('未命名工作簿.xlsx'),
+      pptx: t('未命名演示文稿.pptx'),
+    }
     const name = uniqueName(
       x.entries.map((e) => e.name),
-      `${t('未命名文件')}.txt`,
+      template ? templateNames[template] : `${t('未命名文件')}.txt`,
     )
     const path = await run(
       t('正在新建文件…'),
-      () => call('create_file_entry', { path: x.path, name }),
+      () => call('create_file_entry', { path: x.path, name, template }),
       undefined,
       false,
       undefined,

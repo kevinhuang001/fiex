@@ -178,10 +178,13 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     emptyTrash: 'builtin:empty-trash',
   }
   const menus: CoreMenu[] = []
-  const addMenu = (providerId: string, items: CoreMenuItem[]) => {
+  const addMenu = (
+    providerId: string,
+    items: CoreMenuItem[],
+    children = new Map<string, CoreMenuItem[]>(),
+  ) => {
     const menuSessionId = 'builtin-demo-' + crypto.randomUUID()
     const submenus = new Set(items.filter((item) => item.kind === 'submenu').map((item) => item.id))
-    const children = new Map<string, CoreMenuItem[]>()
     sessions.set(menuSessionId, {
       paths: [...paths],
       directory,
@@ -193,6 +196,35 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
       created: Date.now(),
     })
     menus.push({ kind: 'builtin', providerId, menuSessionId, items })
+  }
+  if (paths.length === 0 && destinationOps.includes('write')) {
+    const root = { ...item('newFile', '新建文件', 'file-plus'), kind: 'submenu' as const }
+    const empty = item('newFile.empty', '空白文件 (.txt)', 'file-text')
+    const office = { ...item('newFile.office', 'Office', 'application'), kind: 'submenu' as const }
+    const docx = item('newFile.docx', 'Word 文档 (.docx)', 'file-text')
+    const xlsx = item('newFile.xlsx', 'Excel 工作簿 (.xlsx)', 'file-spreadsheet')
+    const pptx = item('newFile.pptx', 'PowerPoint 演示文稿 (.pptx)', 'presentation')
+    addMenu(
+      'builtin:new-file',
+      [root],
+      new Map([
+        [
+          'newFile',
+          [
+            { ...empty, parentId: 'newFile' },
+            { ...office, parentId: 'newFile' },
+          ],
+        ],
+        [
+          'newFile.office',
+          [
+            { ...docx, parentId: 'newFile.office' },
+            { ...xlsx, parentId: 'newFile.office' },
+            { ...pptx, parentId: 'newFile.office' },
+          ],
+        ],
+      ]),
+    )
   }
   for (const [, items] of groups) {
     const conflicts = items.filter(
@@ -221,7 +253,7 @@ export async function executeFixtureBuiltin(a: Record<string, unknown>) {
       kind: 'coreAction',
       command: 'chooseOpenWith',
       paths: session.paths,
-      path: session.paths[0],
+      path: session.paths[0] || '',
       directory: session.directory,
     }
   if (command.startsWith('openWith-')) return { handled: true }
@@ -230,7 +262,7 @@ export async function executeFixtureBuiltin(a: Record<string, unknown>) {
       kind: 'coreAction',
       command,
       paths: session.paths,
-      path: session.paths[0],
+      path: session.paths[0] || '',
       directory: session.directory,
     }
   if (command === 'remote.cache')

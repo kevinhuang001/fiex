@@ -99,6 +99,12 @@ export let fixtureEntries = [
     9216,
   ),
   item(
+    root + '/Documents/季度演示.pptx',
+    false,
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    16384,
+  ),
+  item(
     root + '/Documents/产品介绍.pptx',
     false,
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
