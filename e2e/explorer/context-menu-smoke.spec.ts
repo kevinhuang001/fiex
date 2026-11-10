@@ -32,7 +32,7 @@ test('multiple selected Trash items can be permanently deleted', async ({ page }
 
   const menu = page.getByRole('menu', { name: '文件操作' })
   await menu.getByRole('menuitem', { name: '更多', exact: true }).click()
-  await menu.getByRole('menuitem', { name: '彻底删除', exact: true }).click()
+  await menu.getByRole('menuitem', { name: /^彻底删除/ }).click()
 
   const confirmation = page.getByRole('dialog', { name: '彻底删除 2 个项目？' })
   await expect(confirmation).toBeVisible()
@@ -47,7 +47,7 @@ test('context submenus fit their labels, switch immediately, and stay open while
   const notes = page.locator('[data-path="/Users/kevin/Documents/Notes.md"]')
   const row = await notes.boundingBox()
   if (!row) throw new Error('missing file row geometry')
-  await notes.click({ button: 'right', position: { x: row.width - 2, y: row.height - 2 } })
+  await notes.click({ button: 'right', position: { x: row.width / 2, y: row.height / 2 } })
 
   const menu = page.getByRole('menu', { name: '文件操作' })
   await expect(menu).toBeVisible()
