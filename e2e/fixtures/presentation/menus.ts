@@ -142,7 +142,9 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
           ? [item('emptyTrash', '清空废纸篓', 'trash')]
           : [
               item('restore', '放回原处', 'restore'),
-              ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
+              ...(canRemove
+                ? [item('delete', paths.length > 1 ? '彻底删除选中项' : '彻底删除', 'trash')]
+                : []),
             ]
         : [
             ...(permits('trash') ? [item('trash', '移到废纸篓', 'trash', 'trash')] : []),

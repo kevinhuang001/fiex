@@ -1,8 +1,8 @@
 import { t } from '@/i18n'
-import { Check, Copy } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
 import { FileIcon } from './FileIcon'
+import { FileInfoSections } from './FileInfoSections'
 import { tagHex } from '@/lib/tags'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
@@ -10,7 +10,7 @@ import { parseInfoFieldDelta } from '@/lib/ipcValidation'
 import type { Entry } from '@/lib/types'
 import { Channel } from '@tauri-apps/api/core'
 
-type InfoField = {
+export type InfoField = {
   id: string
   sectionId: string
   label: string
@@ -19,7 +19,7 @@ type InfoField = {
   value?: string
   error?: string
 }
-type InfoSection = {
+export type InfoSection = {
   id: string
   title: string
   providerId: string
@@ -205,70 +205,13 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
           <h3>{info.name}</h3>
           <div className="file-info-scroll">
             <dl>
-              {sections.map((section, sectionIndex) => (
-                <Fragment key={section.id}>
-                  <div className="file-info-group">
-                    <span>{section.title}</span>
-                    {section.source === 'plugin' && (
-                      <small>{t('来自：{0}', section.provider)}</small>
-                    )}
-                  </div>
-                  {section.error && (
-                    <div className="file-info-row">
-                      <dt>{t('提供程序')}</dt>
-                      <dd>{section.error}</dd>
-                    </div>
-                  )}
-                  {section.fields.map((field, fieldIndex) => {
-                    const key = `${sectionIndex}:${fieldIndex}`
-                    const value =
-                      field.status === 'ready'
-                        ? field.value
-                        : field.status === 'unavailable'
-                          ? t('不可用')
-                          : field.status === 'error'
-                            ? field.error
-                            : field.compute === 'onDemand'
-                              ? t('尚未计算')
-                              : t('正在计算…')
-                    return (
-                      <div className="file-info-row" key={`${field.sectionId}:${field.id}`}>
-                        <dt>{field.label}</dt>
-                        <dd>
-                          <span>{value}</span>
-                          {field.status === 'ready' && field.value && (
-                            <button
-                              type="button"
-                              className="info-copy"
-                              title={copied === key ? t('已复制') : t('复制')}
-                              aria-label={t('复制')}
-                              onClick={() => void copy(field.value!, key)}
-                            >
-                              {copied === key ? <Check size={12} /> : <Copy size={12} />}
-                            </button>
-                          )}
-                          {field.compute === 'onDemand' &&
-                            ['idle', 'error'].includes(field.status) && (
-                              <button
-                                type="button"
-                                className="file-info-action"
-                                disabled={tasks.current.size > 3}
-                                onClick={() => void compute(section, field)}
-                              >
-                                {field.status === 'error' ? t('重试并授权') : t('计算')}
-                              </button>
-                            )}
-                          {field.compute === 'onDemand' && field.status === 'pending' && (
-                            <button type="button" className="file-info-action" disabled>
-                              {t('正在计算…')}
-                            </button>
-                          )}
-                        </dd>
-                      </div>
-                    )
-                  })}
-                </Fragment>
-              ))}
+              <FileInfoSections
+                sections={sections}
+                copied={copied}
+                computeDisabled={tasks.current.size > 3}
+                onCopy={(value, key) => void copy(value, key)}
+                onCompute={(section, field) => void compute(section, field)}
+              />
             </dl>
             {loading && <p className="file-info-status">{t('正在读取信息…')}</p>}
             {info.tags.length > 0 && (

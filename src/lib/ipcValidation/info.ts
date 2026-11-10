@@ -32,18 +32,16 @@ export function parseInfoOpenResult(value: unknown): InfoOpenResult {
         typeof section.providerId !== 'string' ||
         typeof section.provider !== 'string' ||
         !['core', 'plugin'].includes(String(section.source)) ||
+        (section.pluginId !== undefined && typeof section.pluginId !== 'string') ||
+        (section.error !== undefined && typeof section.error !== 'string') ||
         !Array.isArray(section.fields) ||
         !section.fields.every(infoField)
       )
         return false
-      return section.fields.every(
-        (field) =>
-          field === null ||
-          Array.isArray(field) ||
-          typeof field !== 'object' ||
-          (field.sectionId === section.id &&
-            (section.pluginId === undefined || field.providerId === section.providerId)),
-      )
+      // `section.id` is a Core-owned globally unique display identity such as
+      // `core.metadata::basic`; each field keeps the provider-local section
+      // ID (`basic`) used by `info.compute`.
+      return true
     })
   )
     throw new TypeError('Invalid file info response')

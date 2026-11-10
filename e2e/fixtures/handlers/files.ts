@@ -14,7 +14,6 @@ import { notHandled, state } from './shared'
 type FixtureInfoField = {
   id: string
   sectionId: string
-  providerId?: string
   label: string
   compute: 'onOpen' | 'onDemand'
   status: 'idle' | 'ready' | 'pending' | 'unavailable' | 'error'
@@ -32,6 +31,8 @@ type FixtureInfoSection = {
   error?: string
 }
 const infoSessions = new Map<string, { path: string; sections: FixtureInfoSection[] }>()
+const trashEntryPath = (name: string) =>
+  `trash://${btoa(name).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
 
 function infoField(
   sectionId: string,
@@ -59,13 +60,13 @@ function infoSection(
   pluginId?: string,
 ): FixtureInfoSection {
   return {
-    id: sectionId,
+    id: `${providerId}::${sectionId}`,
     title,
     providerId,
     provider,
     source: pluginId ? 'plugin' : 'core',
     ...(pluginId ? { pluginId } : {}),
-    fields: pluginId ? fields.map((field) => ({ ...field, providerId })) : fields,
+    fields,
   }
 }
 
@@ -207,13 +208,11 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       if (requested === 'trash://') {
         // Trash entries use opaque identities, just like Core: the backing
         // host path never reaches the UI.
-        const trashId = (name: string) =>
-          `trash://${btoa(name).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
         const entries = state.entries
           .filter((entry) => parent(entry.path) === `${root}/.Trash`)
           .map((entry) => ({
             ...entry,
-            path: trashId(entry.name),
+            path: trashEntryPath(entry.name),
             allowedOps: entry.isDir ? ['stat', 'list', 'search', 'remove'] : ['stat', 'remove'],
           }))
         return {
@@ -406,6 +405,17 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'recycle':
       state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
+    case 'delete_permanently': {
+      const paths = new Set(a.paths as string[])
+      const removed = state.entries.filter(
+        (entry) => parent(entry.path) === `${root}/.Trash` && paths.has(trashEntryPath(entry.name)),
+      ).length
+      state.entries = state.entries.filter(
+        (entry) =>
+          !(parent(entry.path) === `${root}/.Trash` && paths.has(trashEntryPath(entry.name))),
+      )
+      return removed
+    }
     case 'remote_download':
     case 'remote_open':
     case 'remote_cache': {

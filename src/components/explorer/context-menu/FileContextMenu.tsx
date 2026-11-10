@@ -83,6 +83,7 @@ export function FileContextMenu(props: ContextMenuProps) {
     menus,
     paths,
     props.workspace.items.map((entry) => entry.path),
+    props.x.path,
   )
   const hasWorkspaceAction = Boolean(morePlan.workspaceAction)
   const moreMenuTrigger: PluginMenuItem = {

@@ -20,15 +20,18 @@ export function buildMoreMenuPlan(
   menus: CoreMenu[],
   selectedPaths: string[],
   workspacePaths: string[],
+  directory: string,
 ): { coreActions: MoreCoreAction[]; workspaceAction: WorkspaceMenuAction | null } {
   const workspace = new Set(workspacePaths)
   const remove = selectedPaths.length > 0 && selectedPaths.every((path) => workspace.has(path))
-  const workspaceAction = selectedPaths.length
-    ? {
-        kind: remove ? ('remove' as const) : ('add' as const),
-        paths: remove ? selectedPaths : selectedPaths.filter((path) => !workspace.has(path)),
-      }
-    : null
+  const workspaceAllowed = !/^(applications|trash|recyclebin):\/\//i.test(directory)
+  const workspaceAction =
+    workspaceAllowed && selectedPaths.length
+      ? {
+          kind: remove ? ('remove' as const) : ('add' as const),
+          paths: remove ? selectedPaths : selectedPaths.filter((path) => !workspace.has(path)),
+        }
+      : null
   const allCoreActions = menus.flatMap((group) =>
     group.items.filter((item) => isMoreAction(item.id)).map((item) => ({ group, item })),
   )

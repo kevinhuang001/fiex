@@ -19,7 +19,7 @@ const menus: CoreMenu[] = [
 
 describe('buildMoreMenuPlan', () => {
   it('groups duplicate and permanent deletion, and removes a workspace item', () => {
-    const plan = buildMoreMenuPlan(menus, ['/work/report'], ['/work/report'])
+    const plan = buildMoreMenuPlan(menus, ['/work/report'], ['/work/report'], '/work')
 
     expect(plan.coreActions.map(({ item }) => item.id)).toEqual(['duplicate', 'delete'])
     expect(plan.coreActions.at(-1)?.item).toMatchObject({ id: 'delete', danger: true })
@@ -27,7 +27,7 @@ describe('buildMoreMenuPlan', () => {
   })
 
   it('places permanent deletion after the workspace action candidates', () => {
-    const plan = buildMoreMenuPlan(menus, ['/work/report'], [])
+    const plan = buildMoreMenuPlan(menus, ['/work/report'], [], '/work')
 
     expect(plan.coreActions.map(({ item }) => item.id)).toEqual(['duplicate', 'delete'])
     expect(plan.coreActions.at(-1)?.item.id).toBe('delete')
@@ -39,8 +39,20 @@ describe('buildMoreMenuPlan', () => {
       menus,
       ['/work/already-added', '/work/new'],
       ['/work/already-added'],
+      '/work',
     )
 
     expect(plan.workspaceAction).toEqual({ kind: 'add', paths: ['/work/new'] })
+  })
+
+  it.each([
+    'applications://',
+    'applications://Utilities',
+    'trash://',
+    'trash://Folder',
+    'recyclebin://',
+  ])('does not offer workspace actions in %s', (directory) => {
+    const plan = buildMoreMenuPlan(menus, ['/item'], [], directory)
+    expect(plan.workspaceAction).toBeNull()
   })
 })
