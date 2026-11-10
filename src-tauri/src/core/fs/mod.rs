@@ -12,6 +12,8 @@ mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;
+#[cfg(any(feature = "desktop", test))]
+pub(crate) use binding::create_file_with_bytes;
 pub(crate) use binding::trusted_snapshot;
 pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
@@ -196,30 +198,26 @@ impl ResourceBroker {
     /// parent's child-create capability is checked once, then the child uses
     /// the same scoped stream/mkdir path as any other storage write.
     pub fn create(&self, name: &str, directory: bool) -> Result<String, FsError> {
-        self.scope.authorize_method(if directory {
-            "host.fs.mkdir"
-        } else {
-            "host.fs.beginWrite"
-        })?;
-        let child = binding::child(
-            self,
-            name,
-            if directory {
-                provider_registry::ChildKind::Folder
-            } else {
-                provider_registry::ChildKind::File
-            },
-        )?;
-        if directory {
-            child.mkdir()?;
-        } else {
-            // The child's create-write check binds the parent's child-create
-            // capability; checking this broker's parent would grant from the
-            // grandparent instead.
-            child.require(FsOperation::Write, true)?;
-            child.begin_write_handle_sized(true, Some(0))?.commit()?;
-            changes::created(&child.path, name, false);
+        if !directory {
+            return self.create_file_with_bytes(name, &[]);
         }
+        self.scope.authorize_method("host.fs.mkdir")?;
+        let child = binding::child(self, name, provider_registry::ChildKind::Folder)?;
+        child.mkdir()?;
+        Ok(child.path)
+    }
+    /// Create a new file and commit its initial bytes through the same
+    /// provider-owned write stream used for ordinary file creation.
+    pub fn create_file_with_bytes(&self, name: &str, bytes: &[u8]) -> Result<String, FsError> {
+        self.scope.authorize_method("host.fs.beginWrite")?;
+        let child = binding::child(self, name, provider_registry::ChildKind::File)?;
+        // The child's create-write check binds the parent's child-create
+        // capability; checking this broker would grant from its parent.
+        child.require(FsOperation::Write, true)?;
+        let mut writer = child.begin_write_handle_sized(true, Some(bytes.len() as u64))?;
+        writer.write(bytes)?;
+        writer.commit()?;
+        changes::created(&child.path, name, false);
         Ok(child.path)
     }
     /// Move this node to the platform Trash when local storage owns it.

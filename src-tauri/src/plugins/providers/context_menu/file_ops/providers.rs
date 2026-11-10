@@ -8,6 +8,7 @@ use std::sync::Arc;
 use groups::AtomicMenuAction;
 
 mod groups;
+mod new_file;
 
 /// Each registration owns both its match rule and one atomic action. Static
 /// eligibility is therefore colocated with the button identity; dynamic

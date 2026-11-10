@@ -2,6 +2,11 @@
 
 这里集中记录 Fiex Core 各版本的主要变化，也是发布工作流生成 GitHub Release 正文时使用的来源。插件有独立版本和发布说明，请查看相应插件的 Release。
 
+## Fiex 0.7.14
+
+- Add a tiered New File menu with a blank text file and valid DOCX, XLSX and PPTX templates.
+- Rename the Office Preview plugin to Office and add right-click conversion of DOCX, XLSX and PPTX to a same-folder PDF (Office plugin 0.3.3; plugin bundle 0.5.12).
+
 ## Fiex 0.7.13
 
 - Restore items moved to the macOS Trash outside Fiex using Finder's original-location metadata, including the original filename and folder.

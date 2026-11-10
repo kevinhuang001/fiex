@@ -56,7 +56,7 @@ export interface TauriCommandArgs {
   ci_reply: { id: number; value: string }
   connection_open: { id: string }
   create_entry: { path: string; name: string }
-  create_file_entry: { path: string; name: string }
+  create_file_entry: { path: string; name: string; template?: 'docx' | 'xlsx' | 'pptx' }
   credential_backend: NoCommandArgs
   credential_backend_set: { backend: string }
   delete_permanently: { paths: string[] }

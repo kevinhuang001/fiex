@@ -1,14 +1,15 @@
 # 文档依据的代码版本
 
-此文档站对照 **2026-11-10** 的 `main` 快照编写。涉及 Core wire contract、用户功能和测试追溯时，以 Fiex Core 锁定的 SDK submodule 为准；外部仓库的 `main` 或官方插件锁定的旧 SDK 不能覆盖 Core 实际使用的版本。
+此文档站对照 **2026-11-11** 的 Core `main` 基线及 Office 功能分支快照编写。涉及 Core wire contract、用户功能和测试追溯时，以 Fiex Core 锁定的 SDK submodule 为准；外部仓库的 `main` 或官方插件锁定的旧 SDK 不能覆盖 Core 实际使用的版本。
 
 | 来源                       | 核对快照                                                             | 本站用途                                                    |
 | -------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Fiex Core `main`           | `acfc307154bce650b7d1cbead9054836fde41b7a`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
+| Fiex Core `main`           | `9b1dc33644d534eaed24bb84ab267bf822f15e7f`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
+| Office 功能 PR 快照        | `54b47fc38ed781305a952f8e7043ca1772c0b1a4`                           | 新建文件菜单、DOCX/XLSX/PPTX 模板、PDF 转换及其自动化测试   |
 | Core 内 `sdk/` 子模块      | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4) | Core 实际使用的协议 7.0、Rust API 和共享 provider contracts |
-| SDK 仓库 `main`            | `ab21f3a15ed993e5ad9a3c326060b446bb490347`                           | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照           |
-| 官方插件仓库 `main`        | `51da0f5f71911ec3c91085cd667add61e727025d`                           | 可编译插件示例与业务实现；其 SDK 子模块见下一行             |
-| 官方插件仓库 `sdk/` 子模块 | `28586d4be27c6e5b23345a010fa7c70a12860820` (`fiex-plugin-sdk` 0.3.4) | 官方仓库当前构建与示例所锁定的 SDK 快照，和 Core 子模块不同 |
+| SDK 仓库 `main`            | `b89eb341f42552936c52d76b9ccf93568511982a`                           | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照           |
+| 官方插件仓库 `main`        | `5c63527b57e31fc02c95629c42383723b6e035f5`                           | 可编译插件示例与业务实现；其 SDK 子模块见下一行             |
+| 官方插件仓库 `sdk/` 子模块 | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4) | 官方仓库当前构建与示例所锁定的 SDK 快照，与 Core 子模块相同 |
 
 因此，插件作者应先在目标 Core 版本上验证兼容性。特别是 SDK/UI API 的小版本变化、Core 子模块锁定版本和官方插件 CI 配置，不能仅凭仓库首页的 `main` 名称推断相同。
 

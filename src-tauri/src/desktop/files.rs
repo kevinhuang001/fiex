@@ -28,6 +28,8 @@ pub(crate) use listing::*;
 mod creation;
 pub(crate) use creation::*;
 
+mod templates;
+
 #[macro_use]
 mod transfer;
 pub(crate) use transfer::*;

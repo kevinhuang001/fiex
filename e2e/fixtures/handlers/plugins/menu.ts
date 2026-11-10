@@ -5,6 +5,8 @@ import {
 } from '../../presentation/menus'
 import { fixturePlugins } from '../../plugins'
 import { requestFixturePermission } from '../../permission'
+import { basename, parent } from '@/lib/files'
+import { handleFiles } from '../files'
 import { notHandled } from '../shared'
 
 interface FixtureMenuItem {
@@ -20,6 +22,7 @@ const fixtureMenuSessions = new Map<
     actions: Set<string>
     submenus: Set<string>
     items: FixtureMenuItem[]
+    paths: string[]
     created: number
   }
 >()
@@ -45,6 +48,19 @@ function resolveFixtureMenu(a: Record<string, unknown>) {
       : []),
     ...(pluginId === 'org.example.checksum' && a.isDirectory !== true
       ? [{ id: 'checksum.calculate', title: '查看校验和', kind: 'action' }]
+      : []),
+    ...(pluginId === 'org.fiex.office-preview' &&
+    selection.length === 1 &&
+    /\.(docx|xlsx|pptx)$/i.test(selectionNames[0])
+      ? [
+          { id: 'office.menu', title: 'Office', kind: 'submenu' },
+          {
+            id: 'office.convertToPdf',
+            title: '转换为 PDF',
+            kind: 'action',
+            parentId: 'office.menu',
+          },
+        ]
       : []),
     ...(pluginId === 'org.fiex.archive'
       ? selection.length === 1 &&
@@ -86,6 +102,7 @@ function resolveFixtureMenu(a: Record<string, unknown>) {
         .map((entry) => entry.id),
     ),
     items: entries,
+    paths: selection,
     created: Date.now(),
   })
   return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
@@ -152,6 +169,18 @@ export async function handlePluginMenu(
       // The checksum action reads file contents. Mirror Core: if the user
       // revoked files.read, the action waits for the Core-owned prompt before
       // it can continue. This is the "during plugin use" re-authorization case.
+      if (itemId === 'office.convertToPdf') {
+        const source = session.paths[0]
+        if (!source) throw new Error('Office conversion requires one selected file')
+        const filename = basename(source).replace(/\.[^.]+$/, '') + '.pdf'
+        await handleFiles('create_file_entry', { path: parent(source), name: filename })
+        window.dispatchEvent(
+          new CustomEvent('fiex:directory-mutated', {
+            detail: { directories: [parent(source)] },
+          }),
+        )
+        return { handled: true }
+      }
       if (itemId === 'checksum.calculate') {
         const plugin = fixturePlugins.find((entry) => entry.id === session.pluginId)
         if (plugin && !plugin.grantedPermissions.includes('files.read')) {

@@ -14,9 +14,14 @@ import {
   AppWindow,
   ChevronRight,
   Copy,
+  FileDown,
+  FilePlus,
+  FileSpreadsheet,
+  FileText,
   ListMinus,
   ListPlus,
   MoreHorizontal,
+  Presentation,
   Trash2,
 } from 'lucide-react'
 export { validPluginMenuItems } from '@/lib/pluginMenu'
@@ -26,9 +31,14 @@ import type { PluginMenuItem } from '@/lib/pluginMenu'
 const icons = {
   application: AppWindow,
   copy: Copy,
+  'file-down': FileDown,
+  'file-plus': FilePlus,
+  'file-spreadsheet': FileSpreadsheet,
+  'file-text': FileText,
   'list-minus': ListMinus,
   'list-plus': ListPlus,
   more: MoreHorizontal,
+  presentation: Presentation,
   trash: Trash2,
 }
 

@@ -9,7 +9,7 @@ serde_json = "1"
 
 [package]
 name = "fiex"
-version = "0.7.13"
+version = "0.7.14"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2024"

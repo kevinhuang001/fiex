@@ -1,5 +1,5 @@
 use super::super::{Context, Selection};
-use super::item;
+use super::{item, new_file::new_file_items};
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     ContextMenuProvider, FsOperation, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
@@ -86,7 +86,7 @@ impl AtomicMenuAction {
             Action::NewFile
                 if selection.paths.is_empty() && caps.write && selection.preflight.new_file =>
             {
-                vec![item("newFile", "新建空文件…", "file-plus", "newFile")]
+                new_file_items()
             }
             Action::Rename if one && caps.rename && selection.preflight.rename => {
                 vec![item("rename", "重新命名", "pencil", "rename")]

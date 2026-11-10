@@ -1827,7 +1827,7 @@ dependencies = [
 
 [[package]]
 name = "fiex"
-version = "0.7.13"
+version = "0.7.14"
 dependencies = [
  "arapuca",
  "aria2-core",

@@ -113,21 +113,22 @@ export const officialPlugins: FixturePlugin[] = officialMode
       },
       {
         id: 'org.fiex.office-preview',
-        name: 'Office 预览',
-        version: '0.2.8',
-        description: 'Word、Excel、PowerPoint 的只读预览（文本级）。',
+        name: 'Office',
+        version: '0.3.3',
+        description: 'Word、Excel、PowerPoint 的只读预览与 PDF 导出。',
         enabled: true,
         approved: true,
         backendAvailable: true,
 
-        declaredPermissions: ['files.read'],
-        grantedPermissions: ['files.read'],
+        declaredPermissions: ['files.read', 'files.create'],
+        grantedPermissions: ['files.read', 'files.create'],
         requestedCommands: [],
         allowedCommands: [],
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         extensions: {
+          contextMenus: true,
           settings: [{ id: 'previewPages', label: '预览页数', type: 'number', defaultValue: 6 }],
           info: { command: 'office.info', extensions: ['docx', 'xlsx', 'pptx'], priority: 100 },
           preview: {

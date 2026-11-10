@@ -124,7 +124,7 @@ function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfo
       sections.push(
         infoSection(
           'org.fiex.office-preview',
-          'Office 预览',
+          'Office',
           '文档',
           'office',
           [
@@ -388,6 +388,21 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       const path = join(a.path as string, a.name as string)
       if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')
       state.entries.push(item(path, true))
+      return path
+    }
+    case 'create_file_entry': {
+      const path = join(a.path as string, a.name as string)
+      if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')
+      const extension = String(a.name).split('.').pop()?.toLowerCase() || ''
+      const mime =
+        {
+          txt: 'text/plain',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          pdf: 'application/pdf',
+        }[extension] || 'application/octet-stream'
+      state.entries.push(item(path, false, mime, a.template ? 1024 : 0))
       return path
     }
     case 'rename_entry': {
