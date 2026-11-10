@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
+import { call } from '@/lib/api'
 import { measureSubmenu } from '@/lib/menuPosition'
 import { usePluginCatalog } from '@/lib/plugins'
 import { invokePluginContextMenuItem } from '@/components/plugins/invokeContextMenuItem'
