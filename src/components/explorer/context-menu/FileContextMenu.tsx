@@ -91,18 +91,21 @@ export function FileContextMenu(props: ContextMenuProps) {
     title: t('更多'),
     icon: 'more',
   }
+  const moreActionItem = ({ item }: (typeof morePlan.coreActions)[number]): PluginMenuItem => ({
+    id: item.id,
+    kind: 'action',
+    parentId: 'more',
+    title: item.title,
+    icon: item.icon,
+    disabled: item.disabled,
+    danger: item.danger,
+    shortcut: item.shortcut ? props.hint(item.shortcut) : undefined,
+  })
+  const regularMoreActions = morePlan.coreActions.filter(({ item }) => item.id !== 'delete')
+  const permanentDeleteActions = morePlan.coreActions.filter(({ item }) => item.id === 'delete')
   const moreMenuItems: PluginMenuItem[] = [
     moreMenuTrigger,
-    ...morePlan.coreActions.map(({ item }) => ({
-      id: item.id,
-      kind: 'action' as const,
-      parentId: 'more',
-      title: item.title,
-      icon: item.icon,
-      disabled: item.disabled,
-      danger: item.danger,
-      shortcut: item.shortcut ? props.hint(item.shortcut) : undefined,
-    })),
+    ...regularMoreActions.map(moreActionItem),
     ...(morePlan.workspaceAction
       ? [
           {
@@ -114,6 +117,17 @@ export function FileContextMenu(props: ContextMenuProps) {
           },
         ]
       : []),
+    ...(permanentDeleteActions.length
+      ? [
+          {
+            id: 'permanent-delete-separator',
+            kind: 'separator' as const,
+            parentId: 'more',
+            title: '',
+          },
+        ]
+      : []),
+    ...permanentDeleteActions.map(moreActionItem),
   ]
   useEffect(() => {
     if (

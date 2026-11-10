@@ -22,7 +22,16 @@ describe('buildMoreMenuPlan', () => {
     const plan = buildMoreMenuPlan(menus, ['/work/report'], ['/work/report'])
 
     expect(plan.coreActions.map(({ item }) => item.id)).toEqual(['duplicate', 'delete'])
+    expect(plan.coreActions.at(-1)?.item).toMatchObject({ id: 'delete', danger: true })
     expect(plan.workspaceAction).toEqual({ kind: 'remove', paths: ['/work/report'] })
+  })
+
+  it('places permanent deletion after the workspace action candidates', () => {
+    const plan = buildMoreMenuPlan(menus, ['/work/report'], [])
+
+    expect(plan.coreActions.map(({ item }) => item.id)).toEqual(['duplicate', 'delete'])
+    expect(plan.coreActions.at(-1)?.item.id).toBe('delete')
+    expect(plan.workspaceAction).toEqual({ kind: 'add', paths: ['/work/report'] })
   })
 
   it('adds only selected items that are not already in the workspace', () => {

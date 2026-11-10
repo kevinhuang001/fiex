@@ -1,5 +1,7 @@
 //! Trash VFS, OS operations, and its view-specific actions.
 mod journal;
+#[cfg(any(target_os = "macos", test))]
+mod macos_ds_store;
 mod menu;
 mod operations;
 mod restore_fs;

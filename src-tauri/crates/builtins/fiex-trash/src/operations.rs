@@ -1,4 +1,6 @@
-use crate::{RECYCLE_BIN_URI, is_recycle_bin_uri, system_recycle_bin, system_trash_directory};
+use crate::{
+    RECYCLE_BIN_URI, TrashDirectory, is_recycle_bin_uri, system_recycle_bin, system_trash_directory,
+};
 use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -10,6 +12,9 @@ use crate::restore_fs::remove_entry;
 use crate::restore_fs::{free_destination, move_entry};
 
 const CANCELLED: &str = "Cancelled: user cancelled operation";
+
+#[cfg(test)]
+mod tests;
 
 pub fn trash_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
@@ -35,11 +40,15 @@ pub fn move_to_trash(path: &Path) -> Result<(), String> {
 }
 
 pub fn restore_needs_folder(paths: &[String]) -> bool {
+    restore_needs_folder_in(paths, system_trash_directory())
+}
+
+fn restore_needs_folder_in(paths: &[String], trash: &TrashDirectory) -> bool {
     paths.iter().any(|uri| {
         if is_recycle_bin_uri(uri) {
             return uri == RECYCLE_BIN_URI;
         }
-        system_trash_directory()
+        trash
             .physical(uri)
             .ok()
             .and_then(|path| original_location(&path))
@@ -175,11 +184,17 @@ fn check_cancelled(cancel: &AtomicBool) -> Result<(), String> {
 }
 
 fn original_location(trashed: &Path) -> Option<String> {
-    #[cfg(target_os = "macos")]
+    let name = trashed.file_name()?.to_string_lossy().into_owned();
+    // The journal records the exact source path for items moved by Fiex. Prefer
+    // it over Finder's best-effort metadata, which can be stale after a name
+    // collision in the Trash.
+    if let Some(original) = journal::original(&name) {
+        return Some(original);
+    }
+    #[cfg(any(target_os = "macos", test))]
     if let Some(original) = macos_put_back(trashed) {
         return Some(original);
     }
-    let name = trashed.file_name()?.to_string_lossy().into_owned();
     if let Some(trash) = trashed.parent().and_then(|files| files.parent()) {
         let info = trash.join("info").join(format!("{name}.trashinfo"));
         if let Ok(text) = std::fs::read_to_string(info) {
@@ -193,24 +208,15 @@ fn original_location(trashed: &Path) -> Option<String> {
             }
         }
     }
-    journal::original(&name)
+    None
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 fn macos_put_back(trashed: &Path) -> Option<String> {
     let name = trashed.file_name()?.to_string_lossy().into_owned();
     let bytes = std::fs::read(trashed.parent()?.join(".DS_Store")).ok()?;
-    let store = ds_store::DsStore::new(&bytes).ok()?;
-    let records = store.contents().get(&name)?;
-    let location = match records.get("ptbL")? {
-        ds_store::RecordValue::String(value) => value,
-        _ => return None,
-    };
-    let original_name = match records.get("ptbN")? {
-        ds_store::RecordValue::String(value) => value,
-        _ => return None,
-    };
-    macos_put_back_path(location, original_name)
+    let (location, original_name) = crate::macos_ds_store::put_back(&bytes, &name)?;
+    macos_put_back_path(&location, &original_name)
 }
 
 /// Finder stores the original parent in `ptbL` and the original leaf name in
@@ -236,6 +242,12 @@ fn macos_put_back_path(location: &str, original_name: &str) -> Option<String> {
         .or_else(|| (location == "System/Volumes/Data").then_some(""))
         .unwrap_or(location)
         .trim_end_matches('/');
+    if location
+        .split('/')
+        .any(|component| matches!(component, "." | "..") || component.contains('\0'))
+    {
+        return None;
+    }
     if location.is_empty() {
         Some(format!("/{original_name}"))
     } else {
@@ -266,31 +278,3 @@ fn remove_trash_metadata(source: &Path) {
 
 #[cfg(not(target_os = "linux"))]
 fn remove_trash_metadata(_: &Path) {}
-
-#[cfg(test)]
-mod tests {
-    use super::macos_put_back_path;
-
-    #[test]
-    fn reconstructs_finder_put_back_path_from_parent_and_original_name() {
-        assert_eq!(
-            macos_put_back_path("/Users/kevin/Downloads/", "Report.pdf").as_deref(),
-            Some("/Users/kevin/Downloads/Report.pdf")
-        );
-    }
-
-    #[test]
-    fn normalizes_apfs_data_volume_firmlink_before_restoring() {
-        assert_eq!(
-            macos_put_back_path("System/Volumes/Data/Users/kevin/Desktop", "桌面文件.txt")
-                .as_deref(),
-            Some("/Users/kevin/Desktop/桌面文件.txt")
-        );
-    }
-
-    #[test]
-    fn rejects_put_back_names_that_are_not_single_path_components() {
-        assert!(macos_put_back_path("/Users/kevin", "../outside.txt").is_none());
-        assert!(macos_put_back_path("/Users/kevin", "/outside.txt").is_none());
-    }
-}
