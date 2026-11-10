@@ -2,6 +2,10 @@
 
 这里集中记录 Fiex Core 各版本的主要变化，也是发布工作流生成 GitHub Release 正文时使用的来源。插件有独立版本和发布说明，请查看相应插件的 Release。
 
+## Fiex 0.7.15
+
+- Align the Tauri application version with the Core/npm version so installer metadata and filenames match the release tag.
+
 ## Fiex 0.7.14
 
 - Add a tiered New File menu with a blank text file and valid DOCX, XLSX and PPTX templates.
