@@ -95,6 +95,32 @@ describe('IPC boundary validation', () => {
     expect(parseInfoOpenResult(response)).toEqual(response)
   })
 
+  it('rejects malformed file info sections before rendering them', () => {
+    expect(() =>
+      parseInfoOpenResult({
+        sessionId: 'info-session',
+        sections: [
+          {
+            id: 'core.metadata::basic',
+            title: '基本信息',
+            providerId: 'core.metadata',
+            provider: 'Fiex',
+            source: 'core',
+            fields: [
+              {
+                id: 'name',
+                sectionId: 'basic',
+                label: '名称',
+                compute: 'onOpen',
+                status: 'invalid-status',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow('Invalid file info response')
+  })
+
   it('normalizes absent optional decoration fields serialized as null by Rust', () => {
     expect(
       parseEntryDecorations([
