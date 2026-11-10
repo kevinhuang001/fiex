@@ -30,12 +30,14 @@
 .context-menu button:hover {
   background: var(--control-hover-background);
 }
-/* Only explicit destructive actions are red. Plugin entries are appended last
-   and must keep the normal color and geometry. */
-.context-menu > button.context-danger {
+/* Explicit destructive actions use the danger color at every menu depth. */
+.context-menu .context-danger {
   color: var(--danger);
 }
-.context-menu > button.context-danger:hover {
+.context-menu .context-danger > svg {
+  color: var(--danger);
+}
+.context-menu .context-danger:hover {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 .context-submenu-wrap {
@@ -135,6 +137,10 @@
   border-radius: var(--radius-submenu);
   background: var(--context-menu-background);
   box-shadow: none;
+}
+.context-submenu.context-submenu-more {
+  width: 216px;
+  max-width: min(260px, calc(100vw - 16px));
 }
 .context-submenu button {
   width: 100%;

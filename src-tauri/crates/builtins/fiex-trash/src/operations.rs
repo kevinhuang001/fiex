@@ -11,6 +11,9 @@ use crate::restore_fs::{free_destination, move_entry};
 
 const CANCELLED: &str = "Cancelled: user cancelled operation";
 
+#[cfg(test)]
+mod tests;
+
 pub fn trash_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -175,11 +178,17 @@ fn check_cancelled(cancel: &AtomicBool) -> Result<(), String> {
 }
 
 fn original_location(trashed: &Path) -> Option<String> {
+    let name = trashed.file_name()?.to_string_lossy().into_owned();
+    // The journal records the exact source path for items moved by Fiex. Prefer
+    // it over Finder's best-effort metadata, which can be stale after a name
+    // collision in the Trash.
+    if let Some(original) = journal::original(&name) {
+        return Some(original);
+    }
     #[cfg(target_os = "macos")]
     if let Some(original) = macos_put_back(trashed) {
         return Some(original);
     }
-    let name = trashed.file_name()?.to_string_lossy().into_owned();
     if let Some(trash) = trashed.parent().and_then(|files| files.parent()) {
         let info = trash.join("info").join(format!("{name}.trashinfo"));
         if let Ok(text) = std::fs::read_to_string(info) {
@@ -193,7 +202,7 @@ fn original_location(trashed: &Path) -> Option<String> {
             }
         }
     }
-    journal::original(&name)
+    None
 }
 
 #[cfg(target_os = "macos")]
@@ -266,31 +275,3 @@ fn remove_trash_metadata(source: &Path) {
 
 #[cfg(not(target_os = "linux"))]
 fn remove_trash_metadata(_: &Path) {}
-
-#[cfg(test)]
-mod tests {
-    use super::macos_put_back_path;
-
-    #[test]
-    fn reconstructs_finder_put_back_path_from_parent_and_original_name() {
-        assert_eq!(
-            macos_put_back_path("/Users/kevin/Downloads/", "Report.pdf").as_deref(),
-            Some("/Users/kevin/Downloads/Report.pdf")
-        );
-    }
-
-    #[test]
-    fn normalizes_apfs_data_volume_firmlink_before_restoring() {
-        assert_eq!(
-            macos_put_back_path("System/Volumes/Data/Users/kevin/Desktop", "桌面文件.txt")
-                .as_deref(),
-            Some("/Users/kevin/Desktop/桌面文件.txt")
-        );
-    }
-
-    #[test]
-    fn rejects_put_back_names_that_are_not_single_path_components() {
-        assert!(macos_put_back_path("/Users/kevin", "../outside.txt").is_none());
-        assert!(macos_put_back_path("/Users/kevin", "/outside.txt").is_none());
-    }
-}

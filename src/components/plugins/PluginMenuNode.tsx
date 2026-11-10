@@ -133,7 +133,10 @@ export function PluginMenuNode({
           <div
             ref={submenu}
             className={
-              'context-submenu' + (openUp ? ' open-up' : '') + (openLeft ? ' open-left' : '')
+              'context-submenu' +
+              (item.id === 'more' ? ' context-submenu-more' : '') +
+              (openUp ? ' open-up' : '') +
+              (openLeft ? ' open-left' : '')
             }
             role="menu"
             aria-label={item.title}

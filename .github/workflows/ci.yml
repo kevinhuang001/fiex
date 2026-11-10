@@ -257,6 +257,13 @@ jobs:
             tail -40 core-test.log | sed 's/^/::error title=RUSTTEST::/'
           fi
           exit "$status"
+      - name: macOS Trash Put Back regression
+        if: runner.os == 'macOS'
+        run: >-
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          -p fiex-trash --target ${{ matrix.target }} --lib
+          operations::tests::fiex_trashed_item_restores_to_its_original_path_without_fallback
+          -- --exact
       - name: Core IPC integration with an external mock plugin
         shell: bash
         env:

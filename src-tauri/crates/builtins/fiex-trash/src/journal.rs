@@ -55,7 +55,7 @@ fn names() -> HashSet<String> {
 
 fn record(original: &str, before: &HashSet<String>) {
     let after = names();
-    let added: Vec<_> = after.difference(before).collect();
+    let added = added_trash_items(before, &after);
     // Never guess when another process concurrently puts an item in the Trash.
     if added.len() != 1 {
         return;
@@ -68,6 +68,17 @@ fn record(original: &str, before: &HashSet<String>) {
         original: original.into(),
     });
     save(&entries);
+}
+
+/// Finder may create or update this metadata file during the same move that
+/// adds the trashed payload. It is not itself the moved item and must not make
+/// the before/after diff ambiguous (which would silently force restore fallback).
+fn added_trash_items(before: &HashSet<String>, after: &HashSet<String>) -> Vec<String> {
+    after
+        .difference(before)
+        .filter(|name| name.as_str() != ".DS_Store")
+        .cloned()
+        .collect()
 }
 
 pub(super) fn original(name: &str) -> Option<String> {
@@ -98,4 +109,21 @@ pub(crate) fn move_to_trash(path: &Path) -> Result<(), String> {
         record(&path.to_string_lossy(), &before);
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::added_trash_items;
+    use std::collections::HashSet;
+
+    #[test]
+    fn finder_metadata_does_not_hide_the_new_trash_item() {
+        let before = HashSet::new();
+        let after = HashSet::from(["report.txt".to_owned(), ".DS_Store".to_owned()]);
+
+        assert_eq!(
+            added_trash_items(&before, &after),
+            vec!["report.txt".to_owned()]
+        );
+    }
 }

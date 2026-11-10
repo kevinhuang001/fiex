@@ -29,8 +29,13 @@ export function buildMoreMenuPlan(
         paths: remove ? selectedPaths : selectedPaths.filter((path) => !workspace.has(path)),
       }
     : null
-  const coreActions = menus.flatMap((group) =>
+  const allCoreActions = menus.flatMap((group) =>
     group.items.filter((item) => isMoreAction(item.id)).map((item) => ({ group, item })),
   )
+  // Permanent deletion is the final, destructive entry in the More submenu.
+  const coreActions = [
+    ...allCoreActions.filter(({ item }) => item.id !== 'delete'),
+    ...allCoreActions.filter(({ item }) => item.id === 'delete'),
+  ]
   return { coreActions, workspaceAction }
 }
