@@ -1,10 +1,10 @@
 # 文档依据的代码版本
 
-此文档站对照 **2026-11-10** 可见的主分支代码编写。涉及 Core wire contract、用户功能和测试追溯时，以 Fiex Core 锁定的 SDK submodule 为准；外部仓库的 `main` 或官方插件锁定的旧 SDK 不能覆盖 Core 实际使用的版本。
+此文档站对照 **2026-11-10** 的 `main` 快照编写。涉及 Core wire contract、用户功能和测试追溯时，以 Fiex Core 锁定的 SDK submodule 为准；外部仓库的 `main` 或官方插件锁定的旧 SDK 不能覆盖 Core 实际使用的版本。
 
 | 来源                       | 核对快照                                                             | 本站用途                                                    |
 | -------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Fiex Core `main`           | `8c7297126721a152506d7553f4a76363392021ef`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
+| Fiex Core `main`           | `acfc307154bce650b7d1cbead9054836fde41b7a`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
 | Core 内 `sdk/` 子模块      | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4) | Core 实际使用的协议 7.0、Rust API 和共享 provider contracts |
 | SDK 仓库 `main`            | `ab21f3a15ed993e5ad9a3c326060b446bb490347`                           | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照           |
 | 官方插件仓库 `main`        | `51da0f5f71911ec3c91085cd667add61e727025d`                           | 可编译插件示例与业务实现；其 SDK 子模块见下一行             |

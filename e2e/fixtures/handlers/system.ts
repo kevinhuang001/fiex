@@ -154,6 +154,9 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       ]
     case 'native_icon':
       throw new Error('UI fixture')
+    case 'open_path':
+      localStorage.setItem('fiex:e2e:last-open-path', String(a.path || ''))
+      return null
     case 'open_with_picker_candidates':
       return {
         sessionId: 'open-with-picker-fixture-session',

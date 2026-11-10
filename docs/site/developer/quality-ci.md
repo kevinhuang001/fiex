@@ -36,6 +36,14 @@ cargo clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-tar
 
 具体 job 顺序、触发条件、target 和 artifact 以[当前 workflow](https://github.com/kevinhuang001/fiex/blob/main/.github/workflows/ci.yml)为准。
 
+## 构建复用与缓存
+
+前端检查会生成可复用的生产前端资源与平台图标；macOS、Windows 和 Linux 桌面 job 使用同一份已检查 artifact，避免各自重新生成不同内容。格式、lint、类型边界、i18n、单测和前端构建仍按 workflow 的步骤执行。
+
+Rust CI 按 OS、target、toolchain、依赖锁文件和相关源码识别 native Cargo cache。命中缓存只复用编译产物；Cargo tests、Clippy、平台 bundle 和 native dependency audit 仍运行。缓存命中也不保证零编译，Cargo 仍会按 fingerprint 判断需重建的内容。
+
+文档页面和本地开发命令见[GitHub Pages 发布](/developer/publishing)。只改文档时可运行站点构建；它验证页面和链接能生成，不替代前端或 Rust 行为测试。
+
 ## 如何解读验证结果
 
 - E2E fixture 成功，说明浏览器用户流程在测试数据下工作；它不是真实桌面系统回收站测试。

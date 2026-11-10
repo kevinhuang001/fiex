@@ -50,7 +50,7 @@ if (existing && !existing.isDraft) {
       '--title',
       `Fiex ${version}`,
       '--notes-file',
-      'docs/RELEASE.md',
+      'docs/site/reference/release-notes.md',
       '--draft',
     )
   gh('release', 'upload', tag, '--clobber', ...files)

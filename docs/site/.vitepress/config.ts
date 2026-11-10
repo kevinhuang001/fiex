@@ -27,6 +27,8 @@ export default defineConfig({
             { text: '查看文件信息', link: '/user-guide/file-info' },
             { text: '常用位置、应用与废纸篓', link: '/user-guide/built-in-locations' },
             { text: '安装插件与连接服务', link: '/user-guide/plugins-and-connections' },
+            { text: '使用源代码管理', link: '/user-guide/source-control' },
+            { text: '本地终端与 SSH 连接', link: '/user-guide/terminal-and-ssh' },
             { text: '设置与快捷键', link: '/user-guide/settings-shortcuts' },
             { text: '问题排查', link: '/user-guide/troubleshooting' },
           ],
@@ -39,6 +41,13 @@ export default defineConfig({
             { text: '项目与仓库', link: '/developer/overview' },
             { text: '本地开发环境', link: '/developer/environment' },
             { text: '系统架构', link: '/developer/architecture' },
+            {
+              text: '目录缓存与传输预检',
+              link: '/developer/architecture/navigation-cache-preflight',
+            },
+            { text: '内置菜单与文件装饰', link: '/developer/architecture/builtin-providers' },
+            { text: '缓存、诊断与错误', link: '/developer/architecture/runtime-contracts' },
+            { text: '远程文件缓存与同步', link: '/developer/architecture/remote-cache-sync' },
             { text: 'IPC 协议参考', link: '/developer/ipc' },
             { text: '软件需求与测试追溯', link: '/developer/requirements' },
             { text: '格式、构建与 CI', link: '/developer/quality-ci' },
@@ -58,6 +67,14 @@ export default defineConfig({
             { text: '调试、验证与发布', link: '/developer/plugin-development/testing-publishing' },
           ],
         },
+        {
+          text: '第三方依赖参考',
+          collapsed: true,
+          items: [
+            { text: 'Arapuca 沙箱库', link: '/developer/third-party/arapuca' },
+            { text: 'Arapuca 命令行手册', link: '/developer/third-party/arapuca-cli-reference' },
+          ],
+        },
       ],
       '/reference/': [
         {
@@ -66,6 +83,8 @@ export default defineConfig({
             { text: '插件权限与安全边界', link: '/reference/security' },
             { text: '当前限制', link: '/reference/limitations' },
             { text: '文档代码基线', link: '/reference/source-baseline' },
+            { text: '版本说明', link: '/reference/release-notes' },
+            { text: '第三方软件与许可', link: '/reference/third-party-notices' },
           ],
         },
       ],
