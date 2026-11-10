@@ -1,77 +1,41 @@
-# 插件开发
+# 插件开发手册
 
-## 先检查版本
+本手册带你从可编译的 Rust 进程开始，逐步注册扩展、处理文件、加入界面并制作可安装包。协议以 Core 当前锁定的 SDK 子模块为准；当前基线使用 manifest schema 2 和 native IPC protocol 7.0。升级协议时请同时检查 Core、SDK 和插件仓库。
 
-当前 Core 的插件 manifest 使用 `schemaVersion: 2`，Native SDK 握手使用 `protocolVersion: 7.0`。Core 会在插件初始化时核对协议版本；不能只改 manifest 字符串来绕过 SDK 不兼容。
+## 推荐路线
 
-项目有独立的 Rust SDK 和 UI SDK。Native 后端通过 Rust SDK 访问 Core 提供的能力；插件面板/预览界面通过 UI SDK 与受控的 Bridge 通信。插件可以只有 Native 后端，也可以同时包含 UI。
+1. [新建并运行插件](/developer/plugin-development/first-plugin)：编译官方 Hello 示例并检查启动握手。
+2. [Manifest 与权限](/developer/plugin-development/manifest)：注册扩展、写平台入口并只申请所需权限。
+3. [Provider 实现](/developer/plugin-development/providers)：选择连接、Info、Preview、菜单、搜索等 provider。
+4. [虚拟文件系统 VFS](/developer/plugin-development/vfs)：实现云端、归档或其他非本地文件空间。
+5. [插件界面与 UI SDK](/developer/plugin-development/ui)：实现面板、连接视图和预览文档。
+6. [调试、验证与发布](/developer/plugin-development/testing-publishing)：本地运行进程、打包并验证 Core 集成。
+7. 查阅独立的 [IPC 协议参考](/developer/ipc) 和 [软件需求/测试追溯](/developer/requirements)。
 
-## Info 字段与按需计算
+## 插件运行模型
 
-Info 字段写在 manifest 的 `extensions.info.sections` 中。每个 section 提供稳定的 `id`、标题和字段列表；每个字段提供 `id`、标签和 `compute` 策略。字段声明由 Core 在安装或启用插件时建立索引，打开“显示简介”时不需要启动插件来询问它有哪些字段。
+Native 插件是由 Fiex 管理的独立进程。Core 启动进程并通过标准输入/输出发送带 Content-Length 的 JSON-RPC 请求。Rust SDK 负责握手、帧读写、并发分发、宿主调用和任务生命周期；业务代码通常只实现 provider trait。
 
-`compute` 目前支持 `onOpen` 与 `onDemand`：前者在面板打开后自动请求；后者先显示为“尚未计算”，用户点击“计算”后才请求该字段。SDK 的 `InfoProvider` 只实现 `compute(ctx, fields)`，并返回与请求字段对应的文本结果。Core 负责字段校验、缓存、会话、取消和权限检查。旧版一次性 Info 行结果与旧 RPC 格式不属于 protocol 7.0。
+插件界面（如果有）作为安装包中的本地页面运行在受控 UI 容器中，通过 UI SDK 的 bridge 调用允许的界面能力。UI 页面不直接通过 bridge 读取文件系统；文件和 VFS 工作应由 native provider 完成。
 
-可参考[官方 Hello 插件 manifest 中的 Info 声明](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/manifest.json)。
+## 从当前示例开始
 
-只有字段计算确实需要文件内容时，才声明并请求相应的读取权限；声明字段本身不等于读取文件。
+官方可编译样例位于 [`fiex-official-plugins/example/hello`](https://github.com/kevinhuang001/fiex-official-plugins/tree/main/example/hello)。它覆盖连接、VFS、Info、Preview、Decorations、Context Menu、Search、Hooks、Toolbar 和 UI。初学时建议先删除不用的示例 provider，再添加你需要的能力，避免复制无关权限。
 
-## 从真实示例开始
+当前 Core 锁定的 Rust API 以 [SDK providers 源码](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/rust/src/providers.rs)和 [protocol-7 contract](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/docs/protocol-7.md)为准。其他仓库的 `main` 可能已经领先于 Core 锁定版本。
 
-官方插件仓库提供可编译的 Hello 示例。开发时优先核对当前协议、manifest 与实际 provider 实现：
+## 何时选哪种扩展
 
-- [SDK protocol 7.0 provider contract](https://github.com/kevinhuang001/fiex-sdk/blob/main/docs/protocol-7.md)
-- [Hello 插件 manifest](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/manifest.json)
-- [Hello 插件 Rust 实现](https://github.com/kevinhuang001/fiex-official-plugins/blob/main/example/hello/src/main.rs)
-- [Rust SDK 新手手册](https://github.com/kevinhuang001/fiex-sdk/blob/main/rust/README.md)
-- [UI SDK](https://github.com/kevinhuang001/fiex-sdk/tree/main/ui)
+| 目标                         | 入口                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| 用户保存连接后浏览服务端文件 | `extensions.connections` + `extensions.vfs` + `ConnectionProvider` + `VfsProvider` |
+| 在文件信息面板增加字段       | Manifest 静态声明 `extensions.info.sections` + `InfoProvider::compute`             |
+| 预览一种文件格式             | `extensions.preview` + `PreviewProvider`，返回包内预览页面或标准预览视图           |
+| 添加文件右键菜单             | `extensions.contextMenus` + `ContextMenuProvider`                                  |
+| 添加连接自身的右键菜单       | `extensions.connectionContextMenus` + 对应 provider                                |
+| 向搜索合并结果               | `extensions.search` + `SearchProvider`                                             |
+| 在打开文件前/后响应          | `extensions.hooks` + `HookProvider`                                                |
+| 增加工具栏按钮或面板         | `extensions.toolbar` + `ToolbarProvider`                                           |
+| 给文件行/列补充动态信息      | `extensions.decorations` + `DecorationProvider`                                    |
 
-快速编译示例：
-
-```sh
-git clone --recurse-submodules https://github.com/kevinhuang001/fiex-official-plugins.git
-cd fiex-official-plugins
-cargo build --manifest-path example/hello/Cargo.toml
-```
-
-SDK 仓库还提供真实进程检查工具，可按示例手册验证 initialize 握手、一次调用和正常退出。
-
-## Manifest 与注册
-
-Manifest 的顶层结构包含 schemaVersion、插件 id、名称、版本、runtime、permissions 和 extensions。标准扩展注册写在 extensions 中；权限声明写在 permissions 中。扩展声明只表示插件提供功能，不会自动授予文件、网络或命令访问权限。
-
-当前常见扩展包括连接、VFS、Info、Preview、Decorations、Context Menu、Search、Hooks、Toolbar、Settings 和 Themes。只注册实际实现的扩展，并使用与目标 Core/SDK 一致的字段。
-
-## 常用 Provider
-
-Rust SDK 的 Providers builder 可以注册标准 provider trait：
-
-| Provider            | 标准事件                                 |
-| ------------------- | ---------------------------------------- |
-| ConnectionProvider  | 连接校验、打开和创建生命周期             |
-| VfsProvider         | 虚拟目录发现、列出、查询、读写和文件操作 |
-| InfoProvider        | 按请求计算 Info 字段                     |
-| PreviewProvider     | 文件预览视图                             |
-| DecorationProvider  | 文件行和列的装饰                         |
-| ContextMenuProvider | 右键菜单项及执行                         |
-| SearchProvider      | 插件搜索来源                             |
-| HookProvider        | 文件打开等生命周期 hook                  |
-| ToolbarProvider     | 工具栏命令和面板                         |
-
-自定义 RPC 可作为标准分发器的 fallback；文件系统能力应优先使用共享 VFS/provider 接口。
-
-## 文件与 VFS
-
-Core 通过 ResourceRef 将当前操作中授权的对象传给插件。它是受范围约束的资源身份，不是任意宿主路径或永久令牌。读取和写入使用 SDK 的 reader/writer；写入先暂存，调用 commit 后才提交，未提交或失败的写入可取消。
-
-VFS provider 应声明实现的 operation，并可根据当前连接或对象返回更窄的发现能力。Core 负责挂载身份、URI、宿主授权范围、能力预检和数据转发。不要在插件中拼造 Core 管理的 fiex:// URI 或直接访问用户文件。
-
-## 权限声明
-
-权限逐项声明，例如 metadata、folders.read、files.read、files.write、network 和 commands。Core 安装/激活流程记录用户批准的声明快照；运行时还会校验当前授权、当前操作范围和具体目标。网络域名需精确声明；commands 只允许 manifest 列出的命令。
-
-外部命令是高风险能力：批准的命令在宿主授权流程下以当前用户身份运行，可能访问 SDK 文件范围以外的文件、网络或启动其他进程。插件不能把它当作普通的文件读取 API。
-
-## 发布与兼容
-
-官方插件包由 official 仓库脚本构建为 Fiex 可安装包。发布前检查平台 entrypoint、schema、protocolVersion、权限声明和包内资源路径，并验证包可在目标 Core 版本中启动。协议升级要同时协调 Core、SDK 和插件；不要保留已移除的旧 manifest 或 RPC 格式。
+注册扩展只表示该 provider 有资格收到对应事件。调用时仍会受用户授权、资源范围、匹配条件和 Core 的能力校验约束。

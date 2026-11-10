@@ -1,25 +1,26 @@
-# 文档代码基线
+# 文档依据的代码版本
 
-本次文档以 **2026-11-08** 默认分支上的实际代码为准，并核对 Core、SDK、官方插件仓库及其 SDK 子模块。Core 基线包含 Core PR #75–#78 的合并结果；本次文档 PR 只加入文档内容与 GitHub Pages 配置。
+此文档站对照 **2026-11-10** 可见的主分支代码编写。涉及 Core wire contract、用户功能和测试追溯时，以 Fiex Core 锁定的 SDK submodule 为准；外部仓库的 `main` 或官方插件锁定的旧 SDK 不能覆盖 Core 实际使用的版本。
 
-| 来源                                   | 核对版本                                   | 用途                                                      |
-| -------------------------------------- | ------------------------------------------ | --------------------------------------------------------- |
-| Core：fiex `main`                      | `0594357eb483fcc3b811955e01f49f3a2cb07159` | 用户行为、Tauri/Core 结构、Cargo workspace、平台实现与 CI |
-| Core 的 SDK 子模块                     | `28586d4be27c6e5b23345a010fa7c70a12860820` | Core 实际锁定的 protocol 7.0 contracts                    |
-| SDK：fiex-sdk `main`                   | `ab21f3a15ed993e5ad9a3c326060b446bb490347` | Rust SDK、共享 provider contracts、UI SDK 与 protocol 7.0 |
-| 官方插件：fiex-official-plugins `main` | `51da0f5f71911ec3c91085cd667add61e727025d` | 官方插件实现、manifest、示例与集成验证                    |
-| 官方插件仓库的 SDK 子模块              | `28586d4be27c6e5b23345a010fa7c70a12860820` | 官方插件构建和验证使用的 SDK 快照                         |
+| 来源                       | 核对快照                                                             | 本站用途                                                    |
+| -------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Fiex Core `main`           | `8c7297126721a152506d7553f4a76363392021ef`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
+| Core 内 `sdk/` 子模块      | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4) | Core 实际使用的协议 7.0、Rust API 和共享 provider contracts |
+| SDK 仓库 `main`            | `ab21f3a15ed993e5ad9a3c326060b446bb490347`                           | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照           |
+| 官方插件仓库 `main`        | `51da0f5f71911ec3c91085cd667add61e727025d`                           | 可编译插件示例与业务实现；其 SDK 子模块见下一行             |
+| 官方插件仓库 `sdk/` 子模块 | `28586d4be27c6e5b23345a010fa7c70a12860820` (`fiex-plugin-sdk` 0.3.4) | 官方仓库当前构建与示例所锁定的 SDK 快照，和 Core 子模块不同 |
 
-Core 与官方插件仓库当前都锁定 SDK commit `28586d4`；SDK 自己的 `main` 是包含该协议改动的合并提交。核对其他版本时，仍应分别查看每个仓库实际检出的 SDK 子模块，不能只看 SDK 的 `main`。
+因此，插件作者应先在目标 Core 版本上验证兼容性。特别是 SDK/UI API 的小版本变化、Core 子模块锁定版本和官方插件 CI 配置，不能仅凭仓库首页的 `main` 名称推断相同。
 
-## 文档更新规则
+协议版本：manifest schema 2；native plugin IPC protocol 7.0。Core pinned SDK crate 版本：0.3.4。版本变更时请重新检查 [IPC 协议参考](/developer/ipc)、[插件开发手册](/developer/plugin-development)、[需求追溯](/developer/requirements)和 CI workflow。
 
-当以下任一项变化时，同一 pull request 应更新对应页面：
+## 更新基线的规则
 
-- 用户可见的文件操作、搜索、设备或设置行为；
-- Cargo workspace crate、Tauri command 边界、provider 路由；
-- Manifest schema、权限、协议版本或 SDK API；
-- 支持的平台、构建命令和 CI workflow；
-- GitHub Pages 路径、workflow 或部署方式。
+发布 Core 新版本或文档变更合并前，维护者应更新本表的完整 commit SHA 和核对日期。对照代码时至少确认：
 
-每次代码版本变更后，此页面中的基线 commit 和核对日期也应随之更新。遇到不一致时，优先核对默认分支代码、子模块 commit 和当前 CI，再更正文档。
+- Core 主分支 commit 与 SDK 子模块 commit；
+- manifest schema、protocolVersion 与 Core 实际校验代码；
+- 对应 UI/E2E/Rust/IPC/平台测试路径；
+- Docs workflow 构建与部署目标。
+
+若页面描述和代码不同，以对应目标版本源码和已运行 CI 为准，并在同一个功能 PR 中修正文档。
