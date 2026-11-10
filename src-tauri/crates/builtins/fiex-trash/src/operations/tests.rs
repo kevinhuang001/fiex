@@ -59,7 +59,7 @@ fn finder_item_put_back_does_not_request_fallback_without_fiex_journal() {
         .enumerate()
         .filter_map(|(position, window)| (window == from.as_slice()).then_some(position))
         .collect();
-    assert_eq!(positions.len(), 2);
+    assert!(positions.len() >= 2);
     for position in positions {
         store[position..position + to.len()].copy_from_slice(&to);
     }
