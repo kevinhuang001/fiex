@@ -1,3 +1,8 @@
+# Fiex 0.7.13
+
+- Restore items moved to the macOS Trash outside Fiex using Finder's original-location metadata, including the original filename and folder.
+- Keep the terminal action available; widen the More submenu and put permanent deletion last with destructive styling.
+
 # Fiex 0.7.12
 
 - Fix invalid decoration labels when opening the Applications directory by normalizing absent Rust option values.
