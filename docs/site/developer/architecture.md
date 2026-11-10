@@ -63,9 +63,14 @@ Core 的本地搜索、Recent、Applications、Trash 和插件连接都可以由
 
 目录打开时，UI 可以先显示缓存列表，再并行请求当前 provider 的目录内容和装饰信息。每次异步更新带 revision/完成状态；较旧的结果不会覆盖新导航的结果。缓存用于更快显示界面，不是文件系统事实来源；Core/provider 返回的新状态会覆盖不一致的缓存视图。
 
+浏览目录的 cache-first 更新、传输 preflight 和内置位置能力边界见[目录缓存、搜索与传输预检](/developer/architecture/navigation-cache-preflight)。列表、装饰和错误的跨层约束见[缓存、诊断与错误合同](/developer/architecture/runtime-contracts)。内置菜单与装饰的 provider 合同见[内置菜单与文件装饰](/developer/architecture/builtin-providers)。
+
+远程连接的离线目录、文件缓存、pin 与 revision 冲突处理见[远程文件缓存与同步](/developer/architecture/remote-cache-sync)。
+
 ## 深入阅读
 
 - [IPC 协议参考](/developer/ipc)
 - [插件开发手册](/developer/plugin-development)
 - [软件需求与测试追溯](/developer/requirements)
 - [插件权限与安全边界](/reference/security)
+- [格式、构建与 CI](/developer/quality-ci)

@@ -1,3 +1,8 @@
+---
+title: Arapuca process sandbox
+description: Vendored upstream reference for the Arapuca sandbox used by Fiex.
+---
+
 # Arapuca
 
 Process sandbox for Linux, macOS, and Windows providing
@@ -41,7 +46,7 @@ be bypassed from userspace.
   `pidfd_send_signal` (Linux 5.3+) for race-free signal delivery,
   preventing PID recycling races. Falls back to `kill()` on older
   kernels
-- **Micro-VM isolation** *(experimental)* (optional, `microvm`
+- **Micro-VM isolation** _(experimental)_ (optional, `microvm`
   feature) — runs the
   subprocess inside a lightweight KVM virtual machine via libkrun.
   Strongest isolation: separate kernel, address space, and device
@@ -54,7 +59,7 @@ be bypassed from userspace.
   pre-installed), cloud-init guest configuration with `write_files`
   support, COW overlays, and optional networking via passt with
   `--no-map-gw` to prevent guest access to host localhost.
-  **Persistent VMs** *(experimental)* (`vm start/exec/stop`) — long-running VMs with
+  **Persistent VMs** _(experimental)_ (`vm start/exec/stop`) — long-running VMs with
   interactive access via vsock, nonce-based authentication, TTY
   support with raw terminal mode and SIGWINCH forwarding, persistent
   overlay disks, and a guest agent injected via read-only virtiofs share
@@ -189,26 +194,26 @@ arapuca run \
 #   via CONNECT proxy (DNS rebinding protection, IP range validation)
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-v /path[:ro]` | Allow path access (read-write default, `:ro` for read-only) |
-| `--cwd /path` | Set working directory (must be within a mount) |
-| `--env KEY=VALUE` | Pass environment variable |
-| `--timeout N` | Kill after N seconds |
-| `--memory N` | Memory limit in MB |
-| `--cpus N` | CPU percentage (200 = 2 cores) |
-| `--pids N` | Max number of PIDs |
-| `--task-id NAME` | Identifier for cgroup and audit |
-| `--allow-host H:P` | Allow HTTPS to host:port or `*.domain:port` via CONNECT proxy (Linux) |
-| `--deny-network` | Block all network; capture DNS queries as audit events (Linux) |
+| Flag                        | Description                                                                                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-v /path[:ro]`             | Allow path access (read-write default, `:ro` for read-only)                                                                                                                                |
+| `--cwd /path`               | Set working directory (must be within a mount)                                                                                                                                             |
+| `--env KEY=VALUE`           | Pass environment variable                                                                                                                                                                  |
+| `--timeout N`               | Kill after N seconds                                                                                                                                                                       |
+| `--memory N`                | Memory limit in MB                                                                                                                                                                         |
+| `--cpus N`                  | CPU percentage (200 = 2 cores)                                                                                                                                                             |
+| `--pids N`                  | Max number of PIDs                                                                                                                                                                         |
+| `--task-id NAME`            | Identifier for cgroup and audit                                                                                                                                                            |
+| `--allow-host H:P`          | Allow HTTPS to host:port or `*.domain:port` via CONNECT proxy (Linux)                                                                                                                      |
+| `--deny-network`            | Block all network; capture DNS queries as audit events (Linux)                                                                                                                             |
 | `--allow-network-listeners` | Allow TCP bind/inbound; on Linux confines listeners to an isolated network namespace. On macOS, Seatbelt cannot reliably confine listeners to loopback, so use only with trusted programs. |
-| `--seccomp MODE` | Seccomp profile: `strict` (default) or `baseline` |
-| `--audit-files` | Emit file access and process spawn audit events (Linux) |
-| `--audit-network` | Emit network connection audit events (Linux) |
-| `--seccomp-debug` | Log blocked syscalls to stderr instead of killing (diagnostic) |
-| `--no-pid-ns` | Disable PID namespace isolation |
-| `--lpac` | Run as a Less Privileged AppContainer; may break binaries needing registry/DLL access outside the LPAC allowlist (Windows) |
-| `-t, --tty` | Allocate a PTY for interactive programs |
+| `--seccomp MODE`            | Seccomp profile: `strict` (default) or `baseline`                                                                                                                                          |
+| `--audit-files`             | Emit file access and process spawn audit events (Linux)                                                                                                                                    |
+| `--audit-network`           | Emit network connection audit events (Linux)                                                                                                                                               |
+| `--seccomp-debug`           | Log blocked syscalls to stderr instead of killing (diagnostic)                                                                                                                             |
+| `--no-pid-ns`               | Disable PID namespace isolation                                                                                                                                                            |
+| `--lpac`                    | Run as a Less Privileged AppContainer; may break binaries needing registry/DLL access outside the LPAC allowlist (Windows)                                                                 |
+| `-t, --tty`                 | Allocate a PTY for interactive programs                                                                                                                                                    |
 
 ### Micro-VM (requires `microvm` feature)
 
@@ -313,16 +318,16 @@ cargo build --features vm-agent --bin arapuca-agent
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `ARAPUCA_READ_PATHS` | Readable paths (`:` on Unix, `;` on Windows) |
-| `ARAPUCA_WRITE_PATHS` | Writable paths (`:` on Unix, `;` on Windows) |
-| `ARAPUCA_RLIMIT_AS` | Max virtual memory in bytes |
-| `ARAPUCA_RLIMIT_NPROC` | Max number of processes |
-| `ARAPUCA_RLIMIT_CPU` | Max CPU time in seconds |
-| `ARAPUCA_RLIMIT_FSIZE` | Max file size in bytes |
-| `ARAPUCA_RLIMIT_NOFILE` | Max open file descriptors |
-| `ARAPUCA_WRAPPER` | Internal sentinel (set by library, required for wrapper path) |
+| Variable                | Description                                                   |
+| ----------------------- | ------------------------------------------------------------- |
+| `ARAPUCA_READ_PATHS`    | Readable paths (`:` on Unix, `;` on Windows)                  |
+| `ARAPUCA_WRITE_PATHS`   | Writable paths (`:` on Unix, `;` on Windows)                  |
+| `ARAPUCA_RLIMIT_AS`     | Max virtual memory in bytes                                   |
+| `ARAPUCA_RLIMIT_NPROC`  | Max number of processes                                       |
+| `ARAPUCA_RLIMIT_CPU`    | Max CPU time in seconds                                       |
+| `ARAPUCA_RLIMIT_FSIZE`  | Max file size in bytes                                        |
+| `ARAPUCA_RLIMIT_NOFILE` | Max open file descriptors                                     |
+| `ARAPUCA_WRAPPER`       | Internal sentinel (set by library, required for wrapper path) |
 
 All `ARAPUCA_*` variables are stripped from the environment before
 exec — the sandboxed process cannot inspect its own configuration.
@@ -416,46 +421,46 @@ case.
 
 ### Defense Layers (Linux)
 
-| Layer | Mechanism | What it prevents |
-|-------|-----------|------------------|
-| Landlock | Kernel filesystem MAC | Reading/writing files outside allowlist |
-| Seccomp BPF | Syscall filter | ptrace, mount, namespace escape, kernel modules |
-| Network namespace | CLONE_NEWNET | All direct network access (AF_INET/AF_INET6) |
-| Proxy bridge | TCP-to-UDS relay | Enables HTTP_PROXY in netns via hardened child process |
-| PID namespace | CLONE_NEWPID | Sandboxed process seeing/signaling host processes |
-| Unotify audit | SECCOMP_RET_USER_NOTIF | File access, process spawn, and network audit trail |
-| DNS capture | UDP port 53 interception | DNS exfiltration, provides audit trail of queries |
-| Cgroups v2 | Resource limits | Memory exhaustion, fork bombs, CPU starvation |
-| Rlimits | POSIX limits | Large file creation, process proliferation |
-| Pdeathsig | PR_SET_PDEATHSIG | Orphan processes surviving parent crash |
-| Setsid | Session detach | Signal propagation to host terminal |
-| Env stripping | Remove ARAPUCA_* | Agent inspecting its own sandbox config |
-| Micro-VM (opt-in) | KVM via libkrun | Kernel exploits, syscall attacks, full address space isolation |
+| Layer             | Mechanism                | What it prevents                                               |
+| ----------------- | ------------------------ | -------------------------------------------------------------- |
+| Landlock          | Kernel filesystem MAC    | Reading/writing files outside allowlist                        |
+| Seccomp BPF       | Syscall filter           | ptrace, mount, namespace escape, kernel modules                |
+| Network namespace | CLONE_NEWNET             | All direct network access (AF_INET/AF_INET6)                   |
+| Proxy bridge      | TCP-to-UDS relay         | Enables HTTP_PROXY in netns via hardened child process         |
+| PID namespace     | CLONE_NEWPID             | Sandboxed process seeing/signaling host processes              |
+| Unotify audit     | SECCOMP_RET_USER_NOTIF   | File access, process spawn, and network audit trail            |
+| DNS capture       | UDP port 53 interception | DNS exfiltration, provides audit trail of queries              |
+| Cgroups v2        | Resource limits          | Memory exhaustion, fork bombs, CPU starvation                  |
+| Rlimits           | POSIX limits             | Large file creation, process proliferation                     |
+| Pdeathsig         | PR_SET_PDEATHSIG         | Orphan processes surviving parent crash                        |
+| Setsid            | Session detach           | Signal propagation to host terminal                            |
+| Env stripping     | Remove ARAPUCA_*         | Agent inspecting its own sandbox config                        |
+| Micro-VM (opt-in) | KVM via libkrun          | Kernel exploits, syscall attacks, full address space isolation |
 
 ### Defense Layers (macOS)
 
-| Layer | Mechanism | What it prevents |
-|-------|-----------|------------------|
-| Seatbelt | sandbox-exec profile | Filesystem/network access outside allowlist |
-| Rlimits | POSIX limits | Large file creation, process proliferation |
-| Memory monitor | RSS polling (500ms) | Memory exhaustion (best-effort) |
-| Parent watchdog | getppid polling (2s) | Orphan processes surviving parent crash |
-| Setsid | Session detach | Signal propagation to host terminal |
-| Env stripping | Remove ARAPUCA_* | Agent inspecting its own sandbox config |
+| Layer           | Mechanism            | What it prevents                            |
+| --------------- | -------------------- | ------------------------------------------- |
+| Seatbelt        | sandbox-exec profile | Filesystem/network access outside allowlist |
+| Rlimits         | POSIX limits         | Large file creation, process proliferation  |
+| Memory monitor  | RSS polling (500ms)  | Memory exhaustion (best-effort)             |
+| Parent watchdog | getppid polling (2s) | Orphan processes surviving parent crash     |
+| Setsid          | Session detach       | Signal propagation to host terminal         |
+| Env stripping   | Remove ARAPUCA_*     | Agent inspecting its own sandbox config     |
 
 ### Defense Layers (Windows)
 
-| Layer | Mechanism | What it prevents |
-|-------|-----------|------------------|
-| AppContainer | CreateAppContainerProfile | Filesystem/network access outside allowlist (deny-by-default) |
-| Job Object | KILL_ON_JOB_CLOSE | Memory exhaustion, fork bombs, CPU starvation, orphan processes |
-| Restricted token | DISABLE_MAX_PRIVILEGE + Low IL | Privilege escalation (fallback when AppContainer inactive) |
-| Mitigations | PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY | DEP bypass, ASLR bypass, Win32k attacks, DLL injection |
-| Child process restriction | MITIGATION_POLICY QWORD2 | Subprocess spawning children (when allow_exec=false) |
-| UI restrictions | JOBOBJECT_BASIC_UI_RESTRICTIONS | Desktop, clipboard, display settings, global atoms access |
-| Handle inheritance | PROC_THREAD_ATTRIBUTE_HANDLE_LIST | Handle leak to subprocess (only stdio inherited) |
-| DACL rollback | Save/restore ACLs | Persistent permission changes surviving sandbox exit |
-| Env stripping | Filter ARAPUCA_*, COMSPEC, __COMPAT_LAYER, etc. | Config inspection, shell injection, compat shim injection |
+| Layer                     | Mechanism                                       | What it prevents                                                |
+| ------------------------- | ----------------------------------------------- | --------------------------------------------------------------- |
+| AppContainer              | CreateAppContainerProfile                       | Filesystem/network access outside allowlist (deny-by-default)   |
+| Job Object                | KILL_ON_JOB_CLOSE                               | Memory exhaustion, fork bombs, CPU starvation, orphan processes |
+| Restricted token          | DISABLE_MAX_PRIVILEGE + Low IL                  | Privilege escalation (fallback when AppContainer inactive)      |
+| Mitigations               | PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY         | DEP bypass, ASLR bypass, Win32k attacks, DLL injection          |
+| Child process restriction | MITIGATION_POLICY QWORD2                        | Subprocess spawning children (when allow_exec=false)            |
+| UI restrictions           | JOBOBJECT_BASIC_UI_RESTRICTIONS                 | Desktop, clipboard, display settings, global atoms access       |
+| Handle inheritance        | PROC_THREAD_ATTRIBUTE_HANDLE_LIST               | Handle leak to subprocess (only stdio inherited)                |
+| DACL rollback             | Save/restore ACLs                               | Persistent permission changes surviving sandbox exit            |
+| Env stripping             | Filter ARAPUCA_*, COMSPEC, __COMPAT_LAYER, etc. | Config inspection, shell injection, compat shim injection       |
 
 ### Seccomp Filter (Linux only)
 
@@ -520,11 +525,11 @@ traffic must flow through a host-side proxy via Unix domain sockets.
 
 **How it works per platform:**
 
-| | Linux | macOS | Windows |
-|-|-------|-------|---------|
-| Block IP | Seccomp returns `EPERM` for `socket(AF_INET/AF_INET6)`. Optionally `CLONE_NEWNET` removes all network interfaces. | Seatbelt `(deny default)` blocks all TCP/UDP. | AppContainer denies network by default. `internetClient` capability granted only when `use_netns` is false. |
-| Allow Unix sockets | Seccomp does not filter `AF_UNIX` — passes through. | `(allow network-outbound (remote unix))` plus literal file access on each socket path. | Named pipes / Unix sockets accessible if DACL grants access. |
-| Proxy socket delivery | `AGENT_NETWORK_PROXY` env var (not stripped). | Same. | Same. |
+|                       | Linux                                                                                                             | macOS                                                                                  | Windows                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Block IP              | Seccomp returns `EPERM` for `socket(AF_INET/AF_INET6)`. Optionally `CLONE_NEWNET` removes all network interfaces. | Seatbelt `(deny default)` blocks all TCP/UDP.                                          | AppContainer denies network by default. `internetClient` capability granted only when `use_netns` is false. |
+| Allow Unix sockets    | Seccomp does not filter `AF_UNIX` — passes through.                                                               | `(allow network-outbound (remote unix))` plus literal file access on each socket path. | Named pipes / Unix sockets accessible if DACL grants access.                                                |
+| Proxy socket delivery | `AGENT_NETWORK_PROXY` env var (not stripped).                                                                     | Same.                                                                                  | Same.                                                                                                       |
 
 The `AGENT_NETWORK_PROXY` env var deliberately avoids the `ARAPUCA_`
 prefix so it survives the wrapper binary's environment sanitization.
@@ -650,10 +655,10 @@ explicit security review:
 
 ### Environment Variable Convention
 
-| Prefix | Scope | Stripped before exec? |
-|--------|-------|-----------------------|
-| `ARAPUCA_*` | Sandbox config (paths, rlimits) | Yes |
-| `AGENT_*` | Agent-facing config (proxy sockets) | No |
+| Prefix      | Scope                               | Stripped before exec? |
+| ----------- | ----------------------------------- | --------------------- |
+| `ARAPUCA_*` | Sandbox config (paths, rlimits)     | Yes                   |
+| `AGENT_*`   | Agent-facing config (proxy sockets) | No                    |
 
 This separation prevents the bug found in the Go predecessor where
 `SANDBOX_NETWORK_PROXY` was set by the library but stripped by the
@@ -664,27 +669,27 @@ binary along with all `SANDBOX_*` vars.
 `#![deny(unsafe_op_in_unsafe_fn)]` is set crate-wide. Every `unsafe`
 block has a `// SAFETY:` comment. Expected `unsafe` locations:
 
-| File | Reason |
-|------|--------|
-| `ffi.rs` | FFI exports, pointer dereference (null-checked) |
-| `rlimit.rs` | `prlimit64` / `setrlimit` (raw syscall) |
-| `landlock.rs` | `libc::syscall` for ABI version probe |
-| `seccomp.rs` | SIGSYS handler, signal setup, fork in tests |
-| `cgroup.rs` | `libc::kill` for SIGKILL |
-| `pidns.rs` | `unshare`, `fork`, `pipe2`, `_exit`, `waitpid` |
-| `unotify.rs` | `ioctl` (seccomp notification), `fcntl`, `fork`, `pidfd_getfd` |
-| `selfexec.rs` | `#[unsafe(no_mangle)]`, raw pointer dereference, `_exit`, `execve` |
-| `wrapper.rs` | `libc::write`, `getrandom`, `prctl`, `execve` |
-| `terminal.rs` | `tcgetattr`, `cfmakeraw`, `tcsetattr` |
-| `process.rs` | `pidfd_send_signal`, `kill`, `waitpid`, `waitid` |
-| `platform/linux.rs` | `pre_exec()` for setsid + pdeathsig |
-| `platform/darwin/mod.rs` | `pre_exec()` for setsid, `kill()` for monitors |
-| `platform/windows.rs` | Win32 API calls: `CreateProcessW`, `CreateJobObjectW`, `CreateRestrictedToken`, `SetTokenInformation`, `DuplicateHandle`, DACL/ACL operations, `NtSetInformationProcess` |
-| `platform/fd.rs` | `fcntl`, `dup2`, `close` |
-| `bridge.rs` | Netlink socket/send/recv for loopback, `OwnedFd::from_raw_fd` |
-| `platform/microvm.rs` | `libc::fork`, krun_sys FFI calls, `libc::getrandom` |
-| `platform/microvm_net.rs` | `libc::fcntl` (CLOEXEC), `libc::close`, `into_raw_fd` |
-| `bin/arapuca.rs` | `libc::prctl`, `libc::execve`, `libc::fork`, `close_range`, `poll`, `read` |
+| File                      | Reason                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ffi.rs`                  | FFI exports, pointer dereference (null-checked)                                                                                                                          |
+| `rlimit.rs`               | `prlimit64` / `setrlimit` (raw syscall)                                                                                                                                  |
+| `landlock.rs`             | `libc::syscall` for ABI version probe                                                                                                                                    |
+| `seccomp.rs`              | SIGSYS handler, signal setup, fork in tests                                                                                                                              |
+| `cgroup.rs`               | `libc::kill` for SIGKILL                                                                                                                                                 |
+| `pidns.rs`                | `unshare`, `fork`, `pipe2`, `_exit`, `waitpid`                                                                                                                           |
+| `unotify.rs`              | `ioctl` (seccomp notification), `fcntl`, `fork`, `pidfd_getfd`                                                                                                           |
+| `selfexec.rs`             | `#[unsafe(no_mangle)]`, raw pointer dereference, `_exit`, `execve`                                                                                                       |
+| `wrapper.rs`              | `libc::write`, `getrandom`, `prctl`, `execve`                                                                                                                            |
+| `terminal.rs`             | `tcgetattr`, `cfmakeraw`, `tcsetattr`                                                                                                                                    |
+| `process.rs`              | `pidfd_send_signal`, `kill`, `waitpid`, `waitid`                                                                                                                         |
+| `platform/linux.rs`       | `pre_exec()` for setsid + pdeathsig                                                                                                                                      |
+| `platform/darwin/mod.rs`  | `pre_exec()` for setsid, `kill()` for monitors                                                                                                                           |
+| `platform/windows.rs`     | Win32 API calls: `CreateProcessW`, `CreateJobObjectW`, `CreateRestrictedToken`, `SetTokenInformation`, `DuplicateHandle`, DACL/ACL operations, `NtSetInformationProcess` |
+| `platform/fd.rs`          | `fcntl`, `dup2`, `close`                                                                                                                                                 |
+| `bridge.rs`               | Netlink socket/send/recv for loopback, `OwnedFd::from_raw_fd`                                                                                                            |
+| `platform/microvm.rs`     | `libc::fork`, krun_sys FFI calls, `libc::getrandom`                                                                                                                      |
+| `platform/microvm_net.rs` | `libc::fcntl` (CLOEXEC), `libc::close`, `into_raw_fd`                                                                                                                    |
+| `bin/arapuca.rs`          | `libc::prctl`, `libc::execve`, `libc::fork`, `close_range`, `poll`, `read`                                                                                               |
 
 ## Building
 

@@ -108,6 +108,17 @@ test('settings sections keep preferences and release shortcut recording on exit'
   ).toHaveCount(0)
 })
 
+test('About opens the canonical VitePress third-party notices', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '关于', exact: true }).click()
+  const license = page.locator('.settings-row-button').filter({ hasText: '开源许可' })
+  await expect(license).toBeVisible()
+  await license.click()
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('fiex:e2e:last-open-path')))
+    .toBe('https://kevinhuang001.github.io/fiex/reference/third-party-notices')
+})
+
 test('go to folder shortcut works while search is focused', async ({ page }) => {
   await page.getByRole('textbox', { name: '搜索文件' }).focus()
   await page.keyboard.press('Control+l')

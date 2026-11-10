@@ -1,15 +1,19 @@
-# Fiex 0.7.13
+# 版本说明
+
+这里集中记录 Fiex Core 各版本的主要变化，也是发布工作流生成 GitHub Release 正文时使用的来源。插件有独立版本和发布说明，请查看相应插件的 Release。
+
+## Fiex 0.7.13
 
 - Restore items moved to the macOS Trash outside Fiex using Finder's original-location metadata, including the original filename and folder.
 - Keep the terminal action available; widen the More submenu and put permanent deletion last with destructive styling.
 
-# Fiex 0.7.12
+## Fiex 0.7.12
 
 - Fix invalid decoration labels when opening the Applications directory by normalizing absent Rust option values.
 - Open a new second pane in the previously visited directory, and support folder copy, cut and duplicate actions with capability checks.
 - Group duplicate, workspace and permanent-delete actions under More; add workspace removal from the workspace item's context menu.
 
-# Fiex 0.7.11
+## Fiex 0.7.11
 
 - Complete the unified typed Provider migration across Core and official plugins, using shared contracts and removing superseded filesystem adapters and virtual-directory special cases.
 - Route native filesystem, search, context-menu, and plugin operations through the shared provider registries and broker.
@@ -20,21 +24,21 @@
 - Opening an already-cached remote file asks the cache registry first, so no redundant “Caching” activity is created; identical sync failures are coalesced.
 - Plugin logs default to WARN-and-above filtering, and directory/invoke logs include the actual path.
 
-# Fiex 0.7.9
+## Fiex 0.7.9
 
 - SDK 0.3.2 adds an active `ctx.aria2()` API that mirrors `ctx.http()`: providers set headers, timeout, connection/split counts and an optional progress callback, then read the download as a stream. Core owns the aria2 process and temporary output.
 - WebDAV, OpenList and Google Drive use `ctx.aria2` for file reads and fall back to the existing HTTP path when aria2 is unavailable.
 - Opening a remote file that is already cached no longer creates a “正在缓存” activity row in the status centre.
 - Google Drive native editors export by type and report the exported size; Office preview/open no longer fail with “incomplete export”.
 
-# Fiex 0.7.8
+## Fiex 0.7.8
 
 - Drop files onto any breadcrumb segment to copy or move them into that ancestor folder (including virtual roots and the ellipsis ancestor).
 - Transfer preflight now runs only across VFS boundaries. Moves, renames and app imports inside the same VFS keep Core capability checks without invoking provider review again.
 - The secondary pane address bar uses the same virtual-path normalization, decoded Chinese display and cached directory stream as the main pane.
 - Saving or validating a connection no longer blocks the window while the browser OAuth page waits. A loading overlay explains that Fiex is waiting for authorization and continues automatically after the callback.
 
-# Fiex 0.7.7
+## Fiex 0.7.7
 
 - Applications creates user folders directly under the view root (`applications://~…`). Breadcrumbs, the address bar and File Info show the real Chinese folder name instead of base64, and existing `applications://user/...` links plus mapped folders migrate automatically.
 - The address bar accepts every built-in virtual root (`recent`, `applications`, `trash`, `recyclebin`) with either URL or Windows-backslash separators. Breadcrumb clicks stay on `applications://` instead of degrading to `applications:\`.
@@ -43,13 +47,13 @@
 - Address-bar navigation now uses the same cached directory stream as the sidebar and history, so a previously opened path paints immediately.
 - Provider settings use a compact feature tab grid and a cleaner execution-order card with enable counts and provider summaries.
 
-# Fiex 0.7.6
+## Fiex 0.7.6
 
 - Remove the Core-owned Office PDF converter and its PowerShell/COM execution. Core no longer knows DOCX/PPTX, Office or WPS.
 - The Office Preview plugin now renders Word/PowerPoint entirely in pure Rust (`office_oxide` IR + `printpdf` + `hayro`) with a bundled CJK font. It lays out only the requested first pages and returns plugin-owned PNG pages, so Core never executes Office or renders a generated PDF.
 - Move official-plugin demo/i18n copy out of Core's production language catalogs.
 
-# Fiex 0.7.5
+## Fiex 0.7.5
 
 - Load plugin previews from the asset origin instead of `srcDoc`, so the app shell CSP no longer blocks the plugin's inline bundle. Archive, Office and Data previews now render instead of timing out.
 - Windows Office documents are converted to PDF through the installed Office automation server before preview; the built-in PDF viewer shows the first 20 pages. The office plugin remains the fallback when conversion is unavailable.
@@ -59,7 +63,7 @@
 - PluginViews receive `theme.changed` events, giving connection UIs the same live theme contract as panels and previews.
 - Picker startup no longer lists an empty path; sidebar connection projection avoids keyring reads and local directory metadata loads in parallel.
 
-# Fiex 0.7.4
+## Fiex 0.7.4
 
 - Separate downloaded connection cache from pinned offline copies, with upload indicators, configurable synchronization intervals and activity records.
 - Route builtin context menus and decorations through the shared event pipeline; keep asynchronous menus inside the viewport.
@@ -68,23 +72,23 @@
 - Fix large and partial stream writes, cleanup after failed commits, pagination cursor cycles and malformed node permission restrictions.
 - Prevent disabled lazy submenu actions from executing; fix Windows Clippy and static toolbar panel CI coverage.
 
-# Fiex 0.7.3
+## Fiex 0.7.3
 
 - Terminal settings now choose a system font (including Nerd Font families) and font size.
 - Plugin host no longer holds its global lock while spawning a plugin process, so a slow Windows process start cannot block Info, hooks or other plugins.
 - File Info has a 15-second loading timeout instead of waiting forever on a plugin.
 
-# Fiex 0.7.2
+## Fiex 0.7.2
 
 - Fiex is now single-instance: launching it again focuses the existing window instead of starting a second Core and a second plugin process tree.
 
-# Fiex 0.7.1
+## Fiex 0.7.1
 
 - Approved, enabled native plugins auto-start after the app opens instead of waiting for the first invocation.
 - Closing Fiex explicitly stops every resident plugin process, so plugin children do not outlive the window.
 - Plugin activation and disable still start/stop their backend immediately.
 
-# Fiex 0.7.0
+## Fiex 0.7.0
 
 - Plugin platform: schema 2 manifests, scoped provider events, unified preview/info providers, per-operation grants and grouped activation with per-capability toggles.
 - Plugin previews can declare a package-local loading page. Core keeps it visible until the preview calls `preview.ready` after its first data render, so there is no empty-shell flash.
@@ -94,7 +98,7 @@
 - Dialogs and plugin sheets adapt to the current window size.
 - Legacy manifest and grant compatibility removed; old records require reactivation.
 
-# Fiex 0.5.1
+## Fiex 0.5.1
 
 0.5.1 is a structure-only release: the Rust host, desktop commands, hooks, settings and SDK are split into modules, with no behavior changes.
 
@@ -106,18 +110,18 @@
 - The plugin store takes each plugin's introduction from the release's `plugin-descriptions.json`, and only lists plugins whose latest release has a package for this platform.
 - Internal cleanup: the Rust plugin host, demo data, panel host, plugin settings, file picker and both SDKs are split into focused modules instead of monolithic files.
 
-# Fiex 0.4.11
+## Fiex 0.4.11
 
 - The preview sheet header is compact (44 px), leaving more room for the content.
 - Office preview now parses DOCX/XLSX/PPTX with a real Office library and renders headings, lists and tables (plugin 0.2.10).
 
-# Fiex 0.4.10
+## Fiex 0.4.10
 
 - Plugin previewers render inside the Quick Look sheet itself, with the same sandbox and bridge as panels; the built-in text, image, media and PDF previewers are unchanged.
 - The dev server serves a plugin's unbuilt `ui/index.html` when there is no `ui/dist`, so self-contained plugin panels can be developed without a bundler.
 - New official plugins (published separately): SQLite viewer and Office preview.
 
-# Fiex 0.4.9
+## Fiex 0.4.9
 
 - Plugins run behind scoped Host services and require explicit activation consent: folder, file, network and external-command grants are requested one at a time and can be revoked.
 - Panels can be declared on toolbar tools and inside context submenus; “高级压缩” opens again instead of failing with “plugin declares no such panel”.
@@ -131,31 +135,31 @@
 - Plugin settings support list fields, shown as add/remove rows.
 - The toolbar plugin switcher no longer flashes the outgoing panel twice, and a reopened cached panel settles before it becomes visible.
 
-# Fiex 0.4.8
+## Fiex 0.4.8
 
 - Plugin iframes stay invisible until their HTML and bridge are ready, eliminating the pop-then-load flash.
 - Plugin empty-selection hints wait for bridge context.
 - The dev plugin catalog now returns a fresh list after installation, so WebDAV appears immediately in “添加连接”.
 
-# Fiex 0.4.7
+## Fiex 0.4.7
 
 - Plugin panels are centered on screen, use the panel size declared by the plugin, and only clamp to the viewport maximum.
 - Large plugin panels no longer force a fixed Core width or height; plugins can also resize through `panel.resize`.
 - Archive’s advanced-compression panel uses a compact plugin-declared size.
 
-# Fiex 0.4.6
+## Fiex 0.4.6
 
 - Decoration badges render after the real filename so text selectors and accessibility keep the exact name.
 - Git status decorations also color the filename; modified files are orange, additions green, deletions red, renames blue, untracked gray.
 - Toolbar plugin panels anchor to the toolbar button; context-menu panels anchor to the menu item position.
 
-# Fiex 0.4.5
+## Fiex 0.4.5
 
 - Nested context submenus automatically flip upward when they would cross the window bottom, so long Archive format lists stay visible.
 - Core owns the plugin panel icon, title and close button. Archive/Checksum/Git panels no longer render duplicate headers.
 - Archive uses separate first-level context entries: “压缩” for non-archive selections, “解压缩” for archive files, and “高级” containing “压缩到…” and advanced compression. Compression defaults to a unique name in the current folder; extraction defaults to the archive folder. Long nested menus flip upward near the viewport bottom.
 
-# Fiex 0.4.4
+## Fiex 0.4.4
 
 - Official plugin React panels can be tested in the dev web environment at `http://127.0.0.1:1421/`; the Git and Archive tools are pinned automatically in development.
 - Archive actions are context-menu only; the Archive toolbar entry was removed.
@@ -163,12 +167,12 @@
 - The Core iframe header owns the plugin icon, title and close button; official panels no longer render their own duplicate header.
 - Demo mode is enabled automatically in development, so opening the dev URL no longer raises "请在 Fiex 桌面应用中浏览本地文件".
 
-# Fiex 0.4.3
+## Fiex 0.4.3
 
 - Status Center progress counts every file, including files inside folders. A folder with 8 files contributes 8 to total/done, not 1.
 - Per-file progress is reported while copying directories, including parallel copies.
 
-# Fiex 0.4.2
+## Fiex 0.4.2
 
 - Plugin manifests are signed with Ed25519 publisher keys. `manifest.files` covers every package file; Core verifies the signature and digests at install and again before spawning the plugin.
 - There is no special official trust. Official and third-party packages use the same first-use publisher fingerprint confirmation and key pinning.
@@ -178,7 +182,7 @@
 - The plugin UI SDK now supports `tasks.create/update/finish/cancel`; Git init/commit/push/pull and Archive compression report name, detail, step and progress to Status Center.
 - Removed the binary-embedded manifest handshake; the package manifest is the single source of truth.
 
-# Fiex 0.4.1
+## Fiex 0.4.1
 
 - Fix GitHub release listing on Windows/macOS by enabling reqwest's system-proxy support. The marketplace now follows the OS proxy instead of failing with "error sending request".
 - Hide every PowerShell helper window used for removable-volume polling, Recycle Bin clearing, device ejection and elevation.
@@ -186,7 +190,7 @@
 - Plugins now embed their manifest at build time and return it during `plugin.initialize`; Core verifies it matches the installed package before serving requests. Old protocol-2.0 plugins without the handshake remain loadable.
 - Keep the 0.4.0 decoupling changes and plugin versions.
 
-# Fiex 0.4.0
+## Fiex 0.4.0
 
 ## Decoupled plugins
 

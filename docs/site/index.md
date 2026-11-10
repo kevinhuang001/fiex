@@ -14,6 +14,8 @@ Fiex 是一款用于整理本地文件和连接插件文件空间的桌面文件
 | 安装 Fiex，开始浏览文件      | [安装与首次启动](/user-guide/start)                       |
 | 学会浏览、选择和整理文件     | [认识主窗口与浏览文件](/user-guide/navigation)            |
 | 安装插件或连接云端/远程服务  | [安装插件与连接服务](/user-guide/plugins-and-connections) |
+| 使用 Git 插件管理仓库        | [使用源代码管理](/user-guide/source-control)              |
+| 使用本地终端或 SSH 插件      | [本地终端与 SSH 连接](/user-guide/terminal-and-ssh)       |
 | 自己编写一个 Fiex 插件       | [插件开发路线](/developer/plugin-development)             |
 | 了解插件与 Core 如何通信     | [IPC 协议参考](/developer/ipc)                            |
 | 了解产品需求对应哪些测试     | [软件需求与测试追溯](/developer/requirements)             |
@@ -45,4 +47,6 @@ Fiex 是一款用于整理本地文件和连接插件文件空间的桌面文件
 
 文档随 Core 源码一起维护。页面涉及版本相关行为时，会标明 Core、manifest schema 或 IPC 协议版本；插件开发请先查看 [版本基线](/reference/source-baseline)。若某项描述与正在使用的 Fiex 版本不符，请以该版本界面和 Release 说明为准，并提交问题时附上版本号与复现步骤。
 
-[查看最新发布版本](https://github.com/kevinhuang001/fiex/releases/latest) · [查看源代码](https://github.com/kevinhuang001/fiex)
+Fiex 的用户指南、开发手册、协议、需求追溯、版本说明和第三方许可统一维护在本 VitePress 站点。仓库根目录 README 只用于项目入口、下载和站点链接；产品操作说明以本站为准。
+
+[查看最新发布版本](https://github.com/kevinhuang001/fiex/releases/latest) · [查看版本说明](/reference/release-notes) · [查看源代码](https://github.com/kevinhuang001/fiex) · [第三方软件与许可](/reference/third-party-notices)

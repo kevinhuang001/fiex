@@ -32,7 +32,9 @@ export function AboutSettings({ onError }: { onError: (s: string) => void }) {
         </div>
         <button
           className="settings-row settings-row-button"
-          onClick={() => openLink('https://github.com/kevinhuang001/fiex/blob/main/THIRD-PARTY.md')}
+          onClick={() =>
+            openLink('https://kevinhuang001.github.io/fiex/reference/third-party-notices')
+          }
         >
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#10b981' }}>
