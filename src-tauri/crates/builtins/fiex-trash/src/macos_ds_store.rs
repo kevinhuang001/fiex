@@ -139,8 +139,10 @@ fn read_value(cursor: &mut Cursor<'_>, data_type: [u8; 4]) -> Option<Option<Stri
 
 fn decode_utf16be(bytes: &[u8]) -> String {
     let units = bytes
-        .chunks_exact(2)
-        .map(|pair| u16::from_be_bytes([pair[0], pair[1]]));
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_be_bytes(*pair));
     String::from_utf16_lossy(&units.collect::<Vec<_>>())
 }
 
