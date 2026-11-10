@@ -168,14 +168,14 @@ fn keep_both_copy_in_source_parent_creates_a_suffixed_sibling() {
     assert_eq!(result.paths.len(), 1);
     assert_paths_resolve_to_same_location(
         &result.paths[0],
-        &directory.path().join("report (2).txt"),
+        &directory.path().join("report (1).txt"),
     );
     assert_eq!(
         std::fs::read(directory.path().join("report.txt")).unwrap(),
         b"report contents"
     );
     assert_eq!(
-        std::fs::read(directory.path().join("report (2).txt")).unwrap(),
+        std::fs::read(directory.path().join("report (1).txt")).unwrap(),
         b"report contents"
     );
 }
@@ -204,10 +204,10 @@ fn duplicate_directory_in_source_parent_creates_a_suffixed_sibling() {
 
     assert!(result.errors.is_empty(), "{:?}", result.errors);
     assert_eq!(result.paths.len(), 1);
-    assert_paths_resolve_to_same_location(&result.paths[0], &parent.path().join("assets (2)"));
+    assert_paths_resolve_to_same_location(&result.paths[0], &parent.path().join("assets (1)"));
     assert!(source.join("nested/image.png").is_file());
     assert_eq!(
-        std::fs::read(parent.path().join("assets (2)/nested/image.png")).unwrap(),
+        std::fs::read(parent.path().join("assets (1)/nested/image.png")).unwrap(),
         b"image bytes"
     );
 }

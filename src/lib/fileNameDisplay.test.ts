@@ -8,14 +8,14 @@ const segment = (value: string) =>
   )
 
 describe('formatDisplayFileName', () => {
-  it('uses a fixed 20-grapheme stem and preserves a normal extension', () => {
-    const stem = '0123456789abcdefghijK'
-    expect(formatDisplayFileName(`${stem}.pdf`)).toBe('0123456789…cdefghijK.pdf')
+  it('uses a 30-unit stem and preserves a normal extension', () => {
+    const stem = 'x'.repeat(31)
+    expect(formatDisplayFileName(`${stem}.pdf`)).toBe(`${'x'.repeat(14)}…${'x'.repeat(15)}.pdf`)
   })
 
   it('keeps dotfiles without treating their leading dot as an extension', () => {
     expect(formatDisplayFileName('.gitignore')).toBe('.gitignore')
-    expect(formatDisplayFileName('.'.repeat(21))).toBe(`${'.'.repeat(10)}…${'.'.repeat(9)}`)
+    expect(formatDisplayFileName('.'.repeat(31))).toBe(`${'.'.repeat(14)}…${'.'.repeat(15)}`)
   })
 
   it('does not split combining marks or emoji grapheme clusters', () => {
@@ -24,23 +24,33 @@ describe('formatDisplayFileName', () => {
     const shown = formatDisplayFileName(name)
     const stem = shown.slice(0, -'.gz'.length)
     const parts = segment(name.slice(0, -'.gz'.length))
-    expect(segment(stem)).toHaveLength(20)
-    expect(stem).toBe(`${parts.slice(0, 10).join('')}…${parts.slice(-9).join('')}`)
+    expect(stem).toBe(`${parts.slice(0, 9).join('')}…${parts.slice(-10).join('')}`)
     expect(shown.endsWith('.gz')).toBe(true)
   })
 
   it('does not change names at or below the stem limit', () => {
-    expect(formatDisplayFileName('x'.repeat(20))).toBe('x'.repeat(20))
+    expect(formatDisplayFileName('x'.repeat(30))).toBe('x'.repeat(30))
     expect(formatDisplayFileName('README')).toBe('README')
     expect(formatDisplayFileName('archive.tar.gz')).toBe('archive.tar.gz')
+    expect(formatDisplayFileName(`${'中'.repeat(15)}.txt`)).toBe(`${'中'.repeat(15)}.txt`)
+    expect(formatDisplayFileName(`${'x'.repeat(31)} (2).txt`)).toBe(
+      `${'x'.repeat(14)}…${'x'.repeat(15)} (2).txt`,
+    )
+  })
+
+  it('counts Japanese kana as two display units', () => {
+    expect(formatDisplayFileName(`${'カ'.repeat(16)}.txt`)).toBe(
+      `${'カ'.repeat(7)}…${'カ'.repeat(7)}.txt`,
+    )
   })
 
   it('keeps the extension even when it is longer than the truncated stem', () => {
-    const name = `${'x'.repeat(25)}.${'extension'.repeat(4)}`
-    expect(formatDisplayFileName(name)).toBe(`xxxxxxxxxx…xxxxxxxxx.${'extension'.repeat(4)}`)
+    const extension = `.${'extension'.repeat(4)}`
+    const name = `${'x'.repeat(31)}${extension}`
+    expect(formatDisplayFileName(name)).toBe(`${'x'.repeat(14)}…${'x'.repeat(15)}${extension}`)
   })
 
   it('treats a trailing dot as part of a name without an extension', () => {
-    expect(formatDisplayFileName(`${'x'.repeat(21)}.`)).toBe(`${'x'.repeat(10)}…${'x'.repeat(8)}.`)
+    expect(formatDisplayFileName(`${'x'.repeat(31)}.`)).toBe(`${'x'.repeat(14)}…${'x'.repeat(14)}.`)
   })
 })

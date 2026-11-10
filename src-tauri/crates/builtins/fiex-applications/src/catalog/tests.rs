@@ -132,6 +132,22 @@ fn system_application_identity_depends_only_on_the_stable_locator() {
 }
 
 #[test]
+fn duplicate_system_application_names_start_at_one_before_the_extension() {
+    let parent = None;
+    let mut names = std::collections::HashSet::new();
+    names.insert((parent.clone(), "editor.app".to_owned()));
+
+    assert_eq!(
+        unique_name("Editor.app", &parent, &mut names),
+        "Editor (1).app"
+    );
+    assert_eq!(
+        unique_name("Editor.app", &parent, &mut names),
+        "Editor (2).app"
+    );
+}
+
+#[test]
 fn decoration_info_tracks_system_apps_after_they_move_into_virtual_folders() {
     let store = store("applications-catalog-decoration-test");
     let backend = Arc::new(TestBackend {

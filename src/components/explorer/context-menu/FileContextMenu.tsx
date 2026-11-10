@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useMenuPosition } from '@/lib/menuPosition'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CloudCheck,
   CloudDownload,
@@ -76,6 +76,10 @@ export function FileContextMenu(props: ContextMenuProps) {
     resolveCoreChildren,
   } = useContextMenu(props)
   const [openCoreChild, setOpenCoreChild] = useState<string | null>(null)
+  const rootSubmenuGroup = useMemo(
+    () => ({ openId: openCoreChild, setOpenId: setOpenCoreChild }),
+    [openCoreChild],
+  )
   const setError = x.setError
   const hasCoreActions = hasTopLevelMenuActions(menus)
   const hasPluginActions = hasTopLevelMenuActions(pluginMenus)
@@ -86,6 +90,9 @@ export function FileContextMenu(props: ContextMenuProps) {
     props.x.path,
   )
   const hasWorkspaceAction = Boolean(morePlan.workspaceAction)
+  useEffect(() => {
+    setOpenCoreChild(null)
+  }, [menu])
   const moreMenuTrigger: PluginMenuItem = {
     id: 'more',
     kind: 'submenu',
@@ -203,6 +210,7 @@ export function FileContextMenu(props: ContextMenuProps) {
         role="menuitem"
         disabled={item.disabled}
         className={item.danger ? 'context-danger' : undefined}
+        onMouseEnter={() => setOpenCoreChild(null)}
         onClick={() => {
           setMenu(null)
           void executeCoreMenu(group, item, props, setOpenWithPath)
@@ -224,9 +232,7 @@ export function FileContextMenu(props: ContextMenuProps) {
           className="context-menu"
           style={position}
         >
-          <SubmenuGroupContext.Provider
-            value={{ openId: openCoreChild, setOpenId: setOpenCoreChild }}
-          >
+          <SubmenuGroupContext.Provider value={rootSubmenuGroup}>
             {menus.flatMap((group) =>
               group.items
                 .filter(
@@ -234,47 +240,43 @@ export function FileContextMenu(props: ContextMenuProps) {
                 )
                 .map((item) => render(group, item)),
             )}
-          </SubmenuGroupContext.Provider>
-          {moreMenuItems.length > 1 && (
-            <PluginMenuNode
-              item={moreMenuTrigger}
-              items={moreMenuItems}
-              onAction={(selected) => {
-                const action = morePlan.coreActions.find(({ item }) => item.id === selected.id)
-                if (action) {
+            {moreMenuItems.length > 1 && (
+              <PluginMenuNode
+                item={moreMenuTrigger}
+                items={moreMenuItems}
+                onAction={(selected) => {
+                  const action = morePlan.coreActions.find(({ item }) => item.id === selected.id)
+                  if (action) {
+                    setMenu(null)
+                    void executeCoreMenu(action.group, action.item, props, setOpenWithPath)
+                    return
+                  }
+                  const workspaceAction = morePlan.workspaceAction
+                  if (selected.id !== 'workspace' || !workspaceAction) return
                   setMenu(null)
-                  void executeCoreMenu(action.group, action.item, props, setOpenWithPath)
-                  return
-                }
-                const workspaceAction = morePlan.workspaceAction
-                if (selected.id !== 'workspace' || !workspaceAction) return
-                setMenu(null)
-                if (workspaceAction.kind === 'remove') {
-                  workspaceAction.paths.forEach((path) => props.workspace.remove(path))
-                } else {
-                  void props
-                    .addWorkspace(workspaceAction.paths)
-                    .then(() => props.workspace.setOpen(true))
-                }
-              }}
-              onExpand={() => {}}
-            />
-          )}
-          {(pluginLoading || pluginError || hasPluginActions) && (
-            <PluginContextActions
-              paths={paths}
-              path={x.path}
-              menus={pluginMenus}
-              loading={pluginLoading}
-              error={pluginError}
-              onRetry={retryPlugins}
-              onClose={() => setMenu(null)}
-              onError={x.setError}
-            />
-          )}
-          <SubmenuGroupContext.Provider
-            value={{ openId: openCoreChild, setOpenId: setOpenCoreChild }}
-          >
+                  if (workspaceAction.kind === 'remove') {
+                    workspaceAction.paths.forEach((path) => props.workspace.remove(path))
+                  } else {
+                    void props
+                      .addWorkspace(workspaceAction.paths)
+                      .then(() => props.workspace.setOpen(true))
+                  }
+                }}
+                onExpand={() => {}}
+              />
+            )}
+            {(pluginLoading || pluginError || hasPluginActions) && (
+              <PluginContextActions
+                paths={paths}
+                path={x.path}
+                menus={pluginMenus}
+                loading={pluginLoading}
+                error={pluginError}
+                onRetry={retryPlugins}
+                onClose={() => setMenu(null)}
+                onError={x.setError}
+              />
+            )}
             {menus.flatMap((group) =>
               group.items
                 .filter(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeMenu } from './menuPosition'
+import { placeMenu, placeSubmenu } from './menuPosition'
 
 const viewport = { width: 1000, height: 700 }
 
@@ -8,18 +8,16 @@ describe('placeMenu', () => {
     expect(placeMenu(120, 200, 210, 260, viewport)).toEqual({ left: 120, top: 200 })
   })
 
-  it('shifts up only as far as the bottom edge requires', () => {
-    // 600 + 260 + margin overflows, so the menu ends at the viewport bottom
-    // instead of flipping above the pointer or being cut off.
+  it('flips above the pointer when the menu would cross the bottom edge', () => {
     expect(placeMenu(120, 600, 210, 260, viewport)).toEqual({
       left: 120,
-      top: viewport.height - 260 - 8,
+      top: 340,
     })
   })
 
-  it('shifts left only as far as the right edge requires', () => {
+  it('flips to the left of the pointer when the menu would cross the right edge', () => {
     expect(placeMenu(900, 200, 210, 120, viewport)).toEqual({
-      left: viewport.width - 210 - 8,
+      left: 690,
       top: 200,
     })
   })
@@ -36,5 +34,29 @@ describe('placeMenu', () => {
     expect(placement.left + 210).toBeLessThanOrEqual(tiny.width - 8)
     expect(placement.top).toBeGreaterThanOrEqual(8)
     expect(placement.top + 150).toBeLessThanOrEqual(tiny.height - 8)
+  })
+})
+
+describe('placeSubmenu', () => {
+  it('uses the side with more room and caps the panel to that space', () => {
+    expect(
+      placeSubmenu(
+        { left: 8, right: 210, top: 100, bottom: 130 },
+        { width: 420, height: 200 },
+        { width: 610, height: 400 },
+        'right',
+      ),
+    ).toEqual({ left: false, up: false, maxWidth: 385 })
+  })
+
+  it('flips a submenu up when the lower edge has less room', () => {
+    expect(
+      placeSubmenu(
+        { left: 100, right: 200, top: 740, bottom: 770 },
+        { width: 160, height: 300 },
+        { width: 800, height: 780 },
+        'right',
+      ).up,
+    ).toBe(true)
   })
 })

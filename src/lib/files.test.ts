@@ -57,9 +57,11 @@ describe('file models', () => {
   })
   it('makes Finder-style unique names', () => {
     expect(uniqueName([], '未命名文件夹')).toBe('未命名文件夹')
-    expect(uniqueName(['未命名文件夹'], '未命名文件夹')).toBe('未命名文件夹 2')
-    expect(uniqueName(['未命名文件夹', '未命名文件夹 2'], '未命名文件夹')).toBe('未命名文件夹 3')
-    expect(uniqueName(['未命名.txt'], '未命名.txt')).toBe('未命名 2.txt')
+    expect(uniqueName(['未命名文件夹'], '未命名文件夹')).toBe('未命名文件夹 (1)')
+    expect(uniqueName(['未命名文件夹', '未命名文件夹 (1)'], '未命名文件夹')).toBe(
+      '未命名文件夹 (2)',
+    )
+    expect(uniqueName(['未命名.txt'], '未命名.txt')).toBe('未命名 (1).txt')
   })
   it('groups dates at local midnight', () => {
     const now = new Date(2026, 9, 20, 12).getTime()

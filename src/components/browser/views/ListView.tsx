@@ -178,6 +178,7 @@ export function ListView({
                 <div
                   role="row"
                   className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}${rowDecor.className}`}
+                  title={item.entry.name}
                   style={{ ...rowDecor.style, gridTemplateColumns: template }}
                   {...shared(item.entry)}
                 >

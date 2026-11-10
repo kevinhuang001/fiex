@@ -198,7 +198,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read_to_string(b.join("x")).unwrap(), "existing");
-        assert!(b.join("x (2)").exists());
+        assert!(b.join("x (1)").exists());
     }
 
     #[test]

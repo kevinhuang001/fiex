@@ -1,12 +1,11 @@
-.context-menu.sidebar-menu {
-  width: 160px;
-}
 .context-menu {
   position: fixed;
+  box-sizing: border-box;
   /* Portaled to the document root: the sidebar and the terminal panel create
      their own stacking contexts, so a menu must outrank the whole shell. */
   z-index: 320;
-  width: 210px;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 16px));
   padding: 6px;
   border-radius: var(--radius-menu);
   box-shadow: none;
@@ -20,7 +19,10 @@
   padding: 6px 9px;
   font-size: 11px;
   width: 100%;
+  box-sizing: border-box;
   border-radius: 6px;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 .context-menu button svg {
   width: 14px;
@@ -121,17 +123,17 @@
 }
 .context-submenu {
   position: absolute;
+  box-sizing: border-box;
   /* Exactly clear the parent's 6px padding + 1px border: level borders touch
      without a gap and without sliding under the parent panel. */
   left: calc(100% + 7px);
-  top: auto;
-  bottom: 0;
+  top: 0;
+  bottom: auto;
   z-index: 50;
   max-height: calc(100vh - 20px);
   overflow-y: auto;
-  /* Nested menus stay compact even when a plugin supplies a long label. */
-  width: 112px;
-  max-width: min(180px, calc(100vw - 16px));
+  width: max-content;
+  max-width: min(420px, calc(100vw - 16px));
   padding: 5px;
   border: 1px solid var(--menu-line);
   border-radius: var(--radius-submenu);
@@ -139,12 +141,13 @@
   box-shadow: none;
 }
 .context-submenu.context-submenu-more {
-  width: 216px;
-  max-width: min(260px, calc(100vw - 16px));
+  width: max-content;
+  max-width: min(420px, calc(100vw - 16px));
 }
 .context-submenu button {
   width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
   padding: 6px 9px;
   border-radius: 5px;
   font-size: 11px;
@@ -153,9 +156,8 @@
 .context-submenu-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   text-align: left;
 }
 .context-submenu-empty {

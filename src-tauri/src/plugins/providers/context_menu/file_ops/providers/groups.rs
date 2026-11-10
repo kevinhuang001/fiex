@@ -123,16 +123,7 @@ impl AtomicMenuAction {
                 )]
             }
             Action::DeletePermanently if nonzero && caps.remove && selection.preflight.remove => {
-                vec![item(
-                    "delete",
-                    if selection.many() {
-                        "彻底删除选中项"
-                    } else {
-                        "彻底删除"
-                    },
-                    "trash",
-                    "",
-                )]
+                vec![item("delete", "彻底删除", "trash", "")]
             }
             Action::Pin
             | Action::Unpin

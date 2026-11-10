@@ -118,7 +118,7 @@ fn unique_with_kind(
             .map(|s| format!(".{s}"))
             .unwrap_or_default()
     };
-    for index in 2..=10_000 {
+    for index in 1..=10_000 {
         let target = binding::child(parent, &format!("{stem} ({index}){extension}"), kind)?;
         if optional_stat(&target)?.is_none() {
             return Ok(target);

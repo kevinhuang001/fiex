@@ -241,11 +241,11 @@ export function uniqueName(names: string[], preferred: string): string {
   const dot = preferred.lastIndexOf('.')
   const stem = dot > 0 ? preferred.slice(0, dot) : preferred
   const extension = dot > 0 ? preferred.slice(dot) : ''
-  for (let i = 2; i < 10_000; i++) {
-    const candidate = `${stem} ${i}${extension}`
+  for (let i = 1; i < 10_000; i++) {
+    const candidate = `${stem} (${i})${extension}`
     if (!taken.has(candidate.toLocaleLowerCase())) return candidate
   }
-  return `${stem} ${Date.now()}${extension}`
+  return `${stem} (${Date.now()})${extension}`
 }
 
 export function size(bytes: number): string {

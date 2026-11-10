@@ -131,9 +131,6 @@ export function NameCell({
   const decoration = explorer.decorations?.[entry.path]
   const field = fieldOf(decoration, 'name')
   const style = fieldStyle(field?.style)
-  const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
-    .filter(Boolean)
-    .join(' · ')
   const label = decoration?.label || entry.name
   return (
     <>
@@ -145,7 +142,6 @@ export function NameCell({
             : '')
         }
         style={style}
-        title={title}
       >
         <span className="filename-fixed">{formatDisplayFileName(entry.name)}</span>
       </span>
