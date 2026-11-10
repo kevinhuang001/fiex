@@ -20,6 +20,61 @@ fn normalizes_apfs_data_volume_firmlink_before_restoring() {
 fn rejects_put_back_names_that_are_not_single_path_components() {
     assert!(macos_put_back_path("/Users/kevin", "../outside.txt").is_none());
     assert!(macos_put_back_path("/Users/kevin", "/outside.txt").is_none());
+    assert!(macos_put_back_path("/Users/../private", "file.txt").is_none());
+    assert!(macos_put_back_path("System/Volumes/Data/Users/./kevin", "file.txt").is_none());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn finder_item_put_back_does_not_request_fallback_without_fiex_journal() {
+    use super::{original_location, restore_needs_folder_in};
+    use crate::{TRASH_URI, TrashDirectory};
+
+    let temp = tempfile::Builder::new()
+        .prefix("fiex-finder-put-back-")
+        .tempdir()
+        .unwrap();
+    let temp_name = temp.path().file_name().unwrap().to_string_lossy();
+    let name: String = temp_name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .rev()
+        .take(5)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    assert_eq!(name.chars().count(), 5);
+    assert!(crate::journal::original(&name).is_none());
+
+    let mut store = include_bytes!("../../tests/data/putback_types.DS_Store").to_vec();
+    let from: Vec<u8> = "a.jpg"
+        .encode_utf16()
+        .flat_map(u16::to_be_bytes)
+        .collect();
+    let to: Vec<u8> = name.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    assert_eq!(from.len(), to.len());
+    let positions: Vec<_> = store
+        .windows(from.len())
+        .enumerate()
+        .filter_map(|(position, window)| (window == from.as_slice()).then_some(position))
+        .collect();
+    assert_eq!(positions.len(), 2);
+    for position in positions {
+        store[position..position + to.len()].copy_from_slice(&to);
+    }
+
+    let trashed = temp.path().join(&name);
+    std::fs::write(&trashed, b"deleted outside Fiex").unwrap();
+    std::fs::write(temp.path().join(".DS_Store"), store).unwrap();
+    let expected = format!("/Users/u/Pics/{name}");
+    assert_eq!(
+        original_location(&trashed).as_deref(),
+        Some(expected.as_str())
+    );
+    let trash = TrashDirectory::with_root(temp.path().to_owned());
+    let uri = format!("{TRASH_URI}{name}");
+    assert!(!restore_needs_folder_in(&[uri], &trash));
 }
 
 #[cfg(target_os = "macos")]

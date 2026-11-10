@@ -1,4 +1,7 @@
-use crate::{RECYCLE_BIN_URI, is_recycle_bin_uri, system_recycle_bin, system_trash_directory};
+use crate::{
+    RECYCLE_BIN_URI, TrashDirectory, is_recycle_bin_uri, system_recycle_bin,
+    system_trash_directory,
+};
 use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -38,11 +41,15 @@ pub fn move_to_trash(path: &Path) -> Result<(), String> {
 }
 
 pub fn restore_needs_folder(paths: &[String]) -> bool {
+    restore_needs_folder_in(paths, system_trash_directory())
+}
+
+fn restore_needs_folder_in(paths: &[String], trash: &TrashDirectory) -> bool {
     paths.iter().any(|uri| {
         if is_recycle_bin_uri(uri) {
             return uri == RECYCLE_BIN_URI;
         }
-        system_trash_directory()
+        trash
             .physical(uri)
             .ok()
             .and_then(|path| original_location(&path))
@@ -185,7 +192,7 @@ fn original_location(trashed: &Path) -> Option<String> {
     if let Some(original) = journal::original(&name) {
         return Some(original);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", test))]
     if let Some(original) = macos_put_back(trashed) {
         return Some(original);
     }
@@ -205,21 +212,12 @@ fn original_location(trashed: &Path) -> Option<String> {
     None
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 fn macos_put_back(trashed: &Path) -> Option<String> {
     let name = trashed.file_name()?.to_string_lossy().into_owned();
     let bytes = std::fs::read(trashed.parent()?.join(".DS_Store")).ok()?;
-    let store = ds_store::DsStore::new(&bytes).ok()?;
-    let records = store.contents().get(&name)?;
-    let location = match records.get("ptbL")? {
-        ds_store::RecordValue::String(value) => value,
-        _ => return None,
-    };
-    let original_name = match records.get("ptbN")? {
-        ds_store::RecordValue::String(value) => value,
-        _ => return None,
-    };
-    macos_put_back_path(location, original_name)
+    let (location, original_name) = crate::macos_ds_store::put_back(&bytes, &name)?;
+    macos_put_back_path(&location, &original_name)
 }
 
 /// Finder stores the original parent in `ptbL` and the original leaf name in
@@ -245,6 +243,12 @@ fn macos_put_back_path(location: &str, original_name: &str) -> Option<String> {
         .or_else(|| (location == "System/Volumes/Data").then_some(""))
         .unwrap_or(location)
         .trim_end_matches('/');
+    if location
+        .split('/')
+        .any(|component| matches!(component, "." | "..") || component.contains('\0'))
+    {
+        return None;
+    }
     if location.is_empty() {
         Some(format!("/{original_name}"))
     } else {

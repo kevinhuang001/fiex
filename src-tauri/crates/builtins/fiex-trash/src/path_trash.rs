@@ -25,7 +25,7 @@ impl TrashDirectory {
     }
 
     #[cfg(all(test, not(windows)))]
-    fn with_root(root: PathBuf) -> Self {
+    pub(crate) fn with_root(root: PathBuf) -> Self {
         Self {
             root_override: Some(root),
         }
