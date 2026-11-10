@@ -179,6 +179,7 @@ export async function handlePluginMenu(
             detail: { directories: [parent(source)] },
           }),
         )
+        return { handled: true }
       }
       if (itemId === 'checksum.calculate') {
         const plugin = fixturePlugins.find((entry) => entry.id === session.pluginId)
