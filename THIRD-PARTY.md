@@ -31,7 +31,7 @@ Fiex incorporates these open-source projects through package managers. Exact res
 | Lofty                        | Audio tag and duration metadata                                | MIT — https://github.com/Serial-ATA/lofty-rs                                          |
 | mp4                          | MP4/MOV container metadata                                     | MIT — https://github.com/alfg/mp4-rust                                                |
 | matroska                     | Matroska/WebM container metadata                               | MIT — https://github.com/rust-av/matroska                                             |
-| trash-core                   | Finder Trash `.DS_Store` parser and test fixture               | Apache-2.0 — see tests/data/LICENSE-APACHE                                           |
+| trash-core                   | Finder Trash `.DS_Store` parser and test fixture               | Apache-2.0 — see tests/data/LICENSE-APACHE                                            |
 
 Fiex adapts the parser and regression fixture from [SecurityRonin/trash-forensic](https://github.com/SecurityRonin/trash-forensic), with a Fiex-specific lookup for individual Trash entries.
 
