@@ -4,13 +4,13 @@ Fiex 同时包含 React/TypeScript 前端和 Tauri/Rust 桌面后端。要验证
 
 ## 工具版本
 
-| 工具 | Core 当前要求 |
-| --- | --- |
-| Node.js | CI 使用 Node 22；本地建议使用相同主版本 |
-| npm | 使用仓库锁文件，通过 `npm ci` 安装 |
-| Rust | Core Cargo manifest 要求 Rust 1.92 或兼容更新版本；SDK 子模块单独要求 1.90 |
-| Git | 需要支持子模块，用于获取 Core 锁定的 SDK |
-| Tauri 平台依赖 | 按操作系统安装 Tauri v2 prerequisites 中列出的 WebView、编译器和系统库 |
+| 工具           | Core 当前要求                                                              |
+| -------------- | -------------------------------------------------------------------------- |
+| Node.js        | CI 使用 Node 22；本地建议使用相同主版本                                    |
+| npm            | 使用仓库锁文件，通过 `npm ci` 安装                                         |
+| Rust           | Core Cargo manifest 要求 Rust 1.92 或兼容更新版本；SDK 子模块单独要求 1.90 |
+| Git            | 需要支持子模块，用于获取 Core 锁定的 SDK                                   |
+| Tauri 平台依赖 | 按操作系统安装 Tauri v2 prerequisites 中列出的 WebView、编译器和系统库     |
 
 平台依赖以 [Tauri v2 官方前置要求](https://v2.tauri.app/start/prerequisites/)为准。Linux 打包还会用到 WebKitGTK/GTK 等系统库。
 

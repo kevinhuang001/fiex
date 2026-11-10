@@ -29,11 +29,11 @@ Manifest 是插件包的声明文件，文件名必须为 `manifest.json`。Core
 
 ## 三个声明层不要混为一谈
 
-| Manifest 部分 | 说明 | 它不代表什么 |
-| --- | --- | --- |
-| `runtime` | 插件进程入口、native 协议版本 | 不代表已安装、已启用或已获授权 |
-| `extensions` | 该插件能提供哪些连接、菜单、预览、VFS 等扩展 | 不代表有权访问任意文件 |
-| `permissions` | 插件请求的文件、网络、命令等能力 | 不代表用户已经批准这些能力 |
+| Manifest 部分 | 说明                                         | 它不代表什么                   |
+| ------------- | -------------------------------------------- | ------------------------------ |
+| `runtime`     | 插件进程入口、native 协议版本                | 不代表已安装、已启用或已获授权 |
+| `extensions`  | 该插件能提供哪些连接、菜单、预览、VFS 等扩展 | 不代表有权访问任意文件         |
+| `permissions` | 插件请求的文件、网络、命令等能力             | 不代表用户已经批准这些能力     |
 
 Core 根据 `extensions` 建立 provider 索引，再按事件、匹配规则和运行时注册信息分发请求。用户需要在启用时审查权限并作出选择。详见[插件权限与安全边界](/reference/security)。
 
@@ -81,20 +81,20 @@ Core 根据 `extensions` 建立 provider 索引，再按事件、匹配规则和
 
 扩展全部放在 `extensions` 下。常见项如下：
 
-| 键 | 用途 | 实现入口 |
-| --- | --- | --- |
-| `connections` | 声明用户可创建的连接类型和输入字段 | `ConnectionProvider` |
-| `vfs` | 声明插件提供文件树/文件空间 | `VfsProvider` |
-| `info` | 声明信息面板区块与字段 | `InfoProvider::compute` |
-| `preview` | 注册匹配文件的预览能力 | `PreviewProvider` |
-| `decorations` | 注册动态列表装饰 | `DecorationProvider` |
-| `contextMenus` | 注册文件/目录菜单项 | `ContextMenuProvider` |
-| `connectionContextMenus` | 注册连接本身的菜单项 | Connection Context Menu provider |
-| `search` | 提供可合并到主搜索的结果 | `SearchProvider` |
-| `hooks` | 声明 `beforeOpen` / `afterOpen` 等事件 | `HookProvider` |
-| `toolbar` | 工具栏命令或插件面板 | `ToolbarProvider` |
-| `settings` | 声明插件设置字段 | 插件设置 UI/API |
-| `themes` | 注册 package 内的声明式主题 | 无 native provider |
+| 键                       | 用途                                   | 实现入口                         |
+| ------------------------ | -------------------------------------- | -------------------------------- |
+| `connections`            | 声明用户可创建的连接类型和输入字段     | `ConnectionProvider`             |
+| `vfs`                    | 声明插件提供文件树/文件空间            | `VfsProvider`                    |
+| `info`                   | 声明信息面板区块与字段                 | `InfoProvider::compute`          |
+| `preview`                | 注册匹配文件的预览能力                 | `PreviewProvider`                |
+| `decorations`            | 注册动态列表装饰                       | `DecorationProvider`             |
+| `contextMenus`           | 注册文件/目录菜单项                    | `ContextMenuProvider`            |
+| `connectionContextMenus` | 注册连接本身的菜单项                   | Connection Context Menu provider |
+| `search`                 | 提供可合并到主搜索的结果               | `SearchProvider`                 |
+| `hooks`                  | 声明 `beforeOpen` / `afterOpen` 等事件 | `HookProvider`                   |
+| `toolbar`                | 工具栏命令或插件面板                   | `ToolbarProvider`                |
+| `settings`               | 声明插件设置字段                       | 插件设置 UI/API                  |
+| `themes`                 | 注册 package 内的声明式主题            | 无 native provider               |
 
 扩展通常可设置 `match` 和 `priority`。Match 仅控制哪些对象适合接收 provider 请求，不是权限规则。Info 字段可在 manifest 的 `extensions.info.sections` 静态声明，并为每个字段选择 `compute: "onOpen"` 或 `"onDemand"`；Core 打开信息面板时不会为枚举字段而临时启动所有插件。
 

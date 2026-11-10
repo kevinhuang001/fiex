@@ -9,15 +9,15 @@ Fiex 是一款用于整理本地文件和连接插件文件空间的桌面文件
 
 ## 选择你的入口
 
-| 你现在要做什么 | 从这里开始 |
-| --- | --- |
-| 安装 Fiex，开始浏览文件 | [安装与首次启动](/user-guide/start) |
-| 学会浏览、选择和整理文件 | [认识主窗口与浏览文件](/user-guide/navigation) |
-| 安装插件或连接云端/远程服务 | [安装插件与连接服务](/user-guide/plugins-and-connections) |
-| 自己编写一个 Fiex 插件 | [插件开发路线](/developer/plugin-development) |
-| 了解插件与 Core 如何通信 | [IPC 协议参考](/developer/ipc) |
-| 了解产品需求对应哪些测试 | [软件需求与测试追溯](/developer/requirements) |
-| 修改桌面应用、运行检查或构建 | [开发者文档](/developer/overview) |
+| 你现在要做什么               | 从这里开始                                                |
+| ---------------------------- | --------------------------------------------------------- |
+| 安装 Fiex，开始浏览文件      | [安装与首次启动](/user-guide/start)                       |
+| 学会浏览、选择和整理文件     | [认识主窗口与浏览文件](/user-guide/navigation)            |
+| 安装插件或连接云端/远程服务  | [安装插件与连接服务](/user-guide/plugins-and-connections) |
+| 自己编写一个 Fiex 插件       | [插件开发路线](/developer/plugin-development)             |
+| 了解插件与 Core 如何通信     | [IPC 协议参考](/developer/ipc)                            |
+| 了解产品需求对应哪些测试     | [软件需求与测试追溯](/developer/requirements)             |
+| 修改桌面应用、运行检查或构建 | [开发者文档](/developer/overview)                         |
 
 ## 文档地图
 
@@ -35,11 +35,11 @@ Fiex 是一款用于整理本地文件和连接插件文件空间的桌面文件
 
 ## 项目仓库
 
-| 仓库 | 包含的内容 |
-| --- | --- |
-| [fiex](https://github.com/kevinhuang001/fiex) | 桌面应用、Core、内置位置、插件宿主和此文档站 |
-| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk) | 插件 Rust SDK、共享 provider 契约、UI SDK 和协议规范 |
-| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | 官方插件实现与可编译的 Hello 示例 |
+| 仓库                                                                            | 包含的内容                                           |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [fiex](https://github.com/kevinhuang001/fiex)                                   | 桌面应用、Core、内置位置、插件宿主和此文档站         |
+| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk)                           | 插件 Rust SDK、共享 provider 契约、UI SDK 和协议规范 |
+| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | 官方插件实现与可编译的 Hello 示例                    |
 
 ## 文档适用版本
 

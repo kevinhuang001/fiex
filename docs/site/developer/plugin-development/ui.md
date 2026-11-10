@@ -4,11 +4,11 @@ Rust 插件适合处理文件、网络和连接逻辑；随包提供的页面适
 
 ## 三种常见页面
 
-| 页面用途 | 注册位置 | 页面如何打开 |
-| --- | --- | --- |
-| 工具栏面板 | `extensions.toolbar.panel.entry` | 用户点击插件工具栏项时显示面板 |
+| 页面用途       | 注册位置                                            | 页面如何打开                     |
+| -------------- | --------------------------------------------------- | -------------------------------- |
+| 工具栏面板     | `extensions.toolbar.panel.entry`                    | 用户点击插件工具栏项时显示面板   |
 | 连接自定义视图 | `ConnectionProvider::open/create` 返回 `PluginView` | 用户打开该连接后显示全宽插件视图 |
-| 文件预览 | `PreviewProvider` 返回 package `PreviewView` | 用户选中匹配文件并打开预览 |
+| 文件预览       | `PreviewProvider` 返回 package `PreviewView`        | 用户选中匹配文件并打开预览       |
 
 若连接是文件树，优先让 `ConnectionProvider` 返回 Core VFS 挂载，而不是自己在 UI 页面里仿造文件浏览器。UI Bridge 没有 VFS 文件读写 API。
 

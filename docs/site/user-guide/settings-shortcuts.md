@@ -25,17 +25,17 @@ macOS 常用 `Command` 键，Windows/Linux 常用 `Ctrl` 键；实际绑定以�
 
 常用默认快捷键如下。你可以在“设置 → 快捷键”查看当前绑定；改过快捷键或切换键位风格后，以设置页面为准。
 
-| 操作 | macOS | Windows / Linux |
-| --- | --- | --- |
-| 快速查看 | `Space` | `Space` |
-| 搜索 | `Command+F` | `Ctrl+F` |
-| 前往文件夹 | `Command+Shift+G` 或 `Command+L` | `Ctrl+L` |
-| 复制 / 剪切 / 粘贴 | `Command+C / X / V` | `Ctrl+C / X / V` |
-| 新建文件夹 | `Command+Shift+N` | `Ctrl+Shift+N` |
-| 重命名 | `Enter` 或 `F2` | `F2` |
-| 移到废纸篓/回收站 | `Command+Backspace` | `Delete` |
-| 新建 / 关闭标签页 | `Command+T / W` | `Ctrl+T / W` |
-| 全选 | `Command+A` | `Ctrl+A` |
+| 操作               | macOS                            | Windows / Linux  |
+| ------------------ | -------------------------------- | ---------------- |
+| 快速查看           | `Space`                          | `Space`          |
+| 搜索               | `Command+F`                      | `Ctrl+F`         |
+| 前往文件夹         | `Command+Shift+G` 或 `Command+L` | `Ctrl+L`         |
+| 复制 / 剪切 / 粘贴 | `Command+C / X / V`              | `Ctrl+C / X / V` |
+| 新建文件夹         | `Command+Shift+N`                | `Ctrl+Shift+N`   |
+| 重命名             | `Enter` 或 `F2`                  | `F2`             |
+| 移到废纸篓/回收站  | `Command+Backspace`              | `Delete`         |
+| 新建 / 关闭标签页  | `Command+T / W`                  | `Ctrl+T / W`     |
+| 全选               | `Command+A`                      | `Ctrl+A`         |
 
 ## 终端字体
 

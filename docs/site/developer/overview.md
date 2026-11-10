@@ -4,11 +4,11 @@
 
 ## 哪个仓库负责什么
 
-| 仓库 | 负责内容 | 典型改动 |
-| --- | --- | --- |
-| [fiex](https://github.com/kevinhuang001/fiex) | 桌面应用、Core、Tauri 命令、内置文件位置、插件宿主、权限和 Pages 文档 | 文件操作、窗口交互、系统集成、provider 路由 |
-| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk) | Rust 插件 SDK、共享 provider contracts、UI SDK、IPC 协议 | 插件调用接口、跨仓库 DTO、JSON-RPC/Wire 变更 |
-| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | 插件业务逻辑、官方示例、插件构建与发行包 | Git、WebDAV、SMB、预览、归档等具体插件 |
+| 仓库                                                                            | 负责内容                                                              | 典型改动                                     |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
+| [fiex](https://github.com/kevinhuang001/fiex)                                   | 桌面应用、Core、Tauri 命令、内置文件位置、插件宿主、权限和 Pages 文档 | 文件操作、窗口交互、系统集成、provider 路由  |
+| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk)                           | Rust 插件 SDK、共享 provider contracts、UI SDK、IPC 协议              | 插件调用接口、跨仓库 DTO、JSON-RPC/Wire 变更 |
+| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | 插件业务逻辑、官方示例、插件构建与发行包                              | Git、WebDAV、SMB、预览、归档等具体插件       |
 
 Core 负责提供通用授权和运行时机制，不应把某个具体插件的远程协议或业务 UI 塞进内置模块。共享数据结构或行为契约需要变更时，先在 SDK 定义，再更新 Core 和所有受影响插件。
 

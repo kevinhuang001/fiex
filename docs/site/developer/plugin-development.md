@@ -26,16 +26,16 @@ Native 插件是由 Fiex 管理的独立进程。Core 启动进程并通过标�
 
 ## 何时选哪种扩展
 
-| 目标 | 入口 |
-| --- | --- |
+| 目标                         | 入口                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
 | 用户保存连接后浏览服务端文件 | `extensions.connections` + `extensions.vfs` + `ConnectionProvider` + `VfsProvider` |
-| 在文件信息面板增加字段 | Manifest 静态声明 `extensions.info.sections` + `InfoProvider::compute` |
-| 预览一种文件格式 | `extensions.preview` + `PreviewProvider`，返回包内预览页面或标准预览视图 |
-| 添加文件右键菜单 | `extensions.contextMenus` + `ContextMenuProvider` |
-| 添加连接自身的右键菜单 | `extensions.connectionContextMenus` + 对应 provider |
-| 向搜索合并结果 | `extensions.search` + `SearchProvider` |
-| 在打开文件前/后响应 | `extensions.hooks` + `HookProvider` |
-| 增加工具栏按钮或面板 | `extensions.toolbar` + `ToolbarProvider` |
-| 给文件行/列补充动态信息 | `extensions.decorations` + `DecorationProvider` |
+| 在文件信息面板增加字段       | Manifest 静态声明 `extensions.info.sections` + `InfoProvider::compute`             |
+| 预览一种文件格式             | `extensions.preview` + `PreviewProvider`，返回包内预览页面或标准预览视图           |
+| 添加文件右键菜单             | `extensions.contextMenus` + `ContextMenuProvider`                                  |
+| 添加连接自身的右键菜单       | `extensions.connectionContextMenus` + 对应 provider                                |
+| 向搜索合并结果               | `extensions.search` + `SearchProvider`                                             |
+| 在打开文件前/后响应          | `extensions.hooks` + `HookProvider`                                                |
+| 增加工具栏按钮或面板         | `extensions.toolbar` + `ToolbarProvider`                                           |
+| 给文件行/列补充动态信息      | `extensions.decorations` + `DecorationProvider`                                    |
 
 注册扩展只表示该 provider 有资格收到对应事件。调用时仍会受用户授权、资源范围、匹配条件和 Core 的能力校验约束。

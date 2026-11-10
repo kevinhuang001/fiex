@@ -32,26 +32,26 @@ Core 仓库用 `sdk/` git submodule 固定所使用的 SDK commit。Core 的实�
 
 Core 的 `src-tauri/Cargo.toml` 工作区分为主应用、foundation、platform 和 built-ins：
 
-| 分层 | 代表 crate | 职责 |
-| --- | --- | --- |
-| Foundation | `fiex-fs`、`fiex-resource`、`fiex-runtime`、`fiex-storage`、`fiex-scope-policy` | 文件/provider 基础类型、资源身份、运行时、存储和授权策略 |
-| Platform | `fiex-platform` | 文件对话框、平台标识和系统服务适配 |
-| Built-ins | `fiex-local-fs`、`fiex-search`、`fiex-info`、`fiex-preview`、`fiex-trash`、`fiex-applications`、`fiex-recent`、`fiex-decorations`、`fiex-actions`、`fiex-usb-fs` | 内置文件系统和浏览器能力 |
-| Application | `src-tauri/src` 主 crate | Tauri 命令、Core 组合、插件宿主和应用生命周期 |
+| 分层        | 代表 crate                                                                                                                                                       | 职责                                                     |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Foundation  | `fiex-fs`、`fiex-resource`、`fiex-runtime`、`fiex-storage`、`fiex-scope-policy`                                                                                  | 文件/provider 基础类型、资源身份、运行时、存储和授权策略 |
+| Platform    | `fiex-platform`                                                                                                                                                  | 文件对话框、平台标识和系统服务适配                       |
+| Built-ins   | `fiex-local-fs`、`fiex-search`、`fiex-info`、`fiex-preview`、`fiex-trash`、`fiex-applications`、`fiex-recent`、`fiex-decorations`、`fiex-actions`、`fiex-usb-fs` | 内置文件系统和浏览器能力                                 |
+| Application | `src-tauri/src` 主 crate                                                                                                                                         | Tauri 命令、Core 组合、插件宿主和应用生命周期            |
 
 crate 是编译和依赖边界，不自动代表一个单独进程。跨仓库的插件业务不能只因“复用方便”就放进 Core workspace。
 
 ## 前端目录边界
 
-| 路径 | 主要职责 |
-| --- | --- |
-| `src/components` | 浏览器、设置、菜单、对话框与插件 UI 容器 |
-| `src/hooks` | 导航、列表刷新、缓存与文件操作交互 |
-| `src/lib` | 纯数据转换、验证、快捷键、缓存和前端 API 封装 |
-| `src-tauri/src/desktop` | Tauri command、窗口管理和应用调度 |
-| `src-tauri/src/core` | 本地文件系统、搜索、传输、卷、终端和应用内核心服务 |
+| 路径                    | 主要职责                                                |
+| ----------------------- | ------------------------------------------------------- |
+| `src/components`        | 浏览器、设置、菜单、对话框与插件 UI 容器                |
+| `src/hooks`             | 导航、列表刷新、缓存与文件操作交互                      |
+| `src/lib`               | 纯数据转换、验证、快捷键、缓存和前端 API 封装           |
+| `src-tauri/src/desktop` | Tauri command、窗口管理和应用调度                       |
+| `src-tauri/src/core`    | 本地文件系统、搜索、传输、卷、终端和应用内核心服务      |
 | `src-tauri/src/plugins` | manifest、安装、插件生命周期、IPC、provider、资源和安全 |
-| `src-tauri/crates` | 可复用的 Rust foundation/platform/built-in crates |
+| `src-tauri/crates`      | 可复用的 Rust foundation/platform/built-in crates       |
 
 ## Provider 与 VFS
 

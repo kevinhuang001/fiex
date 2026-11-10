@@ -24,18 +24,18 @@ providers.serve_with("org.example.plugin", custom_rpc)?;
 
 ## 标准事件与职责
 
-| Trait | Core 调用的方法 | 实现时要处理的内容 |
-| --- | --- | --- |
-| `ConnectionProvider` | `connection.validate/open/create` | 校验连接配置；打开连接后返回 VFS 位置或插件视图 |
-| `InfoProvider` | `info.compute` | 只计算请求中列出的字段 ID，并按要求返回文本结果 |
-| `PreviewProvider` | `preview.open` | 返回插件包内预览页面或相应 PreviewView |
-| `DecorationProvider` | `decorations.resolve` | 对请求对象返回动态 badge/样式贡献 |
-| `ContextMenuProvider` | `contextMenu.resolve/execute` | 分离菜单项声明与用户执行后的动作 |
-| `ConnectionContextMenuProvider` | `connectionContextMenu.resolve/execute` | 对已保存连接提供操作 |
-| `SearchProvider` | `search.query` | 根据请求模式返回结果、路径引用和可选标签 |
-| `HookProvider` | `hooks.invoke` | 按事件契约响应打开文件前/后的 hook 请求 |
-| `ToolbarProvider` | `toolbar.invoke` | 执行命令或返回面板相关动作 |
-| `VfsProvider` | `vfs.*` | 见[VFS 章节](/developer/plugin-development/vfs) |
+| Trait                           | Core 调用的方法                         | 实现时要处理的内容                              |
+| ------------------------------- | --------------------------------------- | ----------------------------------------------- |
+| `ConnectionProvider`            | `connection.validate/open/create`       | 校验连接配置；打开连接后返回 VFS 位置或插件视图 |
+| `InfoProvider`                  | `info.compute`                          | 只计算请求中列出的字段 ID，并按要求返回文本结果 |
+| `PreviewProvider`               | `preview.open`                          | 返回插件包内预览页面或相应 PreviewView          |
+| `DecorationProvider`            | `decorations.resolve`                   | 对请求对象返回动态 badge/样式贡献               |
+| `ContextMenuProvider`           | `contextMenu.resolve/execute`           | 分离菜单项声明与用户执行后的动作                |
+| `ConnectionContextMenuProvider` | `connectionContextMenu.resolve/execute` | 对已保存连接提供操作                            |
+| `SearchProvider`                | `search.query`                          | 根据请求模式返回结果、路径引用和可选标签        |
+| `HookProvider`                  | `hooks.invoke`                          | 按事件契约响应打开文件前/后的 hook 请求         |
+| `ToolbarProvider`               | `toolbar.invoke`                        | 执行命令或返回面板相关动作                      |
+| `VfsProvider`                   | `vfs.*`                                 | 见[VFS 章节](/developer/plugin-development/vfs) |
 
 Trait 的具体签名和 DTO 以锁定 SDK 的 `sdk/rust/src/providers.rs`、`sdk/rust/contracts/src/providers.rs` 为准。SDK 类型会随协议演进；复制其他版本样例前先比对 Cargo submodule commit。
 

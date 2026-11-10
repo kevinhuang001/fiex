@@ -12,17 +12,17 @@ Core 拥有挂载 ID、Fiex URI 和 provider 路由。插件处理的是当前�
 
 `VfsProvider::operations()` 声明实现上限，逻辑操作如下：
 
-| 操作 | 方法 | 说明 |
-| --- | --- | --- |
-| `list` | `vfs.list` | 列出一个目录的直接子项 |
-| `stat` | `vfs.stat` | 获取节点元数据 |
-| `read` | `vfs.openRead`、`vfs.readStream`、`vfs.closeRead` | 读取文件流 |
-| `write` | `vfs.beginWrite`、`vfs.writeStream`、`vfs.commit`、`vfs.abort` | 暂存并提交文件写入 |
-| `mkdir` | `vfs.mkdir` | 创建目录 |
-| `rename` | `vfs.rename` | 重命名/移动 provider 内项目 |
-| `trash` | `vfs.trash` | 移入 provider 可恢复的废纸篓 |
-| `remove` | `vfs.remove` | 永久删除 |
-| `search` | `vfs.search` | provider 内搜索 |
+| 操作     | 方法                                                           | 说明                         |
+| -------- | -------------------------------------------------------------- | ---------------------------- |
+| `list`   | `vfs.list`                                                     | 列出一个目录的直接子项       |
+| `stat`   | `vfs.stat`                                                     | 获取节点元数据               |
+| `read`   | `vfs.openRead`、`vfs.readStream`、`vfs.closeRead`              | 读取文件流                   |
+| `write`  | `vfs.beginWrite`、`vfs.writeStream`、`vfs.commit`、`vfs.abort` | 暂存并提交文件写入           |
+| `mkdir`  | `vfs.mkdir`                                                    | 创建目录                     |
+| `rename` | `vfs.rename`                                                   | 重命名/移动 provider 内项目  |
+| `trash`  | `vfs.trash`                                                    | 移入 provider 可恢复的废纸篓 |
+| `remove` | `vfs.remove`                                                   | 永久删除                     |
+| `search` | `vfs.search`                                                   | provider 内搜索              |
 
 只声明真正完成的操作。Core 不会因为你在 Rust 代码中“能发出请求”就假设服务器账号允许该操作。
 
