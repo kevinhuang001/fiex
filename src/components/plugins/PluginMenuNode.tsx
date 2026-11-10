@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { measureSubmenu } from '@/lib/menuPosition'
 import {
   createContext,
   useContext,
@@ -64,6 +65,7 @@ export function PluginMenuNode({
   const Icon = item.icon ? icons[item.icon as keyof typeof icons] : undefined
   const [openUp, setOpenUp] = useState(false)
   const [openLeft, setOpenLeft] = useState(parentLeft)
+  const [maxWidth, setMaxWidth] = useState(420)
   const submenu = useRef<HTMLDivElement>(null)
   const timer = useRef<number | null>(null)
   const cancel = () => {
@@ -90,12 +92,18 @@ export function PluginMenuNode({
   }, [expanded])
   useLayoutEffect(() => {
     if (expanded && submenu.current) {
-      const rect = submenu.current.getBoundingClientRect()
-      setOpenUp(rect.bottom > window.innerHeight - 8)
-      const roomLeft = rect.left - rect.width >= 8
-      setOpenLeft(parentLeft || (preferLeft && roomLeft) || rect.right > window.innerWidth - 8)
+      const anchor = submenu.current.parentElement
+      if (!anchor) return
+      const placement = measureSubmenu(
+        anchor,
+        submenu.current,
+        parentLeft || preferLeft ? 'left' : 'right',
+      )
+      setOpenUp(placement.up)
+      setOpenLeft(placement.left)
+      setMaxWidth(placement.maxWidth)
     }
-  }, [expanded, parentLeft, preferLeft])
+  }, [expanded, parentLeft, preferLeft, maxWidth])
   if (item.kind === 'separator')
     return (
       <div
@@ -138,6 +146,7 @@ export function PluginMenuNode({
               (openUp ? ' open-up' : '') +
               (openLeft ? ' open-left' : '')
             }
+            style={{ maxWidth }}
             role="menu"
             aria-label={item.title}
             onMouseEnter={cancel}

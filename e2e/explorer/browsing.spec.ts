@@ -168,6 +168,7 @@ test('Info computes only the on-demand field the user selects', async ({ page })
 
   const dialog = page.getByRole('dialog', { name: '显示简介' })
   await expect(dialog).toContainText('Notes.md')
+  await expect(dialog.locator('.file-info-group').filter({ hasText: '核心信息' })).toHaveCount(1)
   const sha256 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-256' })
   const sha512 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-512' })
   await expect(sha256).toContainText('尚未计算')
@@ -178,7 +179,12 @@ test('Info computes only the on-demand field the user selects', async ({ page })
     'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
   )
   await expect(sha512).toContainText('尚未计算')
-  await expect(sha512.getByRole('button', { name: '计算', exact: true })).toBeVisible()
+  const compute = sha512.getByRole('button', { name: '计算', exact: true })
+  await expect(compute).toBeVisible()
+  const details = await sha512.locator('dd').boundingBox()
+  const button = await compute.boundingBox()
+  if (!details || !button) throw new Error('missing Info compute button geometry')
+  expect(button.x + button.width).toBeGreaterThanOrEqual(details.x + details.width - 12)
 })
 
 test('Applications entry and search control', async ({ page }) => {

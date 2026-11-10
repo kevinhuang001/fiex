@@ -14,7 +14,7 @@ pub(crate) fn free_destination(destination: PathBuf) -> PathBuf {
             .extension()
             .map(|value| format!(".{}", value.to_string_lossy()))
             .unwrap_or_default();
-        for index in 2..10_000 {
+        for index in 1..10_000 {
             let candidate = parent.join(format!("{stem} ({index}){extension}"));
             if !path_exists(&candidate) {
                 return candidate;
@@ -113,7 +113,7 @@ mod tests {
 
         let free = free_destination(existing.clone());
 
-        assert_eq!(free.file_name().unwrap(), "note (2).txt");
+        assert_eq!(free.file_name().unwrap(), "note (1).txt");
         assert_eq!(std::fs::read(existing).unwrap(), b"keep");
     }
 }

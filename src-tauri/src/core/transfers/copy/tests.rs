@@ -160,7 +160,7 @@ fn merging_folders_preserves_skipped_files_and_keep_both_keeps_extension() {
     )
     .unwrap();
     assert_eq!(
-        fs::read_to_string(b.join("folder/x (2).txt")).unwrap(),
+        fs::read_to_string(b.join("folder/x (1).txt")).unwrap(),
         "source"
     );
     assert_eq!(

@@ -32,6 +32,7 @@ export function GridView({
       {prefs.view === 'gallery' && explorer.selected.length > 0 && (
         <div
           className="gallery-preview"
+          title={entries.find((e) => e.path === explorer.selected[0])?.name}
           onDoubleClick={() => onPreview(entries.find((e) => e.path === explorer.selected[0])!)}
         >
           {(() => {
@@ -64,6 +65,7 @@ export function GridView({
               <div
                 role="gridcell"
                 className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
+                title={e.name}
                 key={e.path}
                 style={rowDecor.style}
                 {...shared(e)}
@@ -102,6 +104,7 @@ export function GridView({
                   <div
                     role="gridcell"
                     className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
+                    title={e.name}
                     key={e.path}
                     style={rowDecor.style}
                     {...shared(e)}

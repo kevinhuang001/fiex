@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
 
 const MARGIN = 8
+const SUBMENU_GAP = 7
 
 export interface MenuPlacement {
   left: number
@@ -12,12 +13,50 @@ export interface MenuViewport {
   height: number
 }
 
+export function placeSubmenu(
+  anchor: { left: number; right: number; top: number; bottom: number },
+  size: { width: number; height: number },
+  viewport: MenuViewport,
+  preferredSide: 'left' | 'right',
+): { left: boolean; up: boolean; maxWidth: number } {
+  const roomLeft = Math.max(0, Math.floor(anchor.left - MARGIN - SUBMENU_GAP))
+  const roomRight = Math.max(0, Math.floor(viewport.width - anchor.right - MARGIN - SUBMENU_GAP))
+  const preferLeft = preferredSide === 'left'
+  const preferredRoom = preferLeft ? roomLeft : roomRight
+  const otherRoom = preferLeft ? roomRight : roomLeft
+  const left =
+    preferredRoom >= size.width
+      ? preferLeft
+      : otherRoom >= size.width
+        ? !preferLeft
+        : roomLeft >= roomRight
+  const upRoom = anchor.bottom - MARGIN
+  const downRoom = viewport.height - anchor.top - MARGIN
+  return {
+    left,
+    up: downRoom < size.height && upRoom > downRoom,
+    maxWidth: Math.min(420, Math.max(1, left ? roomLeft : roomRight)),
+  }
+}
+
+export function measureSubmenu(
+  anchor: HTMLElement,
+  panel: HTMLElement,
+  preferredSide: 'left' | 'right',
+) {
+  const anchorRect = anchor.getBoundingClientRect()
+  const panelRect = panel.getBoundingClientRect()
+  return placeSubmenu(
+    anchorRect,
+    { width: panelRect.width, height: panelRect.height },
+    { width: window.innerWidth, height: window.innerHeight },
+    preferredSide,
+  )
+}
+
 /** Places a menu at its anchor and keeps the whole menu on screen.
- *
- * The pointer stays the anchor: when the menu does not fit, it moves by the
- * smallest amount that brings it fully inside the viewport instead of flipping
- * to the other side of the pointer. The menu is never capped, so every item is
- * visible and no scrollbar appears. */
+ * Flip toward the opposite side of the pointer when there is room, then clamp
+ * to the viewport margin for tight layouts. */
 export function placeMenu(
   x: number,
   y: number,
@@ -27,9 +66,13 @@ export function placeMenu(
 ): MenuPlacement {
   const maxLeft = Math.max(MARGIN, viewport.width - width - MARGIN)
   const maxTop = Math.max(MARGIN, viewport.height - height - MARGIN)
+  const left =
+    x + width > viewport.width - MARGIN && x - width >= MARGIN ? x - width : Math.min(x, maxLeft)
+  const top =
+    y + height > viewport.height - MARGIN && y - height >= MARGIN ? y - height : Math.min(y, maxTop)
   return {
-    left: Math.max(MARGIN, Math.min(x, maxLeft)),
-    top: Math.max(MARGIN, Math.min(y, maxTop)),
+    left: Math.max(MARGIN, left),
+    top: Math.max(MARGIN, top),
   }
 }
 

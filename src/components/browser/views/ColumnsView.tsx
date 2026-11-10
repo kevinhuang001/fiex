@@ -62,6 +62,7 @@ export function ColumnsView({
           <div
             key={e.path}
             className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}${rowDecor.className}`}
+            title={e.name}
             style={rowDecor.style}
             {...(current
               ? shared(e)

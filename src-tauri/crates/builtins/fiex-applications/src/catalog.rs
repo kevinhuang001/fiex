@@ -8,6 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod name;
+use name::unique_name;
+
 const REFRESH_INTERVAL: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -355,21 +358,6 @@ impl ApplicationsStore {
             })
             .collect())
     }
-}
-
-fn unique_name(
-    desired: &str,
-    parent: &Option<String>,
-    names: &mut HashSet<(Option<String>, String)>,
-) -> String {
-    let mut candidate = desired.to_owned();
-    let mut suffix = 2_u32;
-    while names.contains(&(parent.clone(), candidate.to_lowercase())) {
-        candidate = format!("{desired} ({suffix})");
-        suffix += 1;
-    }
-    names.insert((parent.clone(), candidate.to_lowercase()));
-    candidate
 }
 
 fn safe_name(value: &str) -> String {

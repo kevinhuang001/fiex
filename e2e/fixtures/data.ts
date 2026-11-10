@@ -119,6 +119,7 @@ export let fixtureEntries = [
   item(root + '/Applications/Fiex.app', true),
   item(root + '/.Trash', true),
   item(root + '/.Trash/Old draft.txt', false, 'text/plain', 1200),
+  item(root + '/.Trash/Old notes.txt', false, 'text/plain', 1800),
 ]
 fixtureEntries = fixtureEntries.map((entry) =>
   entry.name === 'Notes.md'

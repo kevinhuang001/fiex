@@ -1,15 +1,10 @@
 import { t } from '@/i18n'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
+import { measureSubmenu } from '@/lib/menuPosition'
 import { usePluginCatalog } from '@/lib/plugins'
-import {
-  beginActivity,
-  finishActivity,
-  quietProgressChannel,
-  updateActivity,
-} from '@/hooks/useActivity'
-import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
+import { invokePluginContextMenuItem } from '@/components/plugins/invokeContextMenuItem'
 import {
   PluginMenuNode,
   SubmenuGroupContext,
@@ -27,6 +22,8 @@ interface Context {
   onRetry: () => void
 }
 
+const PLUGIN_MENU_ID = 'plugin-actions'
+
 export function PluginContextActions({
   paths,
   path,
@@ -38,10 +35,19 @@ export function PluginContextActions({
   onError,
 }: Context & { onClose: () => void; onError: (error: string) => void }) {
   const plugins = usePluginCatalog()
+  const submenuGroup = useContext(SubmenuGroupContext)
+  const setGroupOpenId = submenuGroup?.setOpenId
   const [menus, setMenus] = useState<PluginMenu[]>([])
-  const [open, setOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
+  const open = submenuGroup ? submenuGroup.openId === PLUGIN_MENU_ID : localOpen
+  const setExpanded = (value: boolean) =>
+    setGroupOpenId
+      ? setGroupOpenId((current) =>
+          value ? PLUGIN_MENU_ID : current === PLUGIN_MENU_ID ? null : current,
+        )
+      : setLocalOpen(value)
   const [openChild, setOpenChild] = useState<string | null>(null)
-  const [flip, setFlip] = useState({ left: false, up: false })
+  const [flip, setFlip] = useState({ left: false, up: false, maxWidth: 420 })
   const requestedSubmenus = useRef(new Set<string>())
   const trigger = useRef<HTMLButtonElement>(null)
   const submenu = useRef<HTMLDivElement>(null)
@@ -54,21 +60,20 @@ export function PluginContextActions({
   }
   const scheduleClose = () => {
     cancelClose()
-    // Leave a short grace period so crossing the gap into the submenu (or a
-    // nested submenu) does not collapse the panel under the pointer.
-    closeTimer.current = window.setTimeout(() => setOpen(false), 500)
+    // Let the pointer cross the gap before closing the submenu.
+    closeTimer.current = window.setTimeout(() => setExpanded(false), 500)
   }
   useEffect(() => cancelClose, [])
   useEffect(() => {
     if (!open) setOpenChild(null)
   }, [open])
   useEffect(() => {
-    // A new selection invalidates any nested menus from the previous session.
     requestedSubmenus.current.clear()
-    setOpen(false)
+    setGroupOpenId?.((current) => (current === PLUGIN_MENU_ID ? null : current))
+    setLocalOpen(false)
     setOpenChild(null)
-    setFlip({ left: false, up: false })
-  }, [selectionKey])
+    setFlip({ left: false, up: false, maxWidth: 420 })
+  }, [selectionKey, setGroupOpenId])
   useEffect(() => {
     setMenus((previous) => (previous === resolvedMenus ? previous : resolvedMenus))
   }, [resolvedMenus])
@@ -78,20 +83,18 @@ export function PluginContextActions({
       focusFirst.current = false
       submenu.current.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus()
     }
-    // Measure against the trigger, not the already-flipped submenu, so a later
-    // lazy submenu update cannot flip the panel back off screen.
-    const anchor = trigger.current?.getBoundingClientRect()
+    const anchor = trigger.current
     if (!anchor) return
-    const width = submenu.current.offsetWidth
-    const height = submenu.current.offsetHeight
-    // Submenu levels are flush; measure their real edge for flipping.
-    const side = 0
-    const preferLeft = anchor.left < window.innerWidth / 2
-    const roomLeft = anchor.left - side - width >= 8
-    const left = roomLeft && (preferLeft || anchor.right + side + width > window.innerWidth - 8)
-    const up = anchor.top - 6 + height > window.innerHeight - 8 && anchor.bottom + 6 - height >= 8
-    setFlip((current) => (current.left === left && current.up === up ? current : { left, up }))
-  }, [open, menus, loading])
+    const preferLeft = anchor.getBoundingClientRect().left < window.innerWidth / 2
+    const placement = measureSubmenu(anchor, submenu.current, preferLeft ? 'left' : 'right')
+    setFlip((current) =>
+      current.left === placement.left &&
+      current.up === placement.up &&
+      current.maxWidth === placement.maxWidth
+        ? current
+        : placement,
+    )
+  }, [open, menus, loading, flip.maxWidth])
 
   const resolveSubmenu = async (menu: PluginMenu, submenuId: string) => {
     const key = menu.menuSessionId + ':' + submenuId
@@ -122,76 +125,7 @@ export function PluginContextActions({
     item: PluginMenuItem,
     anchor?: { x: number; y: number },
   ) => {
-    onClose()
-    const pluginId = menu.pluginId
-    const plugin = plugins.find((entry) => entry.id === pluginId)
-    let activityId = ''
-    try {
-      // No content permission is handed out during resolve; executing a real
-      // click enters the operation with its exact selected paths.
-      const response = await call('plugin_context_menu_execute', {
-        menuSessionId: menu.menuSessionId,
-        itemId: item.id,
-        onProgress: quietProgressChannel(),
-      })
-      if (
-        response &&
-        typeof response === 'object' &&
-        'kind' in response &&
-        response.kind === 'panel' &&
-        'assetPath' in response &&
-        typeof response.assetPath === 'string'
-      ) {
-        const entry = response as {
-          assetPath: string
-          panelId?: string
-          title?: string
-          size?: { width: number; height: number }
-        }
-        window.dispatchEvent(
-          new CustomEvent(OPEN_PLUGIN_PANEL, {
-            detail: {
-              pluginId,
-              panelId: entry.panelId || item.id,
-              title: entry.title || item.title,
-              icon: plugin?.icon,
-              selection: paths,
-              directory: path,
-              anchor,
-              source: 'contextMenu',
-              size: entry.size,
-              assetPath: entry.assetPath,
-              timeoutMs: plugin?.uiTimeoutMs,
-              allowCreate: (plugin?.declaredPermissions || []).some(
-                (permission) => permission === 'files.create' || permission === 'folders.create',
-              ),
-            },
-          }),
-        )
-        return
-      }
-      activityId = beginActivity(
-        (plugin?.name || t('插件')) + ' · ' + item.title,
-        paths.length + t(' 个项目'),
-        undefined,
-        'plugin',
-        plugin?.id,
-      )
-      updateActivity(activityId, { indeterminate: true })
-      finishActivity(activityId, undefined, t('已提交'))
-      // Background tasks return a taskId; the Status Center owns their
-      // progress, so never open a raw JSON result dialog for them.
-      const silent =
-        response && typeof response === 'object' && ('taskId' in response || 'handled' in response)
-      if (!silent && response && typeof response === 'object') {
-        window.dispatchEvent(
-          new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
-        )
-      }
-    } catch (error) {
-      if (activityId) finishActivity(activityId, String(error))
-      onError(String(error))
-    }
+    void invokePluginContextMenuItem({ menu, item, paths, path, plugins, anchor, onClose, onError })
   }
 
   const hasItems = menus.some((menu) => menu.items.some((item) => !item.parentId))
@@ -200,7 +134,7 @@ export function PluginContextActions({
       className="context-submenu-wrap plugin-context-actions"
       onMouseEnter={() => {
         cancelClose()
-        setOpen(true)
+        setExpanded(true)
       }}
       onMouseLeave={scheduleClose}
     >
@@ -213,17 +147,17 @@ export function PluginContextActions({
           event.stopPropagation()
           cancelClose()
           // Hover already opens the menu; a click must not immediately close it.
-          setOpen(true)
+          setExpanded(true)
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
             event.preventDefault()
             event.stopPropagation()
             focusFirst.current = true
-            setOpen(true)
+            setExpanded(true)
           } else if (event.key === 'Escape' && open) {
             event.stopPropagation()
-            setOpen(false)
+            setExpanded(false)
           }
         }}
       >
@@ -237,13 +171,14 @@ export function PluginContextActions({
           role="menu"
           aria-label={t('插件操作')}
           className={`context-submenu plugin-context-menu${flip.left ? ' open-left' : ''}${flip.up ? ' plugin-context-menu-up' : ''}`}
+          style={{ maxWidth: flip.maxWidth }}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
           onKeyDown={(event) => {
             if (event.key === 'ArrowLeft' || event.key === 'Escape') {
               event.preventDefault()
               event.stopPropagation()
-              setOpen(false)
+              setExpanded(false)
               trigger.current?.focus()
             }
           }}

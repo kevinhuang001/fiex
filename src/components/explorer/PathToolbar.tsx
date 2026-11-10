@@ -92,7 +92,7 @@ export function PathToolbar({
                 <span key={crumb.path}>
                   {index > 0 && <ChevronRight size={11} />}
                   <button
-                    title={crumb.ellipsis ? t('更上层') : crumb.path}
+                    title={crumb.ellipsis ? t('更上层') : crumb.name}
                     aria-label={crumb.ellipsis ? t('更上层') : undefined}
                     data-drop-folder={crumb.path}
                     onClick={() =>

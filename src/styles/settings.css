@@ -595,6 +595,7 @@
 }
 .file-info-action {
   flex: 0 0 auto;
+  margin-left: auto;
   padding: 3px 7px;
   border: 1px solid var(--line);
   border-radius: 5px;

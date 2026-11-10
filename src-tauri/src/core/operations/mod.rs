@@ -88,7 +88,7 @@ pub fn unique(path: &Path) -> PathBuf {
         .flatten()
         .map(|s| format!(".{}", s.to_string_lossy()))
         .unwrap_or_default();
-    for i in 2.. {
+    for i in 1.. {
         let next = path.with_file_name(format!("{stem} ({i}){ext}"));
         if !exists(&next) {
             return next;

@@ -129,7 +129,7 @@ fn local_unique(path: &Path) -> PathBuf {
         .map(|value| format!(".{}", value.to_string_lossy()))
         .unwrap_or_default();
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    for index in 2.. {
+    for index in 1.. {
         let candidate = parent.join(format!("{stem} ({index}){ext}"));
         if !candidate.exists() {
             return candidate;
