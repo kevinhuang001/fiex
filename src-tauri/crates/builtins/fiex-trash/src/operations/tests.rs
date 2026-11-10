@@ -11,8 +11,7 @@ fn reconstructs_finder_put_back_path_from_parent_and_original_name() {
 #[test]
 fn normalizes_apfs_data_volume_firmlink_before_restoring() {
     assert_eq!(
-        macos_put_back_path("System/Volumes/Data/Users/kevin/Desktop", "桌面文件.txt")
-            .as_deref(),
+        macos_put_back_path("System/Volumes/Data/Users/kevin/Desktop", "桌面文件.txt").as_deref(),
         Some("/Users/kevin/Desktop/桌面文件.txt")
     );
 }
@@ -49,7 +48,9 @@ fn fiex_trashed_item_restores_to_its_original_path_without_fallback() {
         .find(|entry| entry.name == name)
         .expect("find the test item in Trash");
 
-    assert!(!restore_needs_folder(std::slice::from_ref(&trashed.node_id)));
+    assert!(!restore_needs_folder(std::slice::from_ref(
+        &trashed.node_id
+    )));
     assert_eq!(
         restore_from_trash(
             std::slice::from_ref(&trashed.node_id),
@@ -59,5 +60,8 @@ fn fiex_trashed_item_restores_to_its_original_path_without_fallback() {
         .unwrap(),
         1
     );
-    assert_eq!(std::fs::read(&original).unwrap(), b"restore to this exact path");
+    assert_eq!(
+        std::fs::read(&original).unwrap(),
+        b"restore to this exact path"
+    );
 }
