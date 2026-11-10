@@ -5,6 +5,7 @@
 | 来源                       | 核对快照                                                             | 本站用途                                                    |
 | -------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Fiex Core `main`           | `9b1dc33644d534eaed24bb84ab267bf822f15e7f`                           | 用户界面行为、Core 结构、权限、测试和 GitHub Pages workflow |
+| Office 功能 PR 快照        | `54b47fc38ed781305a952f8e7043ca1772c0b1a4`                           | 新建文件菜单、DOCX/XLSX/PPTX 模板、PDF 转换及其自动化测试   |
 | Core 内 `sdk/` 子模块      | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4) | Core 实际使用的协议 7.0、Rust API 和共享 provider contracts |
 | SDK 仓库 `main`            | `b89eb341f42552936c52d76b9ccf93568511982a`                           | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照           |
 | 官方插件仓库 `main`        | `5c63527b57e31fc02c95629c42383723b6e035f5`                           | 可编译插件示例与业务实现；其 SDK 子模块见下一行             |
