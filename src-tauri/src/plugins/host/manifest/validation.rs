@@ -1,5 +1,4 @@
 use super::*;
-use std::collections::HashSet;
 use std::path::{Component, Path};
 
 pub fn valid_id(id: &str) -> bool {

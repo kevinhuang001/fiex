@@ -1,8 +1,9 @@
 //! Core-owned Info sessions, field caching and task cancellation.
 use super::{
-    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoProviderPresentation,
-    InfoSubsectionDescriptor, InfoSubsectionMatch,
+    InfoCompute, InfoFieldKey, InfoFieldResult, InfoProviderPresentation, InfoSubsectionMatch,
 };
+#[cfg(test)]
+use super::{InfoFieldDescriptor, InfoSubsectionDescriptor};
 use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
 use serde::Serialize;
 use std::{
