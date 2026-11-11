@@ -1,6 +1,8 @@
 use super::super::native;
 use super::*;
-fn static_presentation(
+use std::collections::HashSet;
+
+pub(super) fn static_presentation(
     resolver: &Resolver,
     resource: &crate::plugins::resource::resource_context::ResourceSnapshot,
 ) -> Result<InfoProviderPresentation, String> {
@@ -22,7 +24,10 @@ fn static_presentation(
     }
 }
 
-fn section_view(resolver: &Resolver, presentation: &InfoProviderPresentation) -> InfoSectionView {
+pub(super) fn section_view(
+    resolver: &Resolver,
+    presentation: &InfoProviderPresentation,
+) -> InfoSectionView {
     let fields = presentation
         .subsections
         .iter()
@@ -60,7 +65,7 @@ fn section_view(resolver: &Resolver, presentation: &InfoProviderPresentation) ->
     }
 }
 
-fn error_section(resolver: &Resolver, error: &str) -> InfoSectionView {
+pub(super) fn error_section(resolver: &Resolver, error: &str) -> InfoSectionView {
     InfoSectionView {
         id: resolver.id.clone(),
         title: resolver.name.clone(),
@@ -78,7 +83,7 @@ fn error_section(resolver: &Resolver, error: &str) -> InfoSectionView {
     }
 }
 
-fn validate_presentation(presentation: &InfoProviderPresentation) -> Result<(), String> {
+pub(super) fn validate_presentation(presentation: &InfoProviderPresentation) -> Result<(), String> {
     if presentation.title.trim().is_empty() || presentation.title.len() > 256 {
         return Err("Info provider registered an invalid title".into());
     }
@@ -151,7 +156,7 @@ fn has_duplicate_match_values(values: &[String], normalize: impl Fn(&str) -> Str
     values.iter().any(|value| !seen.insert(normalize(value)))
 }
 
-fn valid_mime_pattern(value: &str) -> bool {
+pub(super) fn valid_mime_pattern(value: &str) -> bool {
     let Some((kind, subtype)) = value.split_once('/') else {
         return false;
     };
@@ -167,7 +172,7 @@ fn valid_mime_pattern(value: &str) -> bool {
             }))
 }
 
-fn filter_info_subsections(
+pub(super) fn filter_info_subsections(
     mut presentation: InfoProviderPresentation,
     resource: &crate::plugins::resource::resource_context::ResourceSnapshot,
 ) -> InfoProviderPresentation {

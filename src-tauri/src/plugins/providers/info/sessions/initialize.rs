@@ -25,7 +25,7 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
     let mut providers = HashMap::new();
     let mut sections = Vec::new();
     let mut on_open = Vec::new();
-    let mut total_fields = 0;
+    let mut total_fields = 0_usize;
 
     for resolver in resolvers {
         if sections.len() >= PROVIDER_LIMIT_PER_SESSION {
@@ -55,7 +55,7 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
             continue;
         }
         if total_fields.saturating_add(provider_fields) > FIELD_LIMIT_PER_SESSION {
-            sections.push(error_section(
+            sections.push(presentation::error_section(
                 &resolver,
                 "Info session has reached its field limit",
             ));

@@ -17,12 +17,10 @@ fn cache_base(resource: &ResourceSnapshot) -> Option<String> {
     if access != crate::core::fs::provider_registry::ResourceAccess::HostPath {
         return None;
     }
-    let path_key = crate::plugins::cache::key("info.field.v8", &resource.local);
+    let path_key = crate::plugins::cache::key("info.field.v8", &resource.local)?;
     let version = serde_json::to_string(&(&resource.reference, resource.metadata())).ok()?;
-    Some(format!(
-        "{path_key}:{}",
-        crate::plugins::cache::key(&version, &resource.local)
-    ))
+    let version_key = crate::plugins::cache::key(&version, &resource.local)?;
+    Some(format!("{path_key}:{version_key}"))
 }
 
 pub fn read_core_cache(

@@ -167,7 +167,7 @@ fn validate_info_subsection_match(value: Option<&Value>) -> Result<(), String> {
     }
     if kinds
         .iter()
-        .any(|kind| !matches!(*kind, "file" | "directory" | "symlink"))
+        .any(|kind| !matches!(kind.as_str(), "file" | "directory" | "symlink"))
     {
         return Err("Info subsection match kinds accept file, directory or symlink".into());
     }

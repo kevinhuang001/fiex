@@ -1,6 +1,5 @@
 use super::presentation::*;
 use super::*;
-use super::*;
 
 #[test]
 fn subsection_match_dimensions_are_anded_and_values_are_case_insensitive() {
