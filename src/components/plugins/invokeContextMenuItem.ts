@@ -9,6 +9,8 @@ import {
 } from '@/hooks/useActivity'
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
 import type { PluginMenu, PluginMenuItem } from './PluginMenuNode'
+import { pluginTaskRefreshTracker } from '@/lib/pluginTaskRefresh'
+import { requestDirectoryRefresh } from '@/lib/listing'
 
 export async function invokePluginContextMenuItem({
   menu,
@@ -86,6 +88,19 @@ export async function invokePluginContextMenuItem({
     finishActivity(activityId, undefined, t('已提交'))
     const silent =
       response && typeof response === 'object' && ('taskId' in response || 'handled' in response)
+    if (response && typeof response === 'object' && 'taskId' in response) {
+      const taskId = response.taskId
+      if (typeof taskId === 'string') pluginTaskRefreshTracker.register(taskId, path)
+    }
+    if (
+      response &&
+      typeof response === 'object' &&
+      !Array.isArray(response) &&
+      'handled' in response &&
+      response.handled === true
+    ) {
+      requestDirectoryRefresh([path])
+    }
     if (!silent && response && typeof response === 'object') {
       window.dispatchEvent(
         new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),

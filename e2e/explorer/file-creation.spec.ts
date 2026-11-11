@@ -22,7 +22,9 @@ async function confirmCreatedFile(page: import('@playwright/test').Page, filenam
   await expect(rename).toBeVisible()
   await expect(rename).toHaveValue(filename)
   await rename.press('Enter')
-  await expect(page.getByText(filename, { exact: true })).toBeVisible()
+  const row = page.locator(`[data-path$="/${filename}"]`)
+  await expect(row).toBeVisible()
+  await expect(row).toHaveAttribute('aria-selected', 'true')
 }
 
 test('New File offers a blank file and valid Office templates', async ({ page }) => {

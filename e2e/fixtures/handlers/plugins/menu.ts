@@ -174,11 +174,6 @@ export async function handlePluginMenu(
         if (!source) throw new Error('Office conversion requires one selected file')
         const filename = basename(source).replace(/\.[^.]+$/, '') + '.pdf'
         await handleFiles('create_file_entry', { path: parent(source), name: filename })
-        window.dispatchEvent(
-          new CustomEvent('fiex:directory-mutated', {
-            detail: { directories: [parent(source)] },
-          }),
-        )
         return { handled: true }
       }
       if (itemId === 'checksum.calculate') {

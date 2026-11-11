@@ -56,7 +56,12 @@ fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool 
 }
 
 impl AtomicMenuAction {
-    fn items(&self, selection: &Selection<'_>, caps: &FileCapabilities) -> Vec<MenuItem> {
+    fn items(
+        &self,
+        selection: &Selection<'_>,
+        caps: &FileCapabilities,
+        parent_id: Option<&str>,
+    ) -> Vec<MenuItem> {
         let nonzero = !selection.paths.is_empty();
         let one = selection.paths.len() == 1;
         let mut items = match self.0 {
@@ -86,7 +91,7 @@ impl AtomicMenuAction {
             Action::NewFile
                 if selection.paths.is_empty() && caps.write && selection.preflight.new_file =>
             {
-                new_file_items()
+                new_file_items(parent_id)
             }
             Action::Rename if one && caps.rename && selection.preflight.rename => {
                 vec![item("rename", "重新命名", "pencil", "rename")]
@@ -175,7 +180,11 @@ impl ContextMenuProvider for AtomicMenuAction {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-        Ok(self.items(&context.selection(), &context.capabilities()))
+        let parent_id = match invocation.input()? {
+            ProviderInput::ContextMenuResolve(request) => request.parent_id.as_deref(),
+            _ => None,
+        };
+        Ok(self.items(&context.selection(), &context.capabilities(), parent_id))
     }
 
     fn execute(
@@ -199,7 +208,22 @@ impl ContextMenuProvider for AtomicMenuAction {
             .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
         let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
             .with_local_data(Arc::new(context.clone()));
-        let offered = self.resolve(&resolve)?;
+        let offered = if self.0 == Action::NewFile {
+            self.items(
+                &context.selection(),
+                &context.capabilities(),
+                Some("newFile"),
+            )
+            .into_iter()
+            .chain(self.items(
+                &context.selection(),
+                &context.capabilities(),
+                Some("newFile.office"),
+            ))
+            .collect()
+        } else {
+            self.resolve(&resolve)?
+        };
         if !offered
             .iter()
             .any(|item| item.id == item_id && !item.disabled)
@@ -265,14 +289,40 @@ mod tests {
             assert_eq!(
                 [
                     !AtomicMenuAction(Action::MoveToTrash)
-                        .items(&selection, &caps)
+                        .items(&selection, &caps, None)
                         .is_empty(),
                     !AtomicMenuAction(Action::DeletePermanently)
-                        .items(&selection, &caps)
+                        .items(&selection, &caps, None)
                         .is_empty(),
                 ],
                 expected
             );
         }
+    }
+
+    #[test]
+    fn new_file_menu_resolves_one_level_at_a_time() {
+        let root = new_file_items(None);
+        assert_eq!(root.len(), 1);
+        assert_eq!(root[0].id, "newFile");
+        assert_eq!(root[0].kind, fiex_provider_contracts::MenuItemKind::Submenu);
+
+        let children = new_file_items(Some("newFile"));
+        assert_eq!(
+            children
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["newFile.empty", "newFile.office"]
+        );
+        let office = new_file_items(Some("newFile.office"));
+        assert_eq!(
+            office
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            ["newFile.docx", "newFile.xlsx", "newFile.pptx"]
+        );
+        assert!(new_file_items(Some("unknown")).is_empty());
     }
 }

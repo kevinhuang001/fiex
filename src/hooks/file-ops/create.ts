@@ -75,6 +75,7 @@ export function createActions({ x, run }: FileOpsContext) {
     )
     if (!path) return
     if (x.query) x.setQuery('')
+    x.setSelected([path])
     await renameCreatedEntry(path)
   }
   return { create, createFile }
