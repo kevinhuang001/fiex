@@ -25,6 +25,7 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
     let mut providers = HashMap::new();
     let mut sections = Vec::new();
     let mut on_open = Vec::new();
+    // Keep aggregate fields across providers within the session budget.
     let mut total_fields = 0_usize;
 
     for resolver in resolvers {
