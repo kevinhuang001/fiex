@@ -13,7 +13,7 @@ import { notHandled, state } from './shared'
 
 type FixtureInfoField = {
   id: string
-  sectionId: string
+  subsectionId: string
   label: string
   compute: 'onOpen' | 'onDemand'
   status: 'idle' | 'ready' | 'pending' | 'unavailable' | 'error'
@@ -35,7 +35,7 @@ const trashEntryPath = (name: string) =>
   `trash://${btoa(name).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
 
 function infoField(
-  sectionId: string,
+  subsectionId: string,
   id: string,
   label: string,
   value: string | undefined,
@@ -43,7 +43,7 @@ function infoField(
 ): FixtureInfoField {
   return {
     id,
-    sectionId,
+    subsectionId,
     label,
     compute,
     status: value === undefined ? 'idle' : 'ready',
@@ -55,12 +55,11 @@ function infoSection(
   providerId: string,
   provider: string,
   title: string,
-  sectionId: string,
   fields: FixtureInfoField[],
   pluginId?: string,
 ): FixtureInfoSection {
   return {
-    id: `${providerId}::${sectionId}`,
+    id: providerId,
     title,
     providerId,
     provider,
@@ -72,35 +71,32 @@ function infoSection(
 
 function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfoSection[] {
   const ext = entry.name.split('.').pop()?.toLowerCase() || ''
-  const basic = infoSection('core.metadata', 'Fiex', '基本信息', 'basic', [
-    infoField('basic', 'name', '名称', entry.name),
-    infoField(
-      'basic',
-      'kind',
-      '种类',
-      entry.isDir ? '文件夹' : entry.isSymlink ? '符号链接' : '文件',
-    ),
-    infoField('basic', 'location', '位置', parent(entry.path)),
-    ...(!entry.isDir && ext ? [infoField('basic', 'extension', '扩展名', ext)] : []),
-    ...(!entry.isDir && entry.mime ? [infoField('basic', 'mime', 'MIME 类型', entry.mime)] : []),
-    ...(!entry.isDir
-      ? [infoField('basic', 'size', '大小', `${entry.size} B (${entry.size} bytes)`)]
-      : []),
-  ])
-  const sections = [basic]
-  sections.push(
-    infoSection('core.metadata', 'Fiex', '时间', 'times', [
-      infoField('times', 'created', '创建时间', new Date(entry.created).toLocaleString()),
-      infoField('times', 'modified', '修改时间', new Date(entry.modified).toLocaleString()),
+  const sections = [
+    infoSection('core.metadata', 'Fiex', '元数据', [
+      infoField('basic', 'name', '名称', entry.name),
+      infoField(
+        'basic',
+        'kind',
+        '种类',
+        entry.isDir ? '文件夹' : entry.isSymlink ? '符号链接' : '文件',
+      ),
+      infoField('basic', 'location', '位置', parent(entry.path)),
+      ...(!entry.isDir && ext ? [infoField('basic', 'extension', '扩展名', ext)] : []),
+      ...(!entry.isDir && entry.mime ? [infoField('basic', 'mime', 'MIME 类型', entry.mime)] : []),
+      ...(!entry.isDir
+        ? [infoField('basic', 'size', '大小', `${entry.size} B (${entry.size} bytes)`)]
+        : []),
     ]),
+  ]
+  sections[0]!.fields.push(
+    infoField('times', 'created', '创建时间', new Date(entry.created).toLocaleString()),
+    infoField('times', 'modified', '修改时间', new Date(entry.modified).toLocaleString()),
   )
   if (entry.isDir)
-    sections.push(
-      infoSection('core.metadata', 'Fiex', '目录统计', 'directoryStats', [
-        infoField('directoryStats', 'directFiles', '直接文件数', undefined, 'onDemand'),
-        infoField('directoryStats', 'recursiveFiles', '递归文件总数', undefined, 'onDemand'),
-        infoField('directoryStats', 'recursiveSize', '递归文件总大小', undefined, 'onDemand'),
-      ]),
+    sections[0]!.fields.push(
+      infoField('directoryStats', 'directFiles', '直接文件数', undefined, 'onDemand'),
+      infoField('directoryStats', 'recursiveFiles', '递归文件总数', undefined, 'onDemand'),
+      infoField('directoryStats', 'recursiveSize', '递归文件总大小', undefined, 'onDemand'),
     )
   if (!entry.isDir) {
     if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext))
@@ -109,7 +105,6 @@ function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfo
           'org.fiex.archive',
           '压缩与解压',
           '压缩包',
-          'archive',
           [
             infoField('archive', 'format', '格式', undefined, 'onDemand'),
             infoField('archive', 'compressedSize', '压缩后大小', undefined, 'onDemand'),
@@ -126,7 +121,6 @@ function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfo
           'org.fiex.office-preview',
           'Office',
           '文档',
-          'office',
           [
             infoField('office', 'format', '格式', undefined, 'onOpen'),
             infoField('office', 'paragraphs', '段落', undefined, 'onDemand'),
@@ -142,7 +136,6 @@ function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfo
           'org.fiex.data-preview',
           '数据预览',
           '数据表',
-          'data',
           [
             infoField('data', 'format', '格式', undefined, 'onOpen'),
             infoField('data', 'datasets', '数据集', undefined, 'onDemand'),
@@ -157,7 +150,6 @@ function fixtureInfoSections(entry: (typeof state.entries)[number]): FixtureInfo
         'org.fiex.checksum',
         '校验和',
         '校验和',
-        'checksum',
         [
           ...[
             ['sha256', 'SHA-256'],
@@ -314,7 +306,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'file_info_compute': {
       const session = infoSessions.get(String(a.sessionId))
       if (!session) throw new Error('Info session expired')
-      const requests = a.fields as { sectionId: string; fieldId: string }[]
+      const requests = a.fields as { subsectionId: string; fieldId: string }[]
       const entry = state.entries.find((item) => item.path === session.path)
       if (!entry) throw new Error('Info resource no longer exists')
       const updates = []
@@ -324,17 +316,17 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
             item.providerId === a.providerId &&
             item.fields.some(
               (candidate) =>
-                candidate.sectionId === request.sectionId && candidate.id === request.fieldId,
+                candidate.subsectionId === request.subsectionId && candidate.id === request.fieldId,
             ),
         )
         const field = section?.fields.find(
-          (item) => item.sectionId === request.sectionId && item.id === request.fieldId,
+          (item) => item.subsectionId === request.subsectionId && item.id === request.fieldId,
         )
         if (!field) throw new Error('Info field is not declared')
         computeFixtureField(field, entry)
         updates.push({
           providerId: String(a.providerId),
-          sectionId: field.sectionId,
+          subsectionId: field.subsectionId,
           fieldId: field.id,
           status: field.status,
           value: field.value,

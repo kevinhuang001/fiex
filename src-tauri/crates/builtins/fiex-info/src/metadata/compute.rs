@@ -21,7 +21,7 @@ pub fn compute_metadata_fields(
     let cancelled = input.cancelled.as_ref();
     let directory_fields = fields
         .iter()
-        .filter(|field| field.section_id == "directoryStats")
+        .filter(|field| field.subsection_id == "directoryStats")
         .map(|field| field.field_id.as_str())
         .collect::<HashSet<_>>();
     let directory_values = if is_local && !directory_fields.is_empty() {
@@ -32,7 +32,7 @@ pub fn compute_metadata_fields(
     fields
         .iter()
         .map(|field| {
-            let value = match (field.section_id.as_str(), field.field_id.as_str()) {
+            let value = match (field.subsection_id.as_str(), field.field_id.as_str()) {
                 ("basic", "name") => projected
                     .map(|value| value.name.clone())
                     .filter(|value| !value.is_empty())
@@ -87,7 +87,7 @@ pub fn compute_metadata_fields(
                 _ => None,
             };
             Ok(InfoFieldResult {
-                section_id: field.section_id.clone(),
+                subsection_id: field.subsection_id.clone(),
                 field_id: field.field_id.clone(),
                 unavailable: value.is_none(),
                 value,

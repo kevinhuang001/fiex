@@ -2,6 +2,7 @@
 mod connections;
 #[cfg(test)]
 mod contribution_tests;
+mod info;
 mod permissions;
 mod provider_instances;
 mod validation;

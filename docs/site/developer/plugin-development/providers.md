@@ -41,17 +41,18 @@ Trait 的具体签名和 DTO 以锁定 SDK 的 `sdk/rust/src/providers.rs`、`sd
 
 ## Info 字段：声明一次，按键计算
 
-Info 字段在 manifest 的 `extensions.info.sections` 声明，字段 ID 必须稳定。每个字段选择 `onOpen` 或 `onDemand`：
+Info Provider 在 manifest 的 `extensions.info.title` 和 `extensions.info.subsections` 中静态声明。每个 Provider 在界面只产生一个 Section；Subsection 没有可见标题，只用于资源筛选、字段顺序和计算路由。字段 ID 必须稳定，每个字段选择 `onOpen` 或 `onDemand`：
 
 ```json
 {
   "extensions": {
     "info": {
       "match": { "extensions": ["md"], "kinds": ["file"] },
-      "sections": [
+      "title": "文档信息",
+      "subsections": [
         {
           "id": "document",
-          "title": "文档信息",
+          "match": { "extensions": ["md", "markdown"] },
           "fields": [
             { "id": "title", "label": "标题", "compute": "onOpen" },
             { "id": "word-count", "label": "字数", "compute": "onDemand" }
@@ -63,7 +64,11 @@ Info 字段在 manifest 的 `extensions.info.sections` 声明，字段 ID 必须
 }
 ```
 
-`InfoProvider::compute(ctx, fields)` 收到本次要计算的精确 `InfoFieldKey` 列表。只返回这些键的结果；Core 管理字段索引、权限、缓存、面板会话和取消。不要实现旧版 `describe` 或一次性 Info 行协议。
+`InfoProvider::compute(ctx, fields)` 收到本次要计算的精确 `InfoFieldKey` 列表，每个键由 `(subsectionId, fieldId)` 组成。只返回这些键的结果；Core 管理字段索引、权限、缓存、面板会话和取消。一个 Provider 可声明多个 Subsection，字段按声明顺序平铺在同一个 Provider 标题下。未匹配的 Subsection 会在打开面板前移除；没有适用字段的 Provider 不创建空 Section。不要实现旧版 `info.describe` 或一次性 Info 行协议。
+
+同一个插件可使用 `extensions.info.providers` 注册多个命名 Provider。每个实例必须声明自己的 `id`、`title` 和 `subsections`，并可声明自己的 `match` 与 `priority`；实例不继承另一个 Provider 的字段。Core 为每个实例建立独立 Provider ID 和计算命名空间。
+
+Subsection 的 `match` 支持 `extensions`、`mimeTypes` 和 `kinds`。数组值在同一维度内按 OR 匹配；多个非空维度按 AND 匹配。扩展名会忽略大小写和开头的点，MIME 类型支持 `audio/*` 形式。匹配只读取 Core 可信资源快照中的元数据，不会为了列出字段读取远程或大型文件内容。MIME 通配符只能出现在子类型的完整 `*` 位置。
 
 ## 匹配规则与优先级
 

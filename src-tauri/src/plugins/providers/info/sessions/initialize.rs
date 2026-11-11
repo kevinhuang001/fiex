@@ -1,6 +1,5 @@
 use super::super::native;
 use super::*;
-use std::collections::HashSet;
 
 pub(crate) struct InfoComputeWork {
     pub session_id: String,
@@ -26,35 +25,54 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
     let mut providers = HashMap::new();
     let mut sections = Vec::new();
     let mut on_open = Vec::new();
+    let mut total_fields = 0;
 
     for resolver in resolvers {
-        let descriptors = match static_sections(&resolver, &resource) {
-            Ok(sections) => sections,
+        if sections.len() >= PROVIDER_LIMIT_PER_SESSION {
+            break;
+        }
+        let presentation = match presentation::static_presentation(&resolver, &resource) {
+            Ok(presentation) => presentation,
             Err(error) => {
-                sections.push(error_section(&resolver, &error));
+                sections.push(presentation::error_section(&resolver, &error));
                 continue;
             }
         };
-        if let Err(error) = validate_descriptors(&descriptors) {
-            sections.push(error_section(&resolver, &error));
+        if let Err(error) = presentation::validate_presentation(&presentation) {
+            sections.push(presentation::error_section(&resolver, &error));
             continue;
         }
-        if descriptors.is_empty() {
+        let presentation = presentation::filter_info_subsections(presentation, &resource);
+        if presentation.subsections.is_empty() {
             continue;
         }
-
-        for descriptor in &descriptors {
-            sections.push(section_view(&resolver, descriptor));
-        }
-        let fields = descriptors
+        let provider_fields = presentation
+            .subsections
             .iter()
-            .flat_map(|section| {
-                section
+            .map(|subsection| subsection.fields.len())
+            .sum::<usize>();
+        if provider_fields == 0 {
+            continue;
+        }
+        if total_fields.saturating_add(provider_fields) > FIELD_LIMIT_PER_SESSION {
+            sections.push(error_section(
+                &resolver,
+                "Info session has reached its field limit",
+            ));
+            continue;
+        }
+        total_fields += provider_fields;
+
+        let fields = presentation
+            .subsections
+            .iter()
+            .flat_map(|subsection| {
+                subsection
                     .fields
                     .iter()
                     .filter(|field| field.compute == InfoCompute::OnOpen)
                     .map(move |field| InfoFieldKey {
-                        section_id: section.id.clone(),
+                        subsection_id: subsection.id.clone(),
                         field_id: field.id.clone(),
                     })
             })
@@ -62,11 +80,12 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
         if !fields.is_empty() {
             on_open.push((resolver.id.clone(), fields));
         }
+        sections.push(presentation::section_view(&resolver, &presentation));
         providers.insert(
             resolver.id.clone(),
             ProviderState {
                 resolver,
-                sections: descriptors,
+                presentation,
             },
         );
     }
@@ -99,116 +118,4 @@ pub fn initialize_session(path: String) -> Result<OpenedInfoSession, String> {
             })
             .collect(),
     })
-}
-
-fn static_sections(
-    resolver: &Resolver,
-    resource: &crate::plugins::resource::resource_context::ResourceSnapshot,
-) -> Result<Vec<InfoSectionDescriptor>, String> {
-    match resolver.plugin.as_deref() {
-        None => native::sections(&resolver.id, resource),
-        Some(plugin) => {
-            let sections = plugin
-                .extensions
-                .get("info")
-                .and_then(|info| info.get("sections"))
-                .ok_or("Info provider has no statically registered sections")?;
-            serde_json::from_value(sections.clone())
-                .map_err(|error| format!("invalid registered Info sections: {error}"))
-        }
-    }
-}
-
-fn section_view(resolver: &Resolver, descriptor: &InfoSectionDescriptor) -> InfoSectionView {
-    let fields = descriptor
-        .fields
-        .iter()
-        .map(|field| InfoFieldView {
-            id: field.id.clone(),
-            section_id: descriptor.id.clone(),
-            label: field.label.clone(),
-            compute: field.compute,
-            status: if field.compute == InfoCompute::OnDemand {
-                "idle"
-            } else {
-                "pending"
-            }
-            .into(),
-            value: None,
-            error: None,
-        })
-        .collect();
-    InfoSectionView {
-        id: format!("{}::{}", resolver.id, descriptor.id),
-        title: descriptor.title.clone(),
-        provider_id: resolver.id.clone(),
-        provider: resolver.name.clone(),
-        source: if resolver.plugin.is_some() {
-            "plugin"
-        } else {
-            "core"
-        }
-        .into(),
-        plugin_id: resolver.plugin.as_deref().map(|plugin| plugin.id.clone()),
-        fields,
-        error: None,
-    }
-}
-
-fn error_section(resolver: &Resolver, error: &str) -> InfoSectionView {
-    InfoSectionView {
-        id: format!("{}::error", resolver.id),
-        title: resolver.name.clone(),
-        provider_id: resolver.id.clone(),
-        provider: resolver.name.clone(),
-        source: if resolver.plugin.is_some() {
-            "plugin"
-        } else {
-            "core"
-        }
-        .into(),
-        plugin_id: resolver.plugin.as_deref().map(|plugin| plugin.id.clone()),
-        fields: Vec::new(),
-        error: Some(crate::infrastructure::redact::clean(error, 1500)),
-    }
-}
-
-fn validate_descriptors(sections: &[InfoSectionDescriptor]) -> Result<(), String> {
-    if sections.len() > 64 {
-        return Err("Info provider registered too many sections".into());
-    }
-    let mut section_ids = HashSet::new();
-    let mut total_fields = 0;
-    for section in sections {
-        if !valid_id(&section.id)
-            || section.id.len() > 128
-            || section.title.trim().is_empty()
-            || section.title.len() > 1024
-            || section.fields.is_empty()
-            || !section_ids.insert(&section.id)
-        {
-            return Err("Info provider registered an invalid or duplicate section".into());
-        }
-        let mut field_ids = HashSet::new();
-        for field in &section.fields {
-            total_fields += 1;
-            if total_fields > FIELD_LIMIT
-                || !valid_id(&field.id)
-                || field.id.len() > 128
-                || field.label.trim().is_empty()
-                || field.label.len() > 1024
-                || !field_ids.insert(&field.id)
-            {
-                return Err("Info provider registered an invalid or duplicate field".into());
-            }
-        }
-    }
-    Ok(())
-}
-
-fn valid_id(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':'))
 }

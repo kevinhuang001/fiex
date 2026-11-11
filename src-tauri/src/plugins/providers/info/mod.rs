@@ -2,8 +2,8 @@
 use std::sync::OnceLock;
 
 pub use fiex_info::{
-    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
-    timestamp_text,
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoProviderPresentation,
+    InfoSubsectionDescriptor, InfoSubsectionMatch, timestamp_text,
 };
 
 mod native;

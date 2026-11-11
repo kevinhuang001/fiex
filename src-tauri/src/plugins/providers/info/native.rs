@@ -7,7 +7,7 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::{ResourceSnapshot, ResourceSnapshotProjection};
 use fiex_provider_contracts::{
-    InfoProvider, InfoSectionDescriptor, ProviderError, ProviderInvocation, ProviderKind,
+    InfoProvider, InfoProviderPresentation, ProviderError, ProviderInvocation, ProviderKind,
 };
 use fiex_runtime::ModuleDescriptor;
 use fiex_storage::CoreOwnerKey;
@@ -35,11 +35,18 @@ impl fiex_info::InfoModuleServices for NativeInfoServices {
         })
     }
 
-    fn media_descriptor_path(
+    fn media_descriptor_resource(
         &self,
         ctx: &dyn ProviderInvocation,
-    ) -> Result<std::path::PathBuf, ProviderError> {
-        Ok(NativeProviderInvocation::resource(ctx, 0)?.local.clone())
+    ) -> Result<
+        (
+            std::path::PathBuf,
+            Option<fiex_provider_contracts::ResourceMetadata>,
+        ),
+        ProviderError,
+    > {
+        let resource = NativeProviderInvocation::resource(ctx, 0)?;
+        Ok((resource.local.clone(), resource.metadata().cloned()))
     }
 
     fn media_path(
@@ -92,10 +99,10 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
     registry().get_arc(id)
 }
 
-pub(super) fn sections(
+pub(super) fn presentation(
     id: &str,
     resource: &ResourceSnapshot,
-) -> Result<Vec<InfoSectionDescriptor>, String> {
+) -> Result<InfoProviderPresentation, String> {
     let invocation = NativeProviderInvocation::new(
         "info.compute",
         serde_json::json!({}),
@@ -103,7 +110,7 @@ pub(super) fn sections(
         None,
     );
     fiex_info::InfoModule::new(Arc::new(NativeInfoServices))
-        .sections_for(id, &invocation)
+        .presentation_for(id, &invocation)
         .map_err(|error| error.to_string())
 }
 
@@ -144,19 +151,44 @@ mod tests {
                 .iter()
                 .any(|provider| provider.id == "core.media")
         );
-        let descriptions = sections("core.metadata", &directory).unwrap();
-        assert!(descriptions.iter().any(|section| section.id == "basic"));
+        let descriptions = presentation("core.metadata", &directory).unwrap();
         assert!(
             descriptions
+                .subsections
                 .iter()
-                .any(|section| section.id == "directoryStats")
+                .any(|subsection| subsection.id == "basic")
+        );
+        assert!(
+            descriptions
+                .subsections
+                .iter()
+                .any(|subsection| subsection.id == "directoryStats")
         );
         assert!(
             !descriptions
+                .subsections
                 .iter()
-                .flat_map(|section| &section.fields)
+                .flat_map(|subsection| &subsection.fields)
                 .any(|field| matches!(field.id.as_str(), "extension" | "mime" | "size"))
         );
+
+        let audio = crate::plugins::resource::resource_context::from_metadata(
+            "virtual://song.mp3",
+            crate::plugins::contracts::ResourceMetadata {
+                name: "song.mp3".into(),
+                kind: "file".into(),
+                extension: Some("mp3".into()),
+                ..Default::default()
+            },
+        );
+        assert!(
+            candidates(&audio)
+                .iter()
+                .any(|provider| provider.id == "core.media")
+        );
+        let media = presentation("core.media", &audio).unwrap();
+        assert_eq!(media.subsections.len(), 1);
+        assert_eq!(media.subsections[0].id, "audio");
     }
 
     #[test]

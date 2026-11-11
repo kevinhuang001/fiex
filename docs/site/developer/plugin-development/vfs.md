@@ -56,7 +56,7 @@ Provider 的 `write` 返回 writer 与提交回调。SDK 先创建写流，再�
 
 Core 使用 `vfs.preflight` 检查创建、重命名、删除或传输的目标是否符合 provider 自己的额外动态策略。它不是授权机制，也不能增加权限。只为你负责的操作注册 preflight handler；检查函数必须只读、可重复。最终执行前 Core 会再做一次检查。
 
-Preflight 操作类型及 phase 见 SDK 的 [VFS transfer preflight contract](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/docs/transfer-preflight.md)。远程账号 ACL 仍需在真实写操作时由服务器确认。
+Preflight 操作类型及 phase 见 SDK 的 [VFS transfer preflight contract](https://github.com/kevinhuang001/fiex-sdk/blob/7df42e185f90d6a04bede82a9cfef0be866e15c2/docs/transfer-preflight.md)。远程账号 ACL 仍需在真实写操作时由服务器确认。
 
 ## 测试清单
 

@@ -168,7 +168,14 @@ test('Info computes only the on-demand field the user selects', async ({ page })
 
   const dialog = page.getByRole('dialog', { name: '显示简介' })
   await expect(dialog).toContainText('Notes.md')
-  await expect(dialog.locator('.file-info-group').filter({ hasText: '核心信息' })).toHaveCount(1)
+  const sections = dialog.locator('.file-info-provider-section')
+  await expect(sections).toHaveCount(2)
+  await expect(
+    dialog.locator('.file-info-provider-title').filter({ hasText: '元数据' }),
+  ).toHaveCount(1)
+  await expect(
+    dialog.locator('.file-info-provider-title').filter({ hasText: '校验和' }),
+  ).toHaveCount(1)
   const sha256 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-256' })
   const sha512 = dialog.locator('.file-info-row').filter({ hasText: 'SHA-512' })
   await expect(sha256).toContainText('尚未计算')

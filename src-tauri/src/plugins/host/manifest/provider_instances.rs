@@ -22,7 +22,7 @@ pub(super) fn validate(feature: &str, contribution: &Map<String, Value>) -> Resu
             .ok_or_else(|| format!("{feature} provider must be an object"))?;
         if item.keys().any(|key| {
             !matches!(key.as_str(), "id" | "match" | "priority")
-                && !(feature == "info" && key == "sections")
+                && !(feature == "info" && matches!(key.as_str(), "title" | "subsections"))
         }) {
             return Err(format!(
                 "{feature} provider uses an unsupported descriptor field"
@@ -38,6 +38,7 @@ pub(super) fn validate(feature: &str, contribution: &Map<String, Value>) -> Resu
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b':'))
             || id.starts_with("core:")
+            || id.starts_with("core.")
             || !ids.insert(id)
         {
             return Err(format!("{feature} provider has an invalid or duplicate id"));
@@ -51,6 +52,20 @@ pub(super) fn validate(feature: &str, contribution: &Map<String, Value>) -> Resu
             }
         }
         crate::plugins::match_rules::validate(item.get("match"), false, feature == "contextMenus")?;
+        if feature == "info" {
+            if !item.contains_key("match") || !item.contains_key("priority") {
+                return Err(
+                    "each named Info provider must define its own match and priority".into(),
+                );
+            }
+            if !item.get("title").is_some_and(Value::is_string)
+                || !item.get("subsections").is_some_and(Value::is_array)
+            {
+                return Err(
+                    "each named Info provider must define its own title and subsections".into(),
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -64,6 +79,7 @@ mod tests {
         for providers in [
             json!([{"id":"p"},{"id":"p"}]),
             json!([{"id":"core:metadata"}]),
+            json!([{"id":"core.metadata"}]),
             json!([{"id":"a","match":{"kinds":["vfs"]}}]),
         ] {
             assert!(validate("info", json!({"providers":providers}).as_object().unwrap()).is_err());
@@ -72,8 +88,8 @@ mod tests {
             validate(
                 "info",
                 json!({"providers":[
-                    {"id":"metadata","priority":100},
-                    {"id":"media","match":{"kinds":["file"]}}
+                    {"id":"metadata","title":"Metadata","subsections":[{"id":"basic","fields":[{"id":"name","label":"Name","compute":"onOpen"}]}],"priority":100,"match":{}},
+                    {"id":"media","title":"Media","subsections":[{"id":"audio","fields":[{"id":"duration","label":"Duration","compute":"onDemand"}]}],"priority":100,"match":{"kinds":["file"]}}
                 ]})
                 .as_object()
                 .unwrap()

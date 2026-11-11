@@ -1,5 +1,8 @@
 //! Core-owned Info sessions, field caching and task cancellation.
-use super::{InfoCompute, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor};
+use super::{
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoProviderPresentation,
+    InfoSubsectionDescriptor, InfoSubsectionMatch,
+};
 use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
 use serde::Serialize;
 use std::{
@@ -14,19 +17,24 @@ use std::{
 mod cache;
 mod compute;
 mod initialize;
+mod presentation;
+#[cfg(test)]
+mod presentation_tests;
 pub(super) use cache::{ComputePermit, cache_core_results, read_core_cache};
 pub(crate) use compute::{ComputeTrigger, compute_fields, compute_session};
 pub(crate) use initialize::initialize_session;
 
 const SESSION_TTL: Duration = Duration::from_secs(900);
 const SESSION_LIMIT: usize = 128;
+const PROVIDER_LIMIT_PER_SESSION: usize = 128;
+const FIELD_LIMIT_PER_SESSION: usize = 1024;
 pub(super) const FIELD_LIMIT: usize = 64;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoFieldView {
     pub id: String,
-    pub section_id: String,
+    pub subsection_id: String,
     pub label: String,
     pub compute: InfoCompute,
     pub status: String,
@@ -62,7 +70,7 @@ pub struct InfoOpenResult {
 #[serde(rename_all = "camelCase")]
 pub struct InfoFieldUpdate {
     pub provider_id: String,
-    pub section_id: String,
+    pub subsection_id: String,
     pub field_id: String,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +90,12 @@ pub struct InfoFieldDelta {
 #[derive(Clone)]
 pub(super) struct ProviderState {
     pub resolver: Resolver,
-    pub sections: Vec<InfoSectionDescriptor>,
+    pub presentation: InfoProviderPresentation,
+}
+
+pub(super) struct ActiveTask {
+    pub provider_id: String,
+    pub cancelled: Arc<AtomicBool>,
 }
 
 pub(super) struct Session {
@@ -91,7 +104,7 @@ pub(super) struct Session {
     pub opened: Instant,
     pub sections: Vec<InfoSectionView>,
     pub providers: HashMap<String, ProviderState>,
-    pub tasks: HashMap<String, Arc<AtomicBool>>,
+    pub tasks: HashMap<String, ActiveTask>,
     pub revision: u64,
 }
 
@@ -129,8 +142,8 @@ fn expire_sessions(sessions: &mut HashMap<String, Session>) {
         if session.opened.elapsed() < SESSION_TTL {
             true
         } else {
-            for cancelled in session.tasks.values() {
-                cancelled.store(true, Ordering::Release);
+            for task in session.tasks.values() {
+                task.cancelled.store(true, Ordering::Release);
             }
             false
         }
@@ -144,8 +157,8 @@ fn expire_sessions(sessions: &mut HashMap<String, Session>) {
             break;
         };
         if let Some(session) = sessions.remove(&oldest) {
-            for cancelled in session.tasks.values() {
-                cancelled.store(true, Ordering::Release);
+            for task in session.tasks.values() {
+                task.cancelled.store(true, Ordering::Release);
             }
         }
     }
@@ -179,12 +192,12 @@ pub(super) fn update_fields(
     {
         for field in &mut section.fields {
             let Some(request) = requested.iter().find(|request| {
-                request.section_id == field.section_id && request.field_id == field.id
+                request.subsection_id == field.subsection_id && request.field_id == field.id
             }) else {
                 continue;
             };
             if let Some(result) = results.iter().find(|result| {
-                result.section_id == request.section_id && result.field_id == request.field_id
+                result.subsection_id == request.subsection_id && result.field_id == request.field_id
             }) {
                 field.status = if result.unavailable {
                     "unavailable"
@@ -201,7 +214,7 @@ pub(super) fn update_fields(
             }
             updates.push(InfoFieldUpdate {
                 provider_id: provider_id.to_owned(),
-                section_id: field.section_id.clone(),
+                subsection_id: field.subsection_id.clone(),
                 field_id: field.id.clone(),
                 status: field.status.clone(),
                 value: field.value.clone(),
@@ -234,7 +247,7 @@ pub(crate) fn cancel_session_task(session_id: &str, task_id: &str) {
             .get(session_id)
             .and_then(|session| session.tasks.get(task_id))
     {
-        cancelled.store(true, Ordering::Release);
+        cancelled.cancelled.store(true, Ordering::Release);
     }
 }
 
@@ -242,8 +255,8 @@ pub(crate) fn close_session(session_id: &str) {
     if let Ok(mut store) = sessions().lock()
         && let Some(session) = store.remove(session_id)
     {
-        for cancelled in session.tasks.values() {
-            cancelled.store(true, Ordering::Release);
+        for task in session.tasks.values() {
+            task.cancelled.store(true, Ordering::Release);
         }
     }
 }
@@ -251,15 +264,29 @@ pub(crate) fn close_session(session_id: &str) {
 pub(crate) fn forget_plugin(plugin_id: &str) {
     if let Ok(mut store) = sessions().lock() {
         for session in store.values_mut() {
+            let removed = session
+                .providers
+                .iter()
+                .filter(|(_, provider)| {
+                    provider
+                        .resolver
+                        .plugin
+                        .as_deref()
+                        .is_some_and(|plugin| plugin.id == plugin_id)
+                })
+                .map(|(id, _)| id.clone())
+                .collect::<std::collections::HashSet<_>>();
             session
                 .sections
-                .retain(|section| section.plugin_id.as_deref() != Some(plugin_id));
-            session.providers.retain(|_, provider| {
-                provider
-                    .resolver
-                    .plugin
-                    .as_deref()
-                    .is_none_or(|plugin| plugin.id != plugin_id)
+                .retain(|section| !removed.contains(&section.provider_id));
+            session.providers.retain(|id, _| !removed.contains(id));
+            session.tasks.retain(|_, task| {
+                if removed.contains(&task.provider_id) {
+                    task.cancelled.store(true, Ordering::Release);
+                    false
+                } else {
+                    true
+                }
             });
         }
     }

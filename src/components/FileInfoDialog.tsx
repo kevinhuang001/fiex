@@ -6,13 +6,13 @@ import { FileInfoSections } from './FileInfoSections'
 import { tagHex } from '@/lib/tags'
 import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
-import { parseInfoFieldDelta } from '@/lib/ipcValidation'
+import { parseInfoFieldDelta, shouldApplyInfoDelta } from '@/lib/ipcValidation'
 import type { Entry } from '@/lib/types'
 import { Channel } from '@tauri-apps/api/core'
 
 export type InfoField = {
   id: string
-  sectionId: string
+  subsectionId: string
   label: string
   compute: 'onOpen' | 'onDemand'
   status: 'idle' | 'pending' | 'ready' | 'unavailable' | 'error'
@@ -31,7 +31,7 @@ export type InfoSection = {
 }
 type InfoFieldUpdate = {
   providerId: string
-  sectionId: string
+  subsectionId: string
   fieldId: string
   status: InfoField['status']
   value?: string
@@ -44,14 +44,14 @@ function mergeFieldUpdates(sections: InfoSection[], updates: InfoFieldUpdate[]) 
   if (!updates.length) return sections
   const byKey = new Map(
     updates.map((update) => [
-      `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
+      `${update.providerId}\u0000${update.subsectionId}\u0000${update.fieldId}`,
       update,
     ]),
   )
   return sections.map((section) => ({
     ...section,
     fields: section.fields.map((field) => {
-      const update = byKey.get(`${section.providerId}\u0000${field.sectionId}\u0000${field.id}`)
+      const update = byKey.get(`${section.providerId}\u0000${field.subsectionId}\u0000${field.id}`)
       return update
         ? { ...field, status: update.status, value: update.value, error: update.error }
         : field
@@ -65,8 +65,11 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const [copied, setCopied] = useState('')
   const copiedTimer = useRef<number | null>(null)
   const sessionId = useRef<string | null>(null)
+  const revision = useRef(0)
   const tasks = useRef(new Set<string>())
-  const earlyUpdates = useRef(new Map<string, InfoFieldUpdate>())
+  const earlyUpdates = useRef(
+    new Map<string, { revision: number; updates: Map<string, InfoFieldUpdate> }>(),
+  )
 
   useEffect(
     () => () => {
@@ -79,6 +82,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     if (!info) return
     let alive = true
     let activeSession: string | null = null
+    revision.current = 0
     setSections([])
     setLoading(true)
     earlyUpdates.current.clear()
@@ -93,12 +97,21 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
           reportError(cause, 'file-info:ipc')
           return
         }
-        for (const update of delta.updates) {
-          earlyUpdates.current.set(
-            `${update.providerId}\u0000${update.sectionId}\u0000${update.fieldId}`,
-            update,
-          )
+        if (activeSession === null) {
+          const queued = earlyUpdates.current.get(delta.sessionId)
+          if (queued && delta.revision <= queued.revision) return
+          const updates = new Map(queued?.updates)
+          for (const update of delta.updates) {
+            updates.set(
+              `${update.providerId}\u0000${update.subsectionId}\u0000${update.fieldId}`,
+              update,
+            )
+          }
+          earlyUpdates.current.set(delta.sessionId, { revision: delta.revision, updates })
+          return
         }
+        if (!shouldApplyInfoDelta(delta, activeSession, revision.current)) return
+        revision.current = delta.revision
         setSections((previous) => mergeFieldUpdates(previous, delta.updates))
       }
     const open = async () => {
@@ -113,8 +126,13 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
           return
         }
         sessionId.current = activeSession
+        const queued = earlyUpdates.current.get(activeSession)
+        earlyUpdates.current.clear()
         if (alive && Array.isArray(result.sections)) {
-          setSections(mergeFieldUpdates(result.sections, [...earlyUpdates.current.values()]))
+          if (queued) revision.current = queued.revision
+          setSections(
+            mergeFieldUpdates(result.sections, queued ? [...queued.updates.values()] : []),
+          )
         }
       } catch (cause) {
         if (alive) reportError(cause, 'file-info')
@@ -148,7 +166,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
           : {
               ...item,
               fields: item.fields.map((candidate) =>
-                candidate.id === field.id && candidate.sectionId === field.sectionId
+                candidate.id === field.id && candidate.subsectionId === field.subsectionId
                   ? { ...candidate, status: 'pending', error: undefined }
                   : candidate,
               ),
@@ -156,14 +174,21 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
       ),
     )
     try {
-      const result = await call('file_info_compute', {
-        sessionId: activeSession,
-        providerId: section.providerId,
-        fields: [{ sectionId: field.sectionId, fieldId: field.id }],
-        taskId,
-      })
-      if (sessionId.current === activeSession && result.sessionId === activeSession)
+      const result = parseInfoFieldDelta(
+        await call('file_info_compute', {
+          sessionId: activeSession,
+          providerId: section.providerId,
+          fields: [{ subsectionId: field.subsectionId, fieldId: field.id }],
+          taskId,
+        }),
+      )
+      if (
+        sessionId.current === activeSession &&
+        shouldApplyInfoDelta(result, activeSession, revision.current)
+      ) {
+        revision.current = result.revision
         setSections((previous) => mergeFieldUpdates(previous, result.updates))
+      }
     } catch (cause) {
       if (sessionId.current === activeSession) {
         setSections((previous) =>
@@ -173,7 +198,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
               : {
                   ...item,
                   fields: item.fields.map((candidate) =>
-                    candidate.id === field.id && candidate.sectionId === field.sectionId
+                    candidate.id === field.id && candidate.subsectionId === field.subsectionId
                       ? { ...candidate, status: 'error', error: String(cause) }
                       : candidate,
                   ),

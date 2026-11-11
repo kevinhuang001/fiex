@@ -1,5 +1,4 @@
 use super::*;
-use fiex_provider_contracts::{InfoCompute, InfoFieldDescriptor, InfoSectionDescriptor};
 use std::collections::HashSet;
 use std::path::{Component, Path};
 
@@ -124,7 +123,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         let object = item
             .as_object()
             .ok_or_else(|| format!("extensions.{key} must be an object"))?;
-        if object.contains_key("title") {
+        if key == "preview" && object.contains_key("title") {
             return Err(format!(
                 "extensions.{key}.title is removed; the plugin name is used"
             ));
@@ -134,7 +133,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         }
         if key == "info" && object.contains_key("command") {
             return Err(
-                "extensions.info.command is removed; info.compute is fixed and fields are declared in sections"
+                "extensions.info.command is removed; info.compute is fixed and fields are declared in subsections"
                     .into(),
             );
         }
@@ -142,11 +141,11 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             if object.keys().any(|field| {
                 !matches!(
                     field.as_str(),
-                    "match" | "priority" | "sections" | "providers"
+                    "match" | "priority" | "title" | "subsections" | "providers"
                 )
             }) {
                 return Err(
-                    "extensions.info accepts only match, priority, sections and providers".into(),
+                    "extensions.info accepts only match, priority, title, subsections and providers".into(),
                 );
             }
             if let Some(priority) = object.get("priority") {
@@ -160,7 +159,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         }
         crate::plugins::match_rules::validate(object.get("match"), false, false)?;
         if key == "info" {
-            validate_info_registration(object)?;
+            super::info::validate_registration(object)?;
         }
         if key == "preview"
             && let Some(loading) = object.get("loading")
@@ -307,107 +306,4 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-fn validate_info_registration(object: &serde_json::Map<String, Value>) -> Result<(), String> {
-    if let Some(sections) = object.get("sections") {
-        validate_info_sections(sections)?;
-    }
-    if let Some(providers) = object.get("providers").and_then(Value::as_array) {
-        for provider in providers {
-            let provider = provider
-                .as_object()
-                .ok_or("extensions.info.providers entries must be objects")?;
-            let sections = provider
-                .get("sections")
-                .or_else(|| object.get("sections"))
-                .ok_or("each Info provider must declare non-empty sections")?;
-            validate_info_sections(sections)?;
-        }
-    } else if object.get("sections").is_none() {
-        return Err("extensions.info.sections must declare non-empty sections".into());
-    }
-    Ok(())
-}
-
-fn validate_info_sections(value: &Value) -> Result<(), String> {
-    const MAX_INFO_FIELDS: usize = 64;
-    let sections = value
-        .as_array()
-        .filter(|sections| !sections.is_empty() && sections.len() <= 64)
-        .ok_or("Info sections must contain 1..64 entries")?;
-    let mut section_ids = HashSet::new();
-    let mut field_count = 0_usize;
-    for value in sections {
-        let section = value
-            .as_object()
-            .ok_or("Info sections must contain objects")?;
-        if section
-            .keys()
-            .any(|key| !matches!(key.as_str(), "id" | "title" | "fields"))
-        {
-            return Err("Info section accepts only id, title and fields".into());
-        }
-        let id = section
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let title = section
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        if !valid_info_id(id)
-            || id.len() > 128
-            || title.trim().is_empty()
-            || title.len() > 1024
-            || !section_ids.insert(id)
-        {
-            return Err("Info section has an invalid or duplicate id/title".into());
-        }
-        let fields = section
-            .get("fields")
-            .and_then(Value::as_array)
-            .filter(|fields| !fields.is_empty() && fields.len() <= MAX_INFO_FIELDS)
-            .ok_or("Info section fields must contain 1..64 entries")?;
-        field_count = field_count.saturating_add(fields.len());
-        if field_count > MAX_INFO_FIELDS {
-            return Err("Info provider may declare at most 64 fields".into());
-        }
-        let mut field_ids = HashSet::new();
-        for value in fields {
-            let field = value
-                .as_object()
-                .ok_or("Info fields must contain objects")?;
-            if field
-                .keys()
-                .any(|key| !matches!(key.as_str(), "id" | "label" | "compute"))
-            {
-                return Err("Info fields accept only id, label and compute".into());
-            }
-            let descriptor: InfoFieldDescriptor = serde_json::from_value(value.clone())
-                .map_err(|error| format!("invalid Info field descriptor: {error}"))?;
-            if !valid_info_id(&descriptor.id)
-                || descriptor.id.len() > 128
-                || descriptor.label.trim().is_empty()
-                || descriptor.label.len() > 1024
-                || !field_ids.insert(descriptor.id)
-                || !matches!(
-                    descriptor.compute,
-                    InfoCompute::OnOpen | InfoCompute::OnDemand
-                )
-            {
-                return Err("Info field has an invalid or duplicate id/label/compute".into());
-            }
-        }
-    }
-    let _: Vec<InfoSectionDescriptor> = serde_json::from_value(value.clone())
-        .map_err(|error| format!("invalid Info section descriptor: {error}"))?;
-    Ok(())
-}
-
-fn valid_info_id(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':'))
 }

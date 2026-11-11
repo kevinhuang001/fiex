@@ -173,8 +173,8 @@ fn info_compute_rejects_invalid_field_results() {
         validate_result(
             "info.compute",
             &json!({"fields":[
-                {"sectionId":"basic","fieldId":"size","value":"1 KiB"},
-                {"sectionId":"basic","fieldId":"size","value":"2 KiB"}
+                {"subsectionId":"basic","fieldId":"size","value":"1 KiB"},
+                {"subsectionId":"basic","fieldId":"size","value":"2 KiB"}
             ]})
         )
         .is_err()
@@ -198,7 +198,6 @@ fn connection_validation_rejects_untyped_or_unknown_fields() {
 fn fixed_events_are_core_owned_custom_methods_remain_available() {
     for method in [
         "info.compute",
-        "info.describe",
         "preview.open",
         "contextMenu.resolve",
         "search.query",
