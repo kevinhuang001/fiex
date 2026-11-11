@@ -1,5 +1,5 @@
 use super::super::{Context, Selection};
-use super::{item, new_file::new_file_items};
+use super::{availability::can_open, item, new_file::new_file_items};
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     ContextMenuProvider, FsOperation, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
@@ -42,17 +42,6 @@ fn can_duplicate_to_directory(selection: &Selection<'_>) -> bool {
     let needs_file = selection.entries.iter().any(|entry| !entry.is_dir);
     (!needs_folder || selection.directory_capabilities.create)
         && (!needs_file || selection.directory_capabilities.write)
-}
-
-fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-    !selection.paths.is_empty()
-        && selection.paths.iter().enumerate().all(|(index, path)| {
-            let Some(entry) = selection.entries.get(index) else {
-                return false;
-            };
-            crate::core::volumes::native_vfs::open_policy(path, entry)
-                .unwrap_or_else(|| entry.is_dir || capabilities.read || entry.link_target.is_some())
-        })
 }
 
 impl AtomicMenuAction {
@@ -298,31 +287,5 @@ mod tests {
                 expected
             );
         }
-    }
-
-    #[test]
-    fn new_file_menu_resolves_one_level_at_a_time() {
-        let root = new_file_items(None);
-        assert_eq!(root.len(), 1);
-        assert_eq!(root[0].id, "newFile");
-        assert_eq!(root[0].kind, fiex_provider_contracts::MenuItemKind::Submenu);
-
-        let children = new_file_items(Some("newFile"));
-        assert_eq!(
-            children
-                .iter()
-                .map(|item| item.id.as_str())
-                .collect::<Vec<_>>(),
-            ["newFile.empty", "newFile.office"]
-        );
-        let office = new_file_items(Some("newFile.office"));
-        assert_eq!(
-            office
-                .iter()
-                .map(|item| item.id.as_str())
-                .collect::<Vec<_>>(),
-            ["newFile.docx", "newFile.xlsx", "newFile.pptx"]
-        );
-        assert!(new_file_items(Some("unknown")).is_empty());
     }
 }

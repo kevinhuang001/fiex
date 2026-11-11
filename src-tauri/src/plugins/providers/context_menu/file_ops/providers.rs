@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use groups::AtomicMenuAction;
 
+mod availability;
 mod groups;
 mod new_file;
 
