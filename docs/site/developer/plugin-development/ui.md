@@ -47,7 +47,7 @@ await fiex.clipboard.writeText('已复制')
 await fiex.navigation.open('fiex://mount/example/')
 ```
 
-具体 API 以当前 Core 锁定的 [UI SDK 源码](https://github.com/kevinhuang001/fiex-sdk/tree/24664a69bb411d0b2608461ae08a588f28cbe385/ui)为准。常用能力包括：
+具体 API 以当前 Core 锁定的 [UI SDK 源码](https://github.com/kevinhuang001/fiex-sdk/tree/7df42e185f90d6a04bede82a9cfef0be866e15c2/ui)为准。常用能力包括：
 
 - `context.get()`：读取当前面板/预览上下文、贡献 ID、选择和主题信息。
 - `plugin.invoke(...)`：向 native 插件请求自定义业务方法。
@@ -78,5 +78,5 @@ await fiex.navigation.open('fiex://mount/example/')
 ## 参考
 
 - [Hello UI Bridge 示例](https://github.com/kevinhuang001/fiex-official-plugins/tree/main/example/hello/ui)
-- [UI SDK API](https://github.com/kevinhuang001/fiex-sdk/tree/24664a69bb411d0b2608461ae08a588f28cbe385/ui)
-- [UI bridge IPC 方法审计](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/docs/ipc-audit.md)
+- [UI SDK API](https://github.com/kevinhuang001/fiex-sdk/tree/7df42e185f90d6a04bede82a9cfef0be866e15c2/ui)
+- [UI bridge IPC 方法审计](https://github.com/kevinhuang001/fiex-sdk/blob/7df42e185f90d6a04bede82a9cfef0be866e15c2/docs/ipc-audit.md)

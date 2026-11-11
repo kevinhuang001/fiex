@@ -28,4 +28,4 @@ Fiex 内置支持常见图片、UTF-8 文本/代码和 PDF 预览。部分音视
 
 ## 插件提供的搜索与预览
 
-安装并启用插件后，插件可能增加新的搜索来源或文件预览方式。Office 插件可预览 Word、Excel 和 PowerPoint 文件；在受支持的 `.docx`、`.xlsx` 或 `.pptx` 文件上，还可从右键菜单的“Office → 转换为 PDF”导出同目录 PDF。插件读取文件前仍需通过 Fiex 的权限检查；若你撤销了对应权限，下一次使用该能力时会重新提示。详见[插件与远程连接](/user-guide/plugins-and-connections)。
+安装并启用插件后，插件可能增加新的搜索来源或文件预览方式。Office 插件可预览 Word、Excel 和 PowerPoint 文件；在受支持的 `.docx`、`.xlsx` 或 `.pptx` 文件上，还可从右键菜单的“Office → 转换为 PDF”导出同目录 PDF。转换在本机由 Office 插件完成，任务成功后当前目录会刷新并显示 PDF。插件读取文件前仍需通过 Fiex 的权限检查；若你撤销了对应权限，下一次使用该能力时会重新提示。详见[插件与远程连接](/user-guide/plugins-and-connections)。

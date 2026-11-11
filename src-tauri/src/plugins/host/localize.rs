@@ -49,7 +49,7 @@ mod tests {
             "locales":{"en":{"工具":"Tools","名称":"Name","校验和":"Checksum","算法":"Algorithm"}},
             "extensions":{"settings":[{"id":"名称","label":"名称","defaultValue":"名称"}],"info":{
                 "match":{"extensions":["名称"]},
-                "sections":[{"id":"checksum","title":"校验和","fields":[
+                "title":"校验和","subsections":[{"id":"checksum","fields":[
                     {"id":"sha256","label":"算法","compute":"onDemand"}
                 ]}]
             }}
@@ -60,12 +60,9 @@ mod tests {
         assert_eq!(localized.extensions["settings"][0]["label"], "Name");
         assert_eq!(localized.extensions["settings"][0]["id"], "名称");
         assert_eq!(localized.extensions["settings"][0]["defaultValue"], "名称");
+        assert_eq!(localized.extensions["info"]["title"], "Checksum");
         assert_eq!(
-            localized.extensions["info"]["sections"][0]["title"],
-            "Checksum"
-        );
-        assert_eq!(
-            localized.extensions["info"]["sections"][0]["fields"][0]["label"],
+            localized.extensions["info"]["subsections"][0]["fields"][0]["label"],
             "Algorithm"
         );
         assert_eq!(

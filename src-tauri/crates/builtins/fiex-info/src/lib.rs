@@ -5,17 +5,19 @@
 //! caching remain in the application runtime.
 
 pub use fiex_provider_contracts::{
-    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
-    ResourceMetadata,
+    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoProviderPresentation,
+    InfoSubsectionDescriptor, InfoSubsectionMatch, ResourceMetadata,
 };
 
 pub const MODULE_ID: &str = "core:info";
 
 mod media;
+mod media_descriptors;
 mod metadata;
 mod providers;
 
-pub use media::{compute_media_fields, duration_text, media_descriptors};
+pub use media::{compute_media_fields, duration_text};
+pub use media_descriptors::media_descriptors;
 pub use metadata::{compute_metadata_fields, metadata_descriptors, timestamp_text};
 pub use providers::{InfoMetadataInput, InfoModule, InfoModuleServices, InfoProviderRegistration};
 
@@ -74,18 +76,75 @@ mod tests {
             size: Some(3),
             ..Default::default()
         };
-        let sections = metadata_descriptors(
+        let presentation = metadata_descriptors(
             "/tmp/notes.txt",
             true,
             None,
             Some(&projected),
             &localization(),
         );
-        let basic = sections
+        let basic = presentation
+            .subsections
             .iter()
-            .find(|section| section.id == "basic")
+            .find(|subsection| subsection.id == "basic")
             .unwrap();
         assert!(basic.fields.iter().any(|field| field.id == "size"));
+    }
+
+    #[test]
+    fn media_presentations_select_only_applicable_static_fields() {
+        let audio = media_descriptors(
+            std::path::Path::new("/virtual/song"),
+            Some(&ResourceMetadata {
+                name: "song.mp3".into(),
+                kind: "file".into(),
+                extension: Some("MP3".into()),
+                ..Default::default()
+            }),
+            &localization(),
+        );
+        assert_eq!(audio.title, "媒体");
+        assert_eq!(audio.subsections.len(), 1);
+        assert_eq!(audio.subsections[0].id, "audio");
+        assert!(
+            audio.subsections[0]
+                .fields
+                .iter()
+                .any(|field| field.id == "duration")
+        );
+
+        let video = media_descriptors(
+            std::path::Path::new("/virtual/movie"),
+            Some(&ResourceMetadata {
+                name: "movie.mp4".into(),
+                kind: "file".into(),
+                mime: Some("video/mp4".into()),
+                extension: Some("mp4".into()),
+                ..Default::default()
+            }),
+            &localization(),
+        );
+        assert_eq!(video.subsections.len(), 1);
+        assert_eq!(video.subsections[0].id, "video");
+        assert!(
+            video.subsections[0]
+                .fields
+                .iter()
+                .any(|field| field.id == "video")
+        );
+
+        let mime_only = media_descriptors(
+            std::path::Path::new("/virtual/unnamed"),
+            Some(&ResourceMetadata {
+                name: "unnamed".into(),
+                kind: "file".into(),
+                mime: Some("AUDIO/MPEG".into()),
+                ..Default::default()
+            }),
+            &localization(),
+        );
+        assert_eq!(mime_only.subsections.len(), 1);
+        assert_eq!(mime_only.subsections[0].id, "audio");
     }
 
     #[test]
@@ -110,15 +169,15 @@ mod tests {
         };
         let fields = [
             InfoFieldKey {
-                section_id: "directoryStats".into(),
+                subsection_id: "directoryStats".into(),
                 field_id: "directFiles".into(),
             },
             InfoFieldKey {
-                section_id: "directoryStats".into(),
+                subsection_id: "directoryStats".into(),
                 field_id: "recursiveFiles".into(),
             },
             InfoFieldKey {
-                section_id: "directoryStats".into(),
+                subsection_id: "directoryStats".into(),
                 field_id: "recursiveSize".into(),
             },
         ];

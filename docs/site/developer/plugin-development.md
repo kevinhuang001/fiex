@@ -1,6 +1,6 @@
 # 插件开发手册
 
-本手册带你从可编译的 Rust 进程开始，逐步注册扩展、处理文件、加入界面并制作可安装包。协议以 Core 当前锁定的 SDK 子模块为准；当前基线使用 manifest schema 2 和 native IPC protocol 7.0。升级协议时请同时检查 Core、SDK 和插件仓库。
+本手册带你从可编译的 Rust 进程开始，逐步注册扩展、处理文件、加入界面并制作可安装包。Info Provider 单 Section 改动将 native IPC protocol 提升到 8.0；协议以 Core 锁定的 SDK 子模块为准，升级时请同时检查 Core、SDK 和插件仓库。
 
 ## 推荐路线
 
@@ -22,20 +22,20 @@ Native 插件是由 Fiex 管理的独立进程。Core 启动进程并通过标�
 
 官方可编译样例位于 [`fiex-official-plugins/example/hello`](https://github.com/kevinhuang001/fiex-official-plugins/tree/main/example/hello)。它覆盖连接、VFS、Info、Preview、Decorations、Context Menu、Search、Hooks、Toolbar 和 UI。初学时建议先删除不用的示例 provider，再添加你需要的能力，避免复制无关权限。
 
-当前 Core 锁定的 Rust API 以 [SDK providers 源码](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/rust/src/providers.rs)和 [protocol-7 contract](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/docs/protocol-7.md)为准。其他仓库的 `main` 可能已经领先于 Core 锁定版本。
+当前 Core 锁定的 Rust API 以 [SDK providers 源码](https://github.com/kevinhuang001/fiex-sdk/blob/7df42e185f90d6a04bede82a9cfef0be866e15c2/rust/src/providers.rs)和 [protocol-8 contract](https://github.com/kevinhuang001/fiex-sdk/blob/7df42e185f90d6a04bede82a9cfef0be866e15c2/docs/protocol-8.md)为准。其他仓库的 `main` 可能已经领先于 Core 锁定版本。
 
 ## 何时选哪种扩展
 
-| 目标                         | 入口                                                                               |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| 用户保存连接后浏览服务端文件 | `extensions.connections` + `extensions.vfs` + `ConnectionProvider` + `VfsProvider` |
-| 在文件信息面板增加字段       | Manifest 静态声明 `extensions.info.sections` + `InfoProvider::compute`             |
-| 预览一种文件格式             | `extensions.preview` + `PreviewProvider`，返回包内预览页面或标准预览视图           |
-| 添加文件右键菜单             | `extensions.contextMenus` + `ContextMenuProvider`                                  |
-| 添加连接自身的右键菜单       | `extensions.connectionContextMenus` + 对应 provider                                |
-| 向搜索合并结果               | `extensions.search` + `SearchProvider`                                             |
-| 在打开文件前/后响应          | `extensions.hooks` + `HookProvider`                                                |
-| 增加工具栏按钮或面板         | `extensions.toolbar` + `ToolbarProvider`                                           |
-| 给文件行/列补充动态信息      | `extensions.decorations` + `DecorationProvider`                                    |
+| 目标                         | 入口                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| 用户保存连接后浏览服务端文件 | `extensions.connections` + `extensions.vfs` + `ConnectionProvider` + `VfsProvider`  |
+| 在文件信息面板增加字段       | Manifest 静态声明 `extensions.info.title` / `subsections` + `InfoProvider::compute` |
+| 预览一种文件格式             | `extensions.preview` + `PreviewProvider`，返回包内预览页面或标准预览视图            |
+| 添加文件右键菜单             | `extensions.contextMenus` + `ContextMenuProvider`                                   |
+| 添加连接自身的右键菜单       | `extensions.connectionContextMenus` + 对应 provider                                 |
+| 向搜索合并结果               | `extensions.search` + `SearchProvider`                                              |
+| 在打开文件前/后响应          | `extensions.hooks` + `HookProvider`                                                 |
+| 增加工具栏按钮或面板         | `extensions.toolbar` + `ToolbarProvider`                                            |
+| 给文件行/列补充动态信息      | `extensions.decorations` + `DecorationProvider`                                     |
 
 注册扩展只表示该 provider 有资格收到对应事件。调用时仍会受用户授权、资源范围、匹配条件和 Core 的能力校验约束。

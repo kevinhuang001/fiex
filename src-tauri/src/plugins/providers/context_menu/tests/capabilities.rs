@@ -130,13 +130,10 @@ fn blank_canvas_actions_use_independent_capabilities_and_view_excludes() {
         "newFolder"
     );
     let new_file = action_items(&local, "builtin:new-file");
+    assert_eq!(new_file.len(), 1);
     assert_eq!(new_file[0]["id"], "newFile");
     assert_eq!(new_file[0]["kind"], "submenu");
-    assert_eq!(new_file[1]["id"], "newFile.empty");
-    assert_eq!(new_file[2]["id"], "newFile.office");
-    assert_eq!(new_file[3]["id"], "newFile.docx");
-    assert_eq!(new_file[4]["id"], "newFile.xlsx");
-    assert_eq!(new_file[5]["id"], "newFile.pptx");
+    assert!(super::root_menu_valid(&serde_json::json!({"items":new_file})).is_ok());
 
     let apps = super::builtin::Context::for_test_caps(
         "applications://",

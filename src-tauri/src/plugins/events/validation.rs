@@ -27,11 +27,11 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
             .map_err(|error| format!("invalid Info field results: {error}"))?;
             let mut ids = std::collections::HashSet::new();
             for field in decoded {
-                if !valid_info_id(&field.section_id)
-                    || field.section_id.len() > 128
+                if !valid_info_id(&field.subsection_id)
+                    || field.subsection_id.len() > 128
                     || !valid_info_id(&field.field_id)
                     || field.field_id.len() > 128
-                    || !ids.insert((field.section_id, field.field_id))
+                    || !ids.insert((field.subsection_id, field.field_id))
                     || field
                         .value
                         .as_ref()

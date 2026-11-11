@@ -1,5 +1,5 @@
 use crate::{
-    InfoFieldKey, InfoFieldResult, InfoSectionDescriptor, Localization, compute_media_fields,
+    InfoFieldKey, InfoFieldResult, InfoProviderPresentation, Localization, compute_media_fields,
     compute_metadata_fields, media_descriptors, metadata_descriptors,
 };
 use fiex_provider_contracts::{
@@ -24,8 +24,10 @@ pub trait InfoModuleServices: Send + Sync {
         &self,
         ctx: &dyn ProviderInvocation,
     ) -> Result<InfoMetadataInput, ProviderError>;
-    fn media_descriptor_path(&self, ctx: &dyn ProviderInvocation)
-    -> Result<PathBuf, ProviderError>;
+    fn media_descriptor_resource(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<(PathBuf, Option<ResourceMetadata>), ProviderError>;
     fn media_path(&self, ctx: &dyn ProviderInvocation) -> Result<PathBuf, ProviderError>;
     fn localization(&self) -> Localization;
 }
@@ -58,7 +60,6 @@ impl InfoModule {
                 id: "core.media",
                 priority: 100,
                 rule: ProviderMatchRule {
-                    mime_types: vec!["audio/*".into(), "video/*".into()],
                     kinds: vec!["file".into()],
                     ..Default::default()
                 },
@@ -69,11 +70,11 @@ impl InfoModule {
 
     /// Build Core-owned field descriptors from the already-resolved resource
     /// snapshot. This path is synchronous and does not inspect file contents.
-    pub fn sections_for(
+    pub fn presentation_for(
         &self,
         provider_id: &str,
         ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<InfoSectionDescriptor>, ProviderError> {
+    ) -> Result<InfoProviderPresentation, ProviderError> {
         match provider_id {
             "core.metadata" => {
                 let input = self.services.metadata_input(ctx)?;
@@ -86,8 +87,12 @@ impl InfoModule {
                 ))
             }
             "core.media" => {
-                let path = self.services.media_descriptor_path(ctx)?;
-                Ok(media_descriptors(&path, &self.services.localization()))
+                let (path, metadata) = self.services.media_descriptor_resource(ctx)?;
+                Ok(media_descriptors(
+                    &path,
+                    metadata.as_ref(),
+                    &self.services.localization(),
+                ))
             }
             _ => Err(ProviderError::invalid_params("unknown Core Info provider")),
         }

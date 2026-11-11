@@ -3,12 +3,12 @@ use serde_json::json;
 use std::sync::Condvar;
 
 fn field_key(base: &str, provider_id: &str, field: &InfoFieldKey) -> Option<String> {
-    if field.section_id == "directoryStats" {
+    if field.subsection_id == "directoryStats" {
         return None;
     }
     Some(format!(
-        "{base}:{provider_id}:{}:{}",
-        field.section_id, field.field_id
+        "{base}:v8:{provider_id}:{}:{}",
+        field.subsection_id, field.field_id
     ))
 }
 
@@ -17,7 +17,10 @@ fn cache_base(resource: &ResourceSnapshot) -> Option<String> {
     if access != crate::core::fs::provider_registry::ResourceAccess::HostPath {
         return None;
     }
-    crate::plugins::cache::key("info.field", &resource.local)
+    let path_key = crate::plugins::cache::key("info.field.v8", &resource.local)?;
+    let version = serde_json::to_string(&(&resource.reference, resource.metadata())).ok()?;
+    let version_key = crate::plugins::cache::key(&version, &resource.local)?;
+    Some(format!("{path_key}:{version_key}"))
 }
 
 pub fn read_core_cache(
@@ -46,7 +49,7 @@ pub fn read_core_cache(
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned);
             Some(InfoFieldResult {
-                section_id: field.section_id.clone(),
+                subsection_id: field.subsection_id.clone(),
                 field_id: field.field_id.clone(),
                 value: text,
                 unavailable,
@@ -72,7 +75,7 @@ pub fn cache_core_results(
         if let (Some(key), Some(result)) = (
             field_key(&base, provider_id, field),
             results.iter().find(|value| {
-                value.section_id == field.section_id && value.field_id == field.field_id
+                value.subsection_id == field.subsection_id && value.field_id == field.field_id
             }),
         ) {
             crate::plugins::cache::put(

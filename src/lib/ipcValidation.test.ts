@@ -197,7 +197,7 @@ describe('IPC boundary validation', () => {
         updates: [
           {
             providerId: 'core',
-            sectionId: 'general',
+            subsectionId: 'general',
             fieldId: 'size',
             status: 'ready',
             value: '12 bytes',

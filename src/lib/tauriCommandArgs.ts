@@ -79,7 +79,7 @@ export interface TauriCommandArgs {
   file_info_compute: {
     sessionId: string
     providerId: string
-    fields: Array<{ sectionId: string; fieldId: string }>
+    fields: Array<{ subsectionId: string; fieldId: string }>
     taskId: string
   }
   file_info_open: { path: string; onUpdate?: Channel<unknown> }

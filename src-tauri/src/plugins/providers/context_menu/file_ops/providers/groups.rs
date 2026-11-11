@@ -1,5 +1,5 @@
 use super::super::{Context, Selection};
-use super::{item, new_file::new_file_items};
+use super::{availability::can_open, item, new_file::new_file_items};
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     ContextMenuProvider, FsOperation, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
@@ -44,19 +44,13 @@ fn can_duplicate_to_directory(selection: &Selection<'_>) -> bool {
         && (!needs_file || selection.directory_capabilities.write)
 }
 
-fn can_open(selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-    !selection.paths.is_empty()
-        && selection.paths.iter().enumerate().all(|(index, path)| {
-            let Some(entry) = selection.entries.get(index) else {
-                return false;
-            };
-            crate::core::volumes::native_vfs::open_policy(path, entry)
-                .unwrap_or_else(|| entry.is_dir || capabilities.read || entry.link_target.is_some())
-        })
-}
-
 impl AtomicMenuAction {
-    fn items(&self, selection: &Selection<'_>, caps: &FileCapabilities) -> Vec<MenuItem> {
+    fn items(
+        &self,
+        selection: &Selection<'_>,
+        caps: &FileCapabilities,
+        parent_id: Option<&str>,
+    ) -> Vec<MenuItem> {
         let nonzero = !selection.paths.is_empty();
         let one = selection.paths.len() == 1;
         let mut items = match self.0 {
@@ -86,7 +80,7 @@ impl AtomicMenuAction {
             Action::NewFile
                 if selection.paths.is_empty() && caps.write && selection.preflight.new_file =>
             {
-                new_file_items()
+                new_file_items(parent_id)
             }
             Action::Rename if one && caps.rename && selection.preflight.rename => {
                 vec![item("rename", "重新命名", "pencil", "rename")]
@@ -175,7 +169,11 @@ impl ContextMenuProvider for AtomicMenuAction {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
-        Ok(self.items(&context.selection(), &context.capabilities()))
+        let parent_id = match invocation.input()? {
+            ProviderInput::ContextMenuResolve(request) => request.parent_id.as_deref(),
+            _ => None,
+        };
+        Ok(self.items(&context.selection(), &context.capabilities(), parent_id))
     }
 
     fn execute(
@@ -199,7 +197,22 @@ impl ContextMenuProvider for AtomicMenuAction {
             .ok_or_else(|| ProviderError::invalid_params("menu session is missing"))?;
         let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
             .with_local_data(Arc::new(context.clone()));
-        let offered = self.resolve(&resolve)?;
+        let offered = if self.0 == Action::NewFile {
+            self.items(
+                &context.selection(),
+                &context.capabilities(),
+                Some("newFile"),
+            )
+            .into_iter()
+            .chain(self.items(
+                &context.selection(),
+                &context.capabilities(),
+                Some("newFile.office"),
+            ))
+            .collect()
+        } else {
+            self.resolve(&resolve)?
+        };
         if !offered
             .iter()
             .any(|item| item.id == item_id && !item.disabled)
@@ -265,10 +278,10 @@ mod tests {
             assert_eq!(
                 [
                     !AtomicMenuAction(Action::MoveToTrash)
-                        .items(&selection, &caps)
+                        .items(&selection, &caps, None)
                         .is_empty(),
                     !AtomicMenuAction(Action::DeletePermanently)
-                        .items(&selection, &caps)
+                        .items(&selection, &caps, None)
                         .is_empty(),
                 ],
                 expected

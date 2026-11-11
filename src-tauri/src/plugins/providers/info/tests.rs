@@ -13,15 +13,17 @@ fn metadata_descriptors_keep_file_and_directory_attributes_separate() {
         file.to_str().unwrap(),
         &file,
     );
-    let file_sections = native::sections("core.metadata", &file_resource).unwrap();
-    let directory_sections = native::sections("core.metadata", &directory).unwrap();
+    let file_sections = native::presentation("core.metadata", &file_resource).unwrap();
+    let directory_sections = native::presentation("core.metadata", &directory).unwrap();
     let file_basic = file_sections
+        .subsections
         .iter()
-        .find(|section| section.id == "basic")
+        .find(|subsection| subsection.id == "basic")
         .unwrap();
     let directory_basic = directory_sections
+        .subsections
         .iter()
-        .find(|section| section.id == "basic")
+        .find(|subsection| subsection.id == "basic")
         .unwrap();
     assert!(file_basic.fields.iter().any(|field| field.id == "size"));
     assert!(
@@ -32,13 +34,15 @@ fn metadata_descriptors_keep_file_and_directory_attributes_separate() {
     );
     assert!(
         directory_sections
+            .subsections
             .iter()
-            .any(|section| section.id == "directoryStats")
+            .any(|subsection| subsection.id == "directoryStats")
     );
     assert!(
         !file_sections
+            .subsections
             .iter()
-            .any(|section| section.id == "directoryStats")
+            .any(|subsection| subsection.id == "directoryStats")
     );
 }
 
@@ -62,7 +66,7 @@ fn metadata_field_compute_returns_only_the_requested_values() {
         .compute(
             &invocation,
             &[InfoFieldKey {
-                section_id: "basic".into(),
+                subsection_id: "basic".into(),
                 field_id: "size".into(),
             }],
         )

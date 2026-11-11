@@ -1,7 +1,5 @@
 use crate::Localization;
-use fiex_provider_contracts::{
-    InfoCompute, InfoFieldDescriptor, InfoFieldKey, InfoFieldResult, InfoSectionDescriptor,
-};
+use fiex_provider_contracts::{InfoFieldKey, InfoFieldResult};
 use std::{fs, path::Path, time::Duration};
 
 struct MediaRow {
@@ -21,25 +19,6 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> MediaRow {
     }
 }
 
-fn field(id: &str, label: String) -> InfoFieldDescriptor {
-    InfoFieldDescriptor {
-        id: id.into(),
-        label,
-        compute: InfoCompute::OnDemand,
-    }
-}
-
-fn descriptor(
-    id: &str,
-    title: String,
-    fields: impl IntoIterator<Item = InfoFieldDescriptor>,
-) -> InfoSectionDescriptor {
-    InfoSectionDescriptor {
-        id: id.into(),
-        title,
-        fields: fields.into_iter().collect(),
-    }
-}
 pub fn duration_text(duration: Duration) -> String {
     let total = duration.as_secs();
     let hours = total / 3600;
@@ -134,7 +113,7 @@ fn audio_section(path: &Path, localization: &Localization) -> Option<MediaSectio
         );
     }
     (!rows.is_empty()).then(|| MediaSection {
-        id: "core.audio".into(),
+        id: "audio".into(),
         rows,
     })
 }
@@ -205,7 +184,7 @@ fn mp4_section(path: &Path, localization: &Localization) -> Option<MediaSection>
         mp4.major_brand().to_string(),
     ));
     Some(MediaSection {
-        id: "core.video.mp4".into(),
+        id: "video".into(),
         rows,
     })
 }
@@ -257,7 +236,7 @@ fn matroska_section(path: &Path, localization: &Localization) -> Option<MediaSec
     }
     rows.push(row(localization.text("容器"), "Matroska"));
     (!rows.is_empty()).then(|| MediaSection {
-        id: "core.video.matroska".into(),
+        id: "video".into(),
         rows,
     })
 }
@@ -284,54 +263,6 @@ fn media_sections(path: &Path, localization: &Localization) -> Vec<MediaSection>
     sections
 }
 
-pub fn media_descriptors(path: &Path, localization: &Localization) -> Vec<InfoSectionDescriptor> {
-    let ext = extension(path);
-    let video = ["mp4", "m4v", "mov", "mkv", "webm"].contains(&ext.as_str());
-    if video {
-        let id = if ["mkv", "webm"].contains(&ext.as_str()) {
-            "core.video.matroska"
-        } else {
-            "core.video.mp4"
-        };
-        return vec![descriptor(
-            id,
-            localization.text("视频"),
-            [
-                field("duration", localization.text("时长")),
-                field("video", localization.text("视频")),
-                field("audio", localization.text("音频")),
-                field("container", localization.text("容器")),
-            ],
-        )];
-    }
-    let audio = [
-        "mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wave", "aiff", "aif", "ape",
-        "wv", "wma",
-    ];
-    if audio.contains(&ext.as_str()) {
-        vec![descriptor(
-            "core.audio",
-            localization.text("音频"),
-            [
-                field("format", localization.text("格式")),
-                field("title", localization.text("标题")),
-                field("artist", localization.text("艺术家")),
-                field("album", localization.text("专辑")),
-                field("genre", localization.text("流派")),
-                field("year", localization.text("年份")),
-                field("track", localization.text("音轨")),
-                field("disk", localization.text("碟片")),
-                field("duration", localization.text("时长")),
-                field("bitrate", localization.text("码率")),
-                field("sampleRate", localization.text("采样率")),
-                field("channels", localization.text("声道")),
-            ],
-        )]
-    } else {
-        Vec::new()
-    }
-}
-
 pub fn compute_media_fields(
     path: &Path,
     fields: &[InfoFieldKey],
@@ -341,8 +272,8 @@ pub fn compute_media_fields(
     fields
         .iter()
         .map(|field| {
-            let label = match (field.section_id.as_str(), field.field_id.as_str()) {
-                ("core.audio", "format") => "格式",
+            let label = match (field.subsection_id.as_str(), field.field_id.as_str()) {
+                ("audio", "format") => "格式",
                 (_, "title") => "标题",
                 (_, "artist") => "艺术家",
                 (_, "album") => "专辑",
@@ -361,7 +292,7 @@ pub fn compute_media_fields(
             };
             let value = sections
                 .iter()
-                .find(|section| section.id == field.section_id)
+                .find(|section| section.id == field.subsection_id)
                 .and_then(|section| {
                     section
                         .rows
@@ -370,7 +301,7 @@ pub fn compute_media_fields(
                 })
                 .map(|row| row.value.clone());
             InfoFieldResult {
-                section_id: field.section_id.clone(),
+                subsection_id: field.subsection_id.clone(),
                 field_id: field.field_id.clone(),
                 unavailable: value.is_none(),
                 value,

@@ -48,12 +48,22 @@ pub fn compute_fields(
             .get(provider_id)
             .cloned()
             .ok_or("Info provider is not part of this session")?;
+        let mut requested = HashSet::new();
         for field in fields {
+            if !requested.insert((field.subsection_id.as_str(), field.field_id.as_str())) {
+                return Err("Info compute request contains a duplicate field".into());
+            }
             let declaration = provider
-                .sections
+                .presentation
+                .subsections
                 .iter()
-                .find(|section| section.id == field.section_id)
-                .and_then(|section| section.fields.iter().find(|item| item.id == field.field_id))
+                .find(|subsection| subsection.id == field.subsection_id)
+                .and_then(|subsection| {
+                    subsection
+                        .fields
+                        .iter()
+                        .find(|item| item.id == field.field_id)
+                })
                 .ok_or("Info field is not declared by this provider")?;
             let expected = match trigger {
                 ComputeTrigger::OnOpen => InfoCompute::OnOpen,
@@ -67,7 +77,13 @@ pub fn compute_fields(
             return Err("Info task id is already active".into());
         }
         let cancelled = Arc::new(AtomicBool::new(false));
-        session.tasks.insert(task_id.into(), cancelled.clone());
+        session.tasks.insert(
+            task_id.into(),
+            ActiveTask {
+                provider_id: provider_id.to_owned(),
+                cancelled: cancelled.clone(),
+            },
+        );
         (
             session.resource.clone(),
             session.version.clone(),
@@ -135,7 +151,7 @@ fn compute_provider(
 ) -> Result<Vec<InfoFieldResult>, String> {
     if fields
         .iter()
-        .any(|field| field.section_id == "directoryStats")
+        .any(|field| field.subsection_id == "directoryStats")
     {
         if crate::core::fs::provider_registry::resource_access(&resource.display)
             .map_err(String::from)?
@@ -160,7 +176,7 @@ fn compute_provider(
         .iter()
         .filter(|field| {
             !cached.iter().any(|value| {
-                value.section_id == field.section_id && value.field_id == field.field_id
+                value.subsection_id == field.subsection_id && value.field_id == field.field_id
             })
         })
         .cloned()
@@ -255,7 +271,7 @@ fn validate_field_results(
     }
     let mut returned = HashSet::new();
     for value in results {
-        if value.section_id.len() > 128
+        if value.subsection_id.len() > 128
             || value.field_id.len() > 128
             || value
                 .value
@@ -263,14 +279,13 @@ fn validate_field_results(
                 .is_some_and(|value| value.len() > 16_384)
             || value.unavailable && value.value.is_some()
             || !value.unavailable && value.value.is_none()
-            || !returned.insert((value.section_id.as_str(), value.field_id.as_str()))
+            || !returned.insert((value.subsection_id.as_str(), value.field_id.as_str()))
         {
             return Err("Info provider returned an invalid field result".into());
         }
-        if !requested
-            .iter()
-            .any(|field| field.section_id == value.section_id && field.field_id == value.field_id)
-        {
+        if !requested.iter().any(|field| {
+            field.subsection_id == value.subsection_id && field.field_id == value.field_id
+        }) {
             return Err("Info provider returned an unrequested field".into());
         }
     }

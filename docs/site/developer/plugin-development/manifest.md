@@ -1,6 +1,6 @@
 # Manifest 与权限
 
-Manifest 是插件包的声明文件，文件名必须为 `manifest.json`。Core 当前识别 `schemaVersion: 2`；Native 插件声明 `runtime.protocolVersion: "7.0"`。未知字段或无效扩展注册会导致 manifest 被拒绝。
+Manifest 是插件包的声明文件，文件名必须为 `manifest.json`。Core 当前识别 `schemaVersion: 2`；Native 插件声明 `runtime.protocolVersion: "8.0"`。未知字段或无效扩展注册会导致 manifest 被拒绝。
 
 ## 最小结构
 
@@ -12,7 +12,7 @@ Manifest 是插件包的声明文件，文件名必须为 `manifest.json`。Core
   "version": "0.1.0",
   "description": "Connects to a notes service.",
   "runtime": {
-    "protocolVersion": "7.0",
+    "protocolVersion": "8.0",
     "entrypoints": {
       "windows-x86_64": "fiex-notes.exe",
       "macos-aarch64": "fiex-notes",
@@ -81,22 +81,22 @@ Core 根据 `extensions` 建立 provider 索引，再按事件、匹配规则和
 
 扩展全部放在 `extensions` 下。常见项如下：
 
-| 键                       | 用途                                   | 实现入口                         |
-| ------------------------ | -------------------------------------- | -------------------------------- |
-| `connections`            | 声明用户可创建的连接类型和输入字段     | `ConnectionProvider`             |
-| `vfs`                    | 声明插件提供文件树/文件空间            | `VfsProvider`                    |
-| `info`                   | 声明信息面板区块与字段                 | `InfoProvider::compute`          |
-| `preview`                | 注册匹配文件的预览能力                 | `PreviewProvider`                |
-| `decorations`            | 注册动态列表装饰                       | `DecorationProvider`             |
-| `contextMenus`           | 注册文件/目录菜单项                    | `ContextMenuProvider`            |
-| `connectionContextMenus` | 注册连接本身的菜单项                   | Connection Context Menu provider |
-| `search`                 | 提供可合并到主搜索的结果               | `SearchProvider`                 |
-| `hooks`                  | 声明 `beforeOpen` / `afterOpen` 等事件 | `HookProvider`                   |
-| `toolbar`                | 工具栏命令或插件面板                   | `ToolbarProvider`                |
-| `settings`               | 声明插件设置字段                       | 插件设置 UI/API                  |
-| `themes`                 | 注册 package 内的声明式主题            | 无 native provider               |
+| 键                       | 用途                                       | 实现入口                         |
+| ------------------------ | ------------------------------------------ | -------------------------------- |
+| `connections`            | 声明用户可创建的连接类型和输入字段         | `ConnectionProvider`             |
+| `vfs`                    | 声明插件提供文件树/文件空间                | `VfsProvider`                    |
+| `info`                   | 声明 Provider 标题、隐藏 Subsection 和字段 | `InfoProvider::compute`          |
+| `preview`                | 注册匹配文件的预览能力                     | `PreviewProvider`                |
+| `decorations`            | 注册动态列表装饰                           | `DecorationProvider`             |
+| `contextMenus`           | 注册文件/目录菜单项                        | `ContextMenuProvider`            |
+| `connectionContextMenus` | 注册连接本身的菜单项                       | Connection Context Menu provider |
+| `search`                 | 提供可合并到主搜索的结果                   | `SearchProvider`                 |
+| `hooks`                  | 声明 `beforeOpen` / `afterOpen` 等事件     | `HookProvider`                   |
+| `toolbar`                | 工具栏命令或插件面板                       | `ToolbarProvider`                |
+| `settings`               | 声明插件设置字段                           | 插件设置 UI/API                  |
+| `themes`                 | 注册 package 内的声明式主题                | 无 native provider               |
 
-扩展通常可设置 `match` 和 `priority`。Match 仅控制哪些对象适合接收 provider 请求，不是权限规则。Info 字段可在 manifest 的 `extensions.info.sections` 静态声明，并为每个字段选择 `compute: "onOpen"` 或 `"onDemand"`；Core 打开信息面板时不会为枚举字段而临时启动所有插件。
+扩展通常可设置 `match` 和 `priority`。Match 仅控制哪些对象适合接收 provider 请求，不是权限规则。Info 字段可在 manifest 的 `extensions.info.title` 和 `extensions.info.subsections` 中静态声明，并为每个字段选择 `compute: "onOpen"` 或 `"onDemand"`；Core 打开信息面板时不会为枚举字段而临时启动所有插件。Subsection 只参与静态资源匹配和字段路由，不显示为 UI 分组。旧的 `extensions.info.sections` 结构会被拒绝。
 
 ## 插件包内的文件
 

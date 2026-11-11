@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { call, native } from '@/lib/api'
 import { beginActivity, finishActivity, updateActivity } from './useActivity'
+import { pluginTaskRefreshTracker } from '@/lib/pluginTaskRefresh'
 
 interface PluginTaskEvent {
   taskId: string
@@ -34,6 +35,7 @@ export function usePluginTasks() {
     let disposed = false
     const unlisten = listen<PluginTaskEvent>('plugin-task', ({ payload }) => {
       if (!payload || typeof payload.taskId !== 'string') return
+      pluginTaskRefreshTracker.settle(payload.taskId, payload.status)
       if (payload.internal) return
       if (payload.status === 'running') {
         let activity = activities.get(payload.taskId)

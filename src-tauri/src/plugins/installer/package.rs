@@ -149,9 +149,10 @@ mod tests {
     #[test]
     fn import_accepts_the_same_protocol_series() {
         let dir = tempfile::tempdir().unwrap();
+        let same_series = crate::plugin_sdk::PROTOCOL_VERSION.trim_end_matches(".0");
         fs::write(
             dir.path().join("manifest.json"),
-            serde_json::to_vec(&manifest("7")).unwrap(),
+            serde_json::to_vec(&manifest(same_series)).unwrap(),
         )
         .unwrap();
         assert!(read_manifest(dir.path()).is_ok());

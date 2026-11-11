@@ -1,6 +1,6 @@
 # Native 插件 IPC 协议参考
 
-本页描述 Fiex Core 与 Rust native 插件进程之间的当前 IPC。目标 Core 主分支目前固定 manifest schema 2、protocol 7.0 和 SDK crate 0.3.4；Core 的 submodule commit 以[代码基线](/reference/source-baseline)为准。协议实现源文件为 Core 锁定的 `sdk/rust/src/lib.rs`、`sdk/rust/src/runtime/` 和 `src-tauri/src/plugins/host/process/rpc/`。
+本页描述 Fiex Core 与 Rust native 插件进程之间的 IPC。Info Provider 单 Section 改动将协议提升为 manifest schema 2、protocol 8.0；Core 的 submodule commit 以[代码基线](/reference/source-baseline)为准。协议实现源文件为 Core 锁定的 `sdk/rust/src/lib.rs`、`sdk/rust/src/runtime/` 和 `src-tauri/src/plugins/host/process/rpc/`。
 
 ## 边界与方向
 
@@ -14,7 +14,7 @@ Native 插件是独立进程，Core 管理其启动、标准输入/输出和生�
 
 SDK runtime 一条读线程接收帧，业务请求并发运行，单一写锁串行化完整 response frame。Core 也通过单一插件进程连接匹配 request ID 与响应。插件 `stdout` 只能包含协议帧；诊断日志写入 `stderr`。
 
-UI 插件页面使用另一套 UI bridge，页面调用通过受控的 Tauri/iframe bridge 路由；不要将 UI bridge 方法与 native JSON-RPC 混成一个接口。UI 侧接口见 [UI SDK IPC audit](https://github.com/kevinhuang001/fiex-sdk/blob/24664a69bb411d0b2608461ae08a588f28cbe385/docs/ipc-audit.md)。
+UI 插件页面使用另一套 UI bridge，页面调用通过受控的 Tauri/iframe bridge 路由；不要将 UI bridge 方法与 native JSON-RPC 混成一个接口。UI 侧接口见 [UI SDK IPC audit](https://github.com/kevinhuang001/fiex-sdk/blob/7df42e185f90d6a04bede82a9cfef0be866e15c2/docs/ipc-audit.md)。
 
 ## 帧格式
 
@@ -70,7 +70,7 @@ Core 的标准事件可带顶层 `locale`，SDK 将它写入该请求的 `Reques
 Core 首次调用 provider 前发送：
 
 ```json
-{ "jsonrpc": "2.0", "id": 1, "method": "plugin.initialize", "params": { "protocolVersion": "7.0" } }
+{ "jsonrpc": "2.0", "id": 1, "method": "plugin.initialize", "params": { "protocolVersion": "8.0" } }
 ```
 
 SDK 要求协议版本严格匹配。初始化成功的回复至少包括：
@@ -78,7 +78,7 @@ SDK 要求协议版本严格匹配。初始化成功的回复至少包括：
 ```json
 {
   "pluginId": "org.example.hello",
-  "protocolVersion": "7.0",
+  "protocolVersion": "8.0",
   "sdkVersion": "0.3.4",
   "ready": true,
   "concurrentRequests": true,
@@ -114,7 +114,30 @@ SDK 运行时最多并发处理 64 个普通请求，并限制 8 个后台任务
 | `hooks.invoke`                                | `HookProvider::invoke`           | 处理已声明 hook 事件                                   |
 | `toolbar.invoke`                              | `ToolbarProvider::invoke`        | 执行工具栏命令或返回面板动作                           |
 
-当前协议没有旧式 `info.describe`；Info 字段必须在 manifest 的 `extensions.info.sections` 声明。旧的 `fs.*` provider 命名和 UI 侧 VFS bridge 也不属于当前协议。
+当前协议没有旧式 `info.describe`。Info Provider 必须在 manifest 中静态声明 `extensions.info.title` 和 `extensions.info.subsections`；一个 Provider 对应一个可见 Section，Subsection 只决定字段是否适用及计算键，不会成为 UI 分组。字段和结果使用 `(subsectionId, fieldId)`，Core 以 `(providerId, subsectionId, fieldId)` 验证请求、响应和更新。旧的 `sectionId` 与 `extensions.info.sections` 结构会被拒绝，不做静默兼容。旧的 `fs.*` provider 命名和 UI 侧 VFS bridge 也不属于当前协议。
+
+`file_info_open` 返回的每个 Section 都对应一个 Provider，且 `section.id === section.providerId`。例如：
+
+```json
+{
+  "id": "core.media",
+  "title": "Media",
+  "providerId": "core.media",
+  "provider": "Fiex",
+  "source": "core",
+  "fields": [
+    {
+      "id": "duration",
+      "subsectionId": "audio",
+      "label": "Duration",
+      "compute": "onDemand",
+      "status": "idle"
+    }
+  ]
+}
+```
+
+按需计算请求的 `fields` 为 `{ "subsectionId": "audio", "fieldId": "duration" }`。Subsection 的资源匹配只使用 Core 可信快照的扩展名、MIME 和 kind；同一维度内 OR，不同维度之间 AND。没有匹配字段的 Provider 不返回空 Section。
 
 ## VFS provider 方法
 

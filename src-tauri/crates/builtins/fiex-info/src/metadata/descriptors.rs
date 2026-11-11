@@ -1,7 +1,8 @@
 use super::common::resource_kind;
 use crate::Localization;
 use fiex_provider_contracts::{
-    InfoCompute, InfoFieldDescriptor, InfoSectionDescriptor, ResourceMetadata,
+    InfoCompute, InfoFieldDescriptor, InfoProviderPresentation, InfoSubsectionDescriptor,
+    InfoSubsectionMatch, ResourceMetadata,
 };
 use std::{fs, path::Path};
 
@@ -13,14 +14,13 @@ fn field(id: &str, label: String, compute: InfoCompute) -> InfoFieldDescriptor {
     }
 }
 
-fn section(
+fn subsection(
     id: &str,
-    title: String,
     fields: impl IntoIterator<Item = InfoFieldDescriptor>,
-) -> InfoSectionDescriptor {
-    InfoSectionDescriptor {
+) -> InfoSubsectionDescriptor {
+    InfoSubsectionDescriptor {
         id: id.into(),
-        title,
+        r#match: None,
         fields: fields.into_iter().collect(),
     }
 }
@@ -31,7 +31,7 @@ pub fn metadata_descriptors(
     stat: Option<&fs::Metadata>,
     projected: Option<&ResourceMetadata>,
     localization: &Localization,
-) -> Vec<InfoSectionDescriptor> {
+) -> InfoProviderPresentation {
     let kind = resource_kind(stat, projected);
     let name = projected
         .map(|value| value.name.clone())
@@ -93,7 +93,7 @@ pub fn metadata_descriptors(
             }
         }
     }
-    let mut sections = vec![section("basic", localization.text("基本信息"), basic)];
+    let mut subsections = vec![subsection("basic", basic)];
 
     let mut times = Vec::new();
     if stat.is_some_and(|metadata| metadata.created().is_ok()) {
@@ -128,7 +128,7 @@ pub fn metadata_descriptors(
         ));
     }
     if !times.is_empty() {
-        sections.push(section("times", localization.text("时间"), times));
+        subsections.push(subsection("times", times));
     }
 
     let mut filesystem = Vec::new();
@@ -170,17 +170,12 @@ pub fn metadata_descriptors(
         ]);
     }
     if !filesystem.is_empty() {
-        sections.push(section(
-            "filesystem",
-            localization.text("文件系统属性"),
-            filesystem,
-        ));
+        subsections.push(subsection("filesystem", filesystem));
     }
 
     if kind == "directory" && is_local {
-        sections.push(section(
+        let mut directory_stats = subsection(
             "directoryStats",
-            localization.text("目录统计"),
             [
                 field(
                     "directFiles",
@@ -223,7 +218,15 @@ pub fn metadata_descriptors(
                     InfoCompute::OnDemand,
                 ),
             ],
-        ));
+        );
+        directory_stats.r#match = Some(InfoSubsectionMatch {
+            kinds: vec!["directory".into()],
+            ..Default::default()
+        });
+        subsections.push(directory_stats);
     }
-    sections
+    InfoProviderPresentation {
+        title: localization.text("元数据"),
+        subsections,
+    }
 }
