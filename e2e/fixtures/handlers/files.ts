@@ -33,6 +33,10 @@ type FixtureInfoSection = {
 const infoSessions = new Map<string, { path: string; sections: FixtureInfoSection[] }>()
 const trashEntryPath = (name: string) =>
   `trash://${btoa(name).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
+const trashOriginalPaths = new Map([
+  [trashEntryPath('Old draft.txt'), `${root}/Documents/Old draft.txt`],
+  [trashEntryPath('Old notes.txt'), `${root}/Documents/Old notes.txt`],
+])
 
 function infoField(
   subsectionId: string,
@@ -412,6 +416,40 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'recycle':
       state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
+    case 'trash_restore_needs_folder':
+      return (a.paths as string[]).some((path) => {
+        const original = trashOriginalPaths.get(path)
+        return (
+          !original ||
+          !state.entries.some((entry) => entry.path === parent(original) && entry.isDir)
+        )
+      })
+    case 'restore_from_trash': {
+      const paths = new Set(a.paths as string[])
+      const selected = state.entries.filter(
+        (entry) => parent(entry.path) === `${root}/.Trash` && paths.has(trashEntryPath(entry.name)),
+      )
+      const restoredPaths = new Set<string>()
+      const restored = selected.flatMap((entry) => {
+        const trashPath = trashEntryPath(entry.name)
+        const original = trashOriginalPaths.get(trashPath)
+        const fallback = typeof a.fallback === 'string' ? a.fallback : null
+        const destination = fallback ? join(fallback, entry.name) : original
+        if (!destination || state.entries.some((candidate) => candidate.path === destination))
+          return []
+        trashOriginalPaths.delete(trashPath)
+        restoredPaths.add(trashPath)
+        return [{ ...entry, path: destination, name: basename(destination) }]
+      })
+      state.entries = state.entries.filter(
+        (entry) =>
+          !(
+            parent(entry.path) === `${root}/.Trash` && restoredPaths.has(trashEntryPath(entry.name))
+          ),
+      )
+      state.entries.push(...restored)
+      return restored.length
+    }
     case 'delete_permanently': {
       const paths = new Set(a.paths as string[])
       const removed = state.entries.filter(
