@@ -19,10 +19,10 @@ npm run e2e
 # Rust
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --no-default-features --features fiex/usbfs --lib
-cargo clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features --features fiex/usbfs -- -D warnings
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --workspace --all-targets --no-default-features --features fiex/ci-driver -- -D warnings
 ```
 
-执行时间较长的平台级构建需要安装对应系统依赖。若只改文档，可运行 `npm ci --prefix docs/site` 和 `npm run docs:build --prefix docs/site`；文档构建不代替代码测试。
+Clippy 使用与 CI 相同的 `ci-driver` feature；需要先安装当前桌面平台的原生开发依赖。若只改文档，可运行 `npm ci --prefix docs/site` 和 `npm run docs:build --prefix docs/site`；文档构建不代替代码测试。
 
 ## 当前 Core CI 的主要层次
 

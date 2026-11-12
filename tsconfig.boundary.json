@@ -4,5 +4,5 @@
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src/lib/ipcValidation/json.ts"]
+  "include": ["src/lib/ipcValidation/json.ts", "src/features/explorer/model/fileNameDisplay.ts"]
 }

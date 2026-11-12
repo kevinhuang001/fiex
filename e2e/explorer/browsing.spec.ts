@@ -110,6 +110,37 @@ test('a new second pane starts in the directory visited immediately before the c
   await expect(secondPath).not.toContainText('Research')
 })
 
+test('toolbar sorting changes only the active folder in a split view', async ({ page }) => {
+  await page
+    .getByRole('grid', { name: '文件', exact: true })
+    .locator('[data-path$="/Projects"]')
+    .dblclick()
+  await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('Projects')
+  await page.getByRole('button', { name: '双面板' }).click()
+
+  const secondary = page.getByRole('complementary', { name: '第二个面板' })
+  const secondaryPath = page.getByRole('navigation', { name: '第二个面板的路径' })
+  await expect(secondaryPath).toContainText('Documents')
+  const leftGrid = page.getByRole('grid', { name: '文件', exact: true }).first()
+  const rightGrid = secondary.getByRole('grid', { name: '文件', exact: true })
+  const paths = (grid: typeof leftGrid) =>
+    grid
+      .locator('[data-path]')
+      .evaluateAll((items) => items.map((item) => item.getAttribute('data-path')))
+  const leftBefore = await paths(leftGrid)
+  const rightBefore = await paths(rightGrid)
+
+  await rightGrid.locator('[data-path]').first().click()
+  const sort = page.getByRole('button', { name: '排序方式' })
+  await sort.click()
+  await page.getByRole('menuitem', { name: '名称' }).click()
+  await sort.click()
+  await page.getByRole('menuitem', { name: '降序' }).click()
+
+  await expect.poll(() => paths(leftGrid)).toEqual(leftBefore)
+  await expect.poll(() => paths(rightGrid)).not.toEqual(rightBefore)
+})
+
 test('workspace opens as a compact dock and can be collapsed', async ({ page }) => {
   await page.getByRole('button', { name: '工作区' }).click()
   const dock = page.getByRole('region', { name: '工作区' })
