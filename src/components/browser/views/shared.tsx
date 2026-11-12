@@ -4,7 +4,7 @@ import { FileIcon } from '../../FileIcon'
 import { InlineRename } from '../InlineRename'
 import { asset } from '@/lib/api'
 import { useDecorationIcon } from '@/lib/decorationIcons'
-import { formatDisplayFileName } from '@/lib/fileNameDisplay'
+import { formatDisplayFileName } from '@/features/explorer/model/fileNameDisplay'
 import { isImage } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type {

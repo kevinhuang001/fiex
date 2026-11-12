@@ -42,6 +42,10 @@ export default defineConfig({
             { text: '本地开发环境', link: '/developer/environment' },
             { text: '系统架构', link: '/developer/architecture' },
             {
+              text: '代码库重构基线',
+              link: '/developer/architecture/codebase-audit-2026-11-12',
+            },
+            {
               text: '目录缓存与传输预检',
               link: '/developer/architecture/navigation-cache-preflight',
             },
