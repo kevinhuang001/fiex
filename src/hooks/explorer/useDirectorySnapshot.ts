@@ -3,7 +3,7 @@ import { t } from '@/i18n'
 import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { openDirectoryStream } from '@/lib/listing'
-import { sameStringSet, sameVisibleListing } from '@/lib/listingDiff'
+import { sameStringSet, sameVisibleListing } from '@/features/explorer/model/listingDiff'
 import {
   sameDirectoryDecorations,
   sameListingMetadata,

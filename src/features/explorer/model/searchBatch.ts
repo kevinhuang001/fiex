@@ -1,4 +1,4 @@
-import { sameListing } from '@/lib/listingDiff'
+import { sameListing } from './listingDiff'
 import type { Batch, Entry } from '@/lib/types'
 
 /** Reconcile one streamed search batch without publishing unchanged entries. */

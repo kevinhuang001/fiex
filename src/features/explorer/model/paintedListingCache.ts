@@ -1,5 +1,5 @@
 import { sameDecoration } from '@/lib/entryPresentation'
-import { sameStringSet } from '@/lib/listingDiff'
+import { sameStringSet } from './listingDiff'
 import type { EntryDecoration, Listing } from '@/lib/types'
 
 export interface PaintedDirectorySnapshot {

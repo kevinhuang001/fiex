@@ -1,6 +1,5 @@
-import { sortEntries } from './files'
-import type { Entry } from './types'
-import type { Sort } from './types'
+import { sortEntries } from '@/lib/files'
+import type { Entry, Sort } from '@/lib/types'
 
 /** Compare rendered directory data by stable path identity, independent of
  * provider response order. Callers can keep the current array when this holds. */

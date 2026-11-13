@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Entry } from './types'
+import type { Entry } from '@/lib/types'
 import { sameListing, sameStringSet, sameVisibleListing } from './listingDiff'
 
 const entry = (path: string, patch: Partial<Entry> = {}): Entry => ({
