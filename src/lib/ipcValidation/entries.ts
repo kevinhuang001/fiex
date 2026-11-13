@@ -24,6 +24,7 @@ const ENTRY_KEYS = [
   'uploaded',
   'sync',
 ]
+const LISTING_KEYS = ['allowedOps', 'virtualVolume', 'path', 'entries', 'warnings', 'defaultView']
 
 function isEntrySync(value: unknown): value is Entry['sync'] {
   return (
@@ -31,6 +32,10 @@ function isEntrySync(value: unknown): value is Entry['sync'] {
     (typeof value === 'string' &&
       ['synced', 'partial', 'cloud', 'pinned', 'pending', 'conflict'].includes(value))
   )
+}
+
+function isListingView(value: unknown): value is NonNullable<Listing['defaultView']> {
+  return value === 'list' || value === 'gallery' || value === 'columns' || value === 'icons'
 }
 
 function parseEntryTag(value: unknown): Entry['tags'][number] {
@@ -119,15 +124,15 @@ export function parseSearchBatch(value: unknown): Batch {
 export function parseListing(value: unknown): Listing {
   const listing = objectResult(value)
   if (
+    !onlyKeys(listing, LISTING_KEYS) ||
     typeof listing.path !== 'string' ||
     !Array.isArray(listing.entries) ||
     !Array.isArray(listing.allowedOps) ||
     !listing.allowedOps.every((operation) => typeof operation === 'string') ||
     !Array.isArray(listing.warnings) ||
     !listing.warnings.every((warning) => typeof warning === 'string') ||
-    (listing.virtualVolume !== undefined && typeof listing.virtualVolume !== 'boolean') ||
-    (listing.defaultView !== undefined &&
-      !['list', 'gallery', 'columns', 'icons'].includes(String(listing.defaultView)))
+    typeof listing.virtualVolume !== 'boolean' ||
+    (listing.defaultView !== undefined && !isListingView(listing.defaultView))
   )
     throw new TypeError('Invalid directory listing from IPC')
   return {
@@ -135,10 +140,8 @@ export function parseListing(value: unknown): Listing {
     entries: listing.entries.map(parseEntry),
     allowedOps: listing.allowedOps,
     warnings: listing.warnings,
-    ...(typeof listing.virtualVolume === 'boolean' ? { virtualVolume: listing.virtualVolume } : {}),
-    ...(typeof listing.defaultView === 'string'
-      ? { defaultView: listing.defaultView as Listing['defaultView'] }
-      : {}),
+    virtualVolume: listing.virtualVolume,
+    ...(isListingView(listing.defaultView) ? { defaultView: listing.defaultView } : {}),
   }
 }
 
