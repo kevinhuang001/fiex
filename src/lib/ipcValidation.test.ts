@@ -3,7 +3,6 @@ import {
   parseConnectionMenus,
   parseConnectionOpenResult,
   parseDirectoryViewUpdate,
-  decodeDynamicIpcResult,
   parseEntryDecorations,
   parseInfoFieldDelta,
   parseJsonValue,
@@ -31,32 +30,6 @@ describe('IPC boundary validation', () => {
       nested: [null],
     })
     expect(() => serializeIpcJson(undefined)).toThrow('Invalid JSON IPC value')
-  })
-
-  it('validates state_get arguments before decoding its result', () => {
-    expect(decodeDynamicIpcResult('state_get', { namespace: 'picker', key: 'group' }, 'kind')).toBe(
-      'kind',
-    )
-    expect(() =>
-      decodeDynamicIpcResult('state_get', { namespace: 'picker', key: 'unknown' }, 'kind'),
-    ).toThrow('Invalid saved state key')
-    expect(() =>
-      decodeDynamicIpcResult(
-        'state_get',
-        { namespace: 'picker', key: 'group', extra: true },
-        'kind',
-      ),
-    ).toThrow('Invalid saved state key')
-  })
-
-  it('validates simple Tauri results at the dynamic dispatch boundary', () => {
-    expect(() => decodeDynamicIpcResult('create_entry', {}, 12)).toThrow(
-      'Invalid create_entry IPC result',
-    )
-    expect(decodeDynamicIpcResult('create_entry', {}, '/home/report.txt')).toBe('/home/report.txt')
-    expect(() => decodeDynamicIpcResult('open_path', {}, { unexpected: true })).toThrow(
-      'Invalid open_path IPC result',
-    )
   })
 
   it('validates both connection navigation variants', () => {

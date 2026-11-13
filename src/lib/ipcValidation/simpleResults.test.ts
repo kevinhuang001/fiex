@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { decodeDynamicIpcResult } from '../ipcValidation'
 import { decodeSimpleIpcResult } from './simpleResults'
 
 describe('simple Tauri result validation', () => {
@@ -46,5 +47,15 @@ describe('simple Tauri result validation', () => {
 
   it('leaves commands with structured result decoders unhandled', () => {
     expect(decodeSimpleIpcResult('list_directory', { entries: [] })).toBeNull()
+  })
+
+  it('validates simple results at the dynamic dispatch boundary', () => {
+    expect(() => decodeDynamicIpcResult('create_entry', {}, 12)).toThrow(
+      'Invalid create_entry IPC result',
+    )
+    expect(decodeDynamicIpcResult('create_entry', {}, '/home/report.txt')).toBe('/home/report.txt')
+    expect(() => decodeDynamicIpcResult('open_path', {}, { unexpected: true })).toThrow(
+      'Invalid open_path IPC result',
+    )
   })
 })
