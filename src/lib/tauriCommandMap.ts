@@ -17,7 +17,6 @@ import type { ListColumns } from './listColumns'
 import type { Platform } from './platform'
 import type { Theme } from './themes'
 import type {
-  Batch,
   Entry,
   EntryDecoration,
   Ide,
@@ -178,7 +177,7 @@ export interface TauriCommandResults {
   reset_provider_preference: import('@/components/settings/ProviderSettings').ProviderPreferences
   restore_from_trash: number
   save_remote_connection: RemoteConnection
-  search_files: Batch
+  search_files: void
   set_provider_preference: import('@/components/settings/ProviderSettings').ProviderPreferences
   set_tags: void
   state_get: JsonValue | null

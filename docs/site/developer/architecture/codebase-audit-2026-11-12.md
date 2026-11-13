@@ -64,6 +64,7 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 | P2-01 Explorer feature | PR #98–#102、#104–#105、#108 | 将导航、列表生命周期 hooks、目录专属列宽偏好、流式搜索、目录视图、列表比较/缓存及列表网格布局/拖拽模型迁移到 Explorer feature；共享偏好合同与 IPC 归一化留在 lib                                                                       |
 | P1-01 架构边界         | PR #97                       | 新增 AST 导入检查，禁止 feature 层依赖 components/hooks；进入前端 CI；Vitest 覆盖允许和拒绝方向                                                                                                                                        |
 | P1-02 Info IPC         | PR #95                       | Info 合同由 IPC 层定义并由 UI 消费，严格类型检查覆盖 Info 解码器，回归测试拒绝把枚举值编码为数组                                                                                                                                       |
-| P1 其余及之后          | 后续小 PR                    | 扩展模块边界与 typed IPC 检查，再逐个迁移 Explorer、文件操作、菜单和 Rust use cases                                                                                                                                                    |
+| P1-03 搜索 IPC         | PR #109                      | `search_files` 命令结果改为 `void`，参数和结果通过 typed command map 约束；搜索批次继续由 Channel 独立传输并经 `parseSearchBatch` 校验                                                                                                 |
+| P1 其余及之后          | 后续小 PR                    | 继续扩展 typed IPC 和模块边界，再逐个迁移 Explorer 操作、菜单和 Rust use cases                                                                                                                                                         |
 
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。

@@ -99,8 +99,9 @@ export function search(
   }
   const onBatchChannel = new Channel<unknown>()
   onBatchChannel.onmessage = (batch) => onBatch(parseSearchBatch(batch))
-  return invoke('search_files', {
+  const args: TauriCommandArgs['search_files'] = {
     request: { root, query, hidden, ignores, pane, mode, engine },
     onBatch: onBatchChannel,
-  })
+  }
+  return invoke<TauriCommandResult<'search_files'>>('search_files', args)
 }
