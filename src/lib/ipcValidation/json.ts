@@ -2,6 +2,16 @@ import type { JsonValue } from '../../../sdk/ui/src/index'
 
 type JsonObject = { [key: string]: JsonValue }
 
+export function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+export function isUnsignedInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+  )
+}
+
 export function isJsonObject(value: unknown): value is Record<string, JsonValue> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
