@@ -1,6 +1,6 @@
 import { isUnsignedInteger } from './json'
 
-type SimpleResultKind = 'void' | 'string' | 'nullableString' | 'count' | 'boolean'
+type SimpleResultKind = 'void' | 'string' | 'nullableString' | 'count' | 'boolean' | 'platform'
 
 const SIMPLE_RESULT_KINDS: Record<string, SimpleResultKind> = {
   begin_operation: 'void',
@@ -34,6 +34,7 @@ const SIMPLE_RESULT_KINDS: Record<string, SimpleResultKind> = {
   open_external_url: 'void',
   open_in_ide: 'void',
   open_path: 'void',
+  platform: 'platform',
   open_terminal: 'void',
   open_with_picker_execute: 'void',
   plugin_activate: 'void',
@@ -110,6 +111,10 @@ export function decodeSimpleIpcResult(command: string, value: unknown): { value:
   }
   if (kind === 'count') {
     if (!isUnsignedInteger(value) || !Number.isSafeInteger(value)) throw invalid()
+    return { value }
+  }
+  if (kind === 'platform') {
+    if (value !== 'macos' && value !== 'windows' && value !== 'linux') throw invalid()
     return { value }
   }
   if (typeof value !== 'boolean') throw invalid()

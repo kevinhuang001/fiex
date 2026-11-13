@@ -44,6 +44,14 @@ export interface RecentNavigationTarget {
   target: string
 }
 
+export interface SearchProviderEngine {
+  id: string
+  provider: string
+  priority: number
+  builtin: boolean
+  modes: Array<'name' | 'content'>
+}
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */

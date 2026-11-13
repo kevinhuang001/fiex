@@ -26,6 +26,7 @@ import type {
   OperationResult,
   RecentNavigationTarget,
   RemoteConnection,
+  SearchProviderEngine,
   SystemProxyInfo,
   Terminal,
 } from './types'
@@ -152,7 +153,7 @@ export interface TauriCommandResults {
   preview_open: ResolvedPreview
   provider_catalog: { features: Catalog }
   provider_preferences: import('@/components/settings/ProviderSettings').ProviderPreferences
-  search_providers: JsonValue[]
+  search_providers: SearchProviderEngine[]
   read_preview: string
   recent_navigation_target: RecentNavigationTarget
   recycle: OperationResult

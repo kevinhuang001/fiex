@@ -32,6 +32,7 @@ import { parsePluginCatalog } from './ipcValidation/pluginCatalog'
 import { parseSystemProxyInfo } from './ipcValidation/systemProxy'
 import { parseRecentNavigationTarget } from './ipcValidation/recentNavigation'
 import { parseDropPlan } from './ipcValidation/dropPlan'
+import { parseSearchProviders } from './ipcValidation/searchProviders'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -112,6 +113,7 @@ export function decodeDynamicIpcResult(
   if (command === 'system_proxy_info') return parseSystemProxyInfo(value)
   if (command === 'recent_navigation_target') return parseRecentNavigationTarget(value)
   if (command === 'internal_drop') return parseDropPlan(value)
+  if (command === 'search_providers') return parseSearchProviders(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
