@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { call, native } from '@/lib/api'
 import { getLocale } from '@/i18n'
 import type { Location, Preferences } from '@/lib/types'
-import type { Navigation } from '@/features/explorer/model/useNavigation'
+import type { Navigation } from './useNavigation'
 
 export function resolveInitialPath({
   startOverride,

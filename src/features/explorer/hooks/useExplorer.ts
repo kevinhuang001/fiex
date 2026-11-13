@@ -1,6 +1,6 @@
 import type { Preferences } from '@/lib/types'
-import { useListing } from './explorer/useListing'
-import { useNavigation } from '@/features/explorer/model/useNavigation'
+import { useListing } from './useListing'
+import { useNavigation } from './useNavigation'
 export function useExplorer(
   prefs: Preferences,
   startOverride?: string,

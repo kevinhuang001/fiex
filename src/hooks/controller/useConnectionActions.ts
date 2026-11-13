@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { call } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
 import { basename } from '@/lib/files'

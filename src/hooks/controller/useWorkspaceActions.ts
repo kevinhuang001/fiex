@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { call } from '@/lib/api'
 import { basename } from '@/lib/files'
 import type { Entry, Location, Preferences } from '@/lib/types'

@@ -2,7 +2,7 @@ import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { basename, displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
 import { useEffect, useRef, useState } from 'react'
-import type { Explorer } from './useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 
 export function usePathEditor({
   x,

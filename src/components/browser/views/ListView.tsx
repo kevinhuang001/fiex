@@ -8,7 +8,7 @@ import { listGridTemplate, resizeListColumn } from '@/features/explorer/model/li
 import { LIST_COLUMNS_DEFAULT } from '@/lib/listColumns'
 import type { ListColumnKey, ListColumns } from '@/lib/listColumns'
 import type { Entry, Sort } from '@/lib/types'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { SharedRow } from './shared'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
