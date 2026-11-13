@@ -1,3 +1,9 @@
+import type {
+  InfoField,
+  InfoFieldDelta,
+  InfoFieldUpdate,
+  InfoSection,
+} from '@/lib/ipcValidation/infoTypes'
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
@@ -9,36 +15,6 @@ import { reportError } from '@/lib/errorCenter'
 import { parseInfoFieldDelta, shouldApplyInfoDelta } from '@/lib/ipcValidation'
 import type { Entry } from '@/lib/types'
 import { Channel } from '@tauri-apps/api/core'
-
-export type InfoField = {
-  id: string
-  subsectionId: string
-  label: string
-  compute: 'onOpen' | 'onDemand'
-  status: 'idle' | 'pending' | 'ready' | 'unavailable' | 'error'
-  value?: string
-  error?: string
-}
-export type InfoSection = {
-  id: string
-  title: string
-  providerId: string
-  provider: string
-  source: 'core' | 'plugin'
-  pluginId?: string
-  fields: InfoField[]
-  error?: string
-}
-type InfoFieldUpdate = {
-  providerId: string
-  subsectionId: string
-  fieldId: string
-  status: InfoField['status']
-  value?: string
-  error?: string
-}
-export type InfoFieldDelta = { sessionId: string; revision: number; updates: InfoFieldUpdate[] }
-export type InfoOpenResult = { sessionId: string; sections: InfoSection[] }
 
 function mergeFieldUpdates(sections: InfoSection[], updates: InfoFieldUpdate[]) {
   if (!updates.length) return sections
