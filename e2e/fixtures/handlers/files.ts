@@ -10,6 +10,7 @@ import {
   root,
 } from '../data'
 import { notHandled, state } from './shared'
+import { waitForDirectoryListingRelease } from './directoryGate'
 
 type FixtureInfoField = {
   id: string
@@ -201,6 +202,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
   switch (command) {
     case 'list_directory': {
       const requested = String(a.path || '')
+      await waitForDirectoryListingRelease(requested)
       if (requested === 'trash://') {
         // Trash entries use opaque identities, just like Core: the backing
         // host path never reaches the UI.

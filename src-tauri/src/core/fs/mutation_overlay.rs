@@ -161,10 +161,7 @@ pub(super) fn reconcile_at_revision(path: &str, listing: &mut Listing, revision:
                     && entry.modified == expected.modified
             }),
         };
-        if confirmed {
-            return false;
-        }
-        true
+        !confirmed
     });
     apply(listing, &directory.pending);
     true
