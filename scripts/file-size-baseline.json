@@ -20,7 +20,6 @@
   "src-tauri/src/desktop/mod.rs": 317,
   "src-tauri/src/infrastructure/logging.rs": 452,
   "src-tauri/src/plugins/aria2.rs": 452,
-  "src-tauri/src/plugins/events/tests.rs": 312,
   "src-tauri/src/plugins/host/manifest/validation.rs": 414,
   "src-tauri/src/plugins/host/process/rpc/transport.rs": 312,
   "src-tauri/src/plugins/providers/connection_menu.rs": 310,
