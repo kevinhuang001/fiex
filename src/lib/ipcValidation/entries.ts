@@ -4,7 +4,7 @@ import type { Batch, Entry, Listing } from '../types'
 import { isJsonObject, isUnsignedInteger, objectResult, onlyKeys } from './json'
 
 export { parseOperationResult } from './operations'
-export { parseLocations, parseStateGetResult } from './state'
+export { parseLocations, parseStateGetArgs, parseStateGetResult } from './state'
 
 const ENTRY_KEYS = [
   'path',

@@ -25,6 +25,24 @@ function isPickerSortDirection(value: unknown): value is PickerSortState['direct
   return value === 'asc' || value === 'desc'
 }
 
+export function parseStateGetArgs(value: Record<string, unknown>): StateGetArgs {
+  if (!onlyKeys(value, ['namespace', 'key']) || typeof value.key !== 'string')
+    throw new TypeError('Invalid saved state key')
+  if (value.namespace === 'layout') return { namespace: 'layout', key: value.key }
+  if (
+    value.namespace === 'explorer' &&
+    (value.key === 'locations' || value.key === 'lastPath' || value.key === 'preferences')
+  )
+    return { namespace: 'explorer', key: value.key }
+  if (value.namespace === 'picker') {
+    if (value.key === 'sort' || value.key === 'group')
+      return { namespace: 'picker', key: value.key }
+    if (value.key === 'lastOpenDirectory' || value.key === 'lastSaveDirectory')
+      return { namespace: 'picker', key: value.key }
+  }
+  throw new TypeError('Invalid saved state key')
+}
+
 export function parseLocations(value: JsonValue): Location[] {
   if (!Array.isArray(value)) throw new TypeError('Invalid saved locations')
   const locations: Location[] = []
