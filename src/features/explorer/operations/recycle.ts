@@ -1,11 +1,11 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
-import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
 
 /** Moving entries to the Trash and deleting them for good. */
-export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
+export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOpsContext) {
+  const { progressChannel, quietProgressChannel } = activity
   const moveToTrash = async (
     paths: string[],
     onProgress: ReturnType<typeof progressChannel> = quietProgressChannel(),
