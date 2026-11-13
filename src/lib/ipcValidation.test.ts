@@ -97,6 +97,19 @@ describe('IPC boundary validation', () => {
     ).toThrow('Invalid remote connection config')
   })
 
+  it('rejects unknown remote connection config fields', () => {
+    expect(() =>
+      parseRemoteConnectionConfig({
+        id: null,
+        name: 'SFTP',
+        kind: 'sftp',
+        pluginId: null,
+        settings: {},
+        secretKeys: ['password'],
+      }),
+    ).toThrow('Invalid remote connection config')
+  })
+
   it('decodes stored values according to their namespace and key', () => {
     expect(parseStateGetResult({ namespace: 'layout', key: 'columns.hash' }, { size: 20 })).toEqual(
       { name: 260, modified: 155, size: 60, kind: 108 },

@@ -153,22 +153,32 @@ export function parseRemoteConnectionConfig(value: unknown): {
 } {
   const config = objectResult(value)
   if (
+    !onlyKeys(config, ['id', 'name', 'kind', 'pluginId', 'settings']) ||
     (config.id !== null && typeof config.id !== 'string') ||
     typeof config.name !== 'string' ||
     typeof config.kind !== 'string' ||
     (config.pluginId !== null && typeof config.pluginId !== 'string') ||
-    config.settings === null ||
-    Array.isArray(config.settings) ||
-    typeof config.settings !== 'object' ||
-    !Object.values(config.settings).every(
-      (setting) =>
-        typeof setting === 'string' ||
-        typeof setting === 'boolean' ||
-        (typeof setting === 'number' && Number.isFinite(setting)),
-    )
+    !isJsonObject(config.settings)
   )
     throw new TypeError('Invalid remote connection config')
-  return config as unknown as ReturnType<typeof parseRemoteConnectionConfig>
+
+  const settings: Array<[string, string | number | boolean]> = []
+  for (const [key, setting] of Object.entries(config.settings)) {
+    if (
+      typeof setting !== 'string' &&
+      typeof setting !== 'boolean' &&
+      !(typeof setting === 'number' && Number.isFinite(setting))
+    )
+      throw new TypeError('Invalid remote connection config')
+    settings.push([key, setting])
+  }
+  return {
+    id: typeof config.id === 'string' ? config.id : null,
+    name: config.name,
+    kind: config.kind,
+    pluginId: typeof config.pluginId === 'string' ? config.pluginId : null,
+    settings: Object.fromEntries(settings),
+  }
 }
 
 export function parseInstallPreview(value: unknown): InstallPreview
