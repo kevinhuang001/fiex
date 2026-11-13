@@ -1,8 +1,72 @@
 import type { Theme } from '../themes'
-import type { Catalog, ProviderPreferences } from '@/components/settings/ProviderSettings'
+import type {
+  Catalog,
+  ProviderEntry,
+  ProviderPreferences,
+} from '@/components/settings/ProviderSettings'
 import type { InstallPreview } from '@/components/settings/installer/types'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
+
+function onlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const strings: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') return null
+    strings.push(item)
+  }
+  return strings
+}
+
+function parseProviderEntry(value: unknown): ProviderEntry | null {
+  if (
+    !isJsonObject(value) ||
+    !onlyKeys(value, [
+      'id',
+      'name',
+      'pluginId',
+      'defaultPriority',
+      'builtin',
+      'locked',
+      'available',
+      'modes',
+    ]) ||
+    typeof value.id !== 'string' ||
+    typeof value.name !== 'string' ||
+    (value.pluginId !== undefined && typeof value.pluginId !== 'string') ||
+    typeof value.defaultPriority !== 'number' ||
+    !Number.isFinite(value.defaultPriority) ||
+    typeof value.builtin !== 'boolean' ||
+    (value.locked !== undefined && typeof value.locked !== 'boolean') ||
+    (value.available !== undefined && typeof value.available !== 'boolean') ||
+    (value.modes !== undefined && !stringArray(value.modes))
+  )
+    return null
+
+  const modes = value.modes === undefined ? undefined : stringArray(value.modes)
+  return {
+    id: value.id,
+    name: value.name,
+    ...(typeof value.pluginId === 'string' ? { pluginId: value.pluginId } : {}),
+    defaultPriority: value.defaultPriority,
+    builtin: value.builtin,
+    ...(typeof value.locked === 'boolean' ? { locked: value.locked } : {}),
+    ...(typeof value.available === 'boolean' ? { available: value.available } : {}),
+    ...(modes ? { modes } : {}),
+  }
+}
+
+function parsePreference(value: unknown): { order: string[]; disabled: string[] } | null {
+  if (!isJsonObject(value) || !onlyKeys(value, ['order', 'disabled'])) return null
+  const order = stringArray(value.order)
+  const disabled = stringArray(value.disabled)
+  if (!order || !disabled) return null
+  return { order, disabled }
+}
 
 function isThemeMode(value: unknown): value is Theme['mode'] {
   return value === 'light' || value === 'dark'
@@ -53,46 +117,31 @@ export function parseThemes(value: unknown): Theme[] {
 export function parseProviderCatalog(value: unknown): { features: Catalog } {
   const catalog = objectResult(value)
   const features = catalog.features
-  if (features === null || Array.isArray(features) || typeof features !== 'object')
+  if (!onlyKeys(catalog, ['features']) || !isJsonObject(features))
     throw new TypeError('Invalid provider catalog')
-  for (const providers of Object.values(features)) {
+  const parsedFeatures: Array<[string, ProviderEntry[]]> = []
+  for (const [feature, providers] of Object.entries(features)) {
     if (!Array.isArray(providers)) throw new TypeError('Invalid provider list')
+    const parsedProviders: ProviderEntry[] = []
     for (const provider of providers) {
-      if (
-        provider === null ||
-        Array.isArray(provider) ||
-        typeof provider !== 'object' ||
-        typeof provider.id !== 'string' ||
-        typeof provider.name !== 'string' ||
-        typeof provider.defaultPriority !== 'number' ||
-        typeof provider.builtin !== 'boolean' ||
-        (provider.locked !== undefined && typeof provider.locked !== 'boolean') ||
-        (provider.available !== undefined && typeof provider.available !== 'boolean') ||
-        (provider.modes !== undefined &&
-          (!Array.isArray(provider.modes) ||
-            !provider.modes.every((mode) => typeof mode === 'string')))
-      )
-        throw new TypeError('Invalid provider catalog entry')
+      const parsed = parseProviderEntry(provider)
+      if (!parsed) throw new TypeError('Invalid provider catalog entry')
+      parsedProviders.push(parsed)
     }
+    parsedFeatures.push([feature, parsedProviders])
   }
-  return { features: features as unknown as Catalog }
+  return { features: Object.fromEntries(parsedFeatures) }
 }
 
 export function parseProviderPreferences(value: unknown): ProviderPreferences {
   const preferences = objectResult(value)
-  for (const preference of Object.values(preferences)) {
-    if (
-      preference === null ||
-      Array.isArray(preference) ||
-      typeof preference !== 'object' ||
-      !Array.isArray(preference.order) ||
-      !preference.order.every((id) => typeof id === 'string') ||
-      !Array.isArray(preference.disabled) ||
-      !preference.disabled.every((id) => typeof id === 'string')
-    )
-      throw new TypeError('Invalid provider preferences')
+  const entries: Array<[string, { order: string[]; disabled: string[] }]> = []
+  for (const [feature, rawPreference] of Object.entries(preferences)) {
+    const preference = parsePreference(rawPreference)
+    if (!preference) throw new TypeError('Invalid provider preferences')
+    entries.push([feature, preference])
   }
-  return preferences as unknown as ProviderPreferences
+  return Object.fromEntries(entries)
 }
 
 export function parseRemoteConnectionConfig(value: unknown): {

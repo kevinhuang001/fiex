@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react'
 export interface ProviderEntry {
   id: string
   name: string
+  pluginId?: string
   defaultPriority: number
   builtin: boolean
   locked?: boolean
