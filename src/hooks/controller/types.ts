@@ -1,5 +1,5 @@
 import type { TransferConflict } from '@/lib/types'
-import type { Run } from '../file-ops/types'
+import type { Run } from '@/features/explorer/operations/types'
 
 /** File-operation helpers shared by the controller hooks. */
 export type { Run }

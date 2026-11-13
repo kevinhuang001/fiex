@@ -2,12 +2,19 @@ import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import type { ConflictResolution } from '@/lib/types'
-import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import { canDuplicateEntries, planTransferPaths } from '@/features/explorer/model/transferPolicy'
 import type { FileOpsContext } from './types'
 
 /** Copying, moving and duplicating entries, including conflict resolution. */
-export function transferActions({ x, conflict, setConflict, setClipboard, run }: FileOpsContext) {
+export function transferActions({
+  x,
+  conflict,
+  setConflict,
+  setClipboard,
+  run,
+  activity,
+}: FileOpsContext) {
+  const { progressChannel, quietProgressChannel, updateActivity } = activity
   const executeTransfer = async (
     paths: string[],
     destination: string,

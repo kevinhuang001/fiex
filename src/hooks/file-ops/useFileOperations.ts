@@ -1,14 +1,15 @@
 import type { DialogState } from '@/lib/dialogs'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { createActions } from './create'
-import { recycleActions } from './recycle'
-import { createResultHandler } from './result'
-import { restoreActions } from './restore'
+import { createActions } from '@/features/explorer/operations/create'
+import { recycleActions } from '@/features/explorer/operations/recycle'
+import { createResultHandler } from '@/features/explorer/operations/result'
+import { restoreActions } from '@/features/explorer/operations/restore'
+import type { Clipboard, ConflictState } from '@/features/explorer/operations/types'
+import { transferActions } from '@/features/explorer/operations/transfer'
 import { useRunner } from './run'
-import { transferActions } from './transfer'
-import type { Clipboard, ConflictState } from './types'
 
 export function useFileOperations({
   x,
@@ -39,6 +40,7 @@ export function useFileOperations({
     setClipboard,
     run,
     handleResult,
+    activity: { progressChannel, quietProgressChannel, updateActivity },
   }
   const { create, createFile } = createActions(context)
   const { recycle, deletePermanently, emptyTrash } = recycleActions(context)

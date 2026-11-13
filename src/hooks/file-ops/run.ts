@@ -5,7 +5,7 @@ import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivi
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { Run } from './types'
+import type { Run } from '@/features/explorer/operations/types'
 
 /** Serializes file operations: only one runs at a time and the busy label
  *  follows it, including the cancellable activity it registers. */

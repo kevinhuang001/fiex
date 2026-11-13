@@ -3,9 +3,10 @@ import { scheduleActivityReveal } from '@/lib/activity'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import type { OperationProgress } from '@/lib/types'
+import type { ActivityKind } from '@/features/explorer/operations/types'
 
 type ActivityStatus = 'running' | 'done' | 'error'
-export type ActivityKind = 'transfer' | 'delete' | 'sync' | 'plugin'
+export type { ActivityKind } from '@/features/explorer/operations/types'
 
 export interface ActivityItem {
   id: string
