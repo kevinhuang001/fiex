@@ -1,8 +1,9 @@
-import type { ConnectionMenu } from '@/components/sidebar/Connections'
+import type { ConnectionMenu } from '../connectionMenu'
 import type { CoreMenu } from '../coreMenu'
-import type { PluginMenu } from '@/components/plugins/PluginMenuNode'
-import { isJsonObject, parseJsonValue } from './json'
+import type { PluginMenu } from '../pluginMenu'
+import { isJsonObject, objectResult, parseJsonValue } from './json'
 import { validPluginMenuItems } from '../pluginMenu'
+import type { ConnectionMenuItem } from '../connectionMenu'
 
 export function parsePluginMenuResult(value: unknown, source: 'core'): CoreMenu[]
 export function parsePluginMenuResult(value: unknown, source: 'plugins'): PluginMenu[]
@@ -48,33 +49,74 @@ function validCoreItems(items: unknown): boolean {
 export function parseConnectionMenus(value: unknown): ConnectionMenu[] {
   const json = parseJsonValue(value)
   if (!Array.isArray(json)) throw new TypeError('Invalid connection menu list')
-  for (const menu of json) {
-    if (
-      menu === null ||
-      Array.isArray(menu) ||
-      typeof menu !== 'object' ||
-      !['builtin', 'plugin'].includes(String(menu.kind)) ||
-      typeof menu.providerId !== 'string' ||
-      typeof menu.menuSessionId !== 'string' ||
-      (menu.kind === 'plugin' && typeof menu.pluginId !== 'string') ||
-      (menu.pluginName !== undefined && typeof menu.pluginName !== 'string') ||
-      !Array.isArray(menu.items)
-    )
-      throw new TypeError('Invalid connection menu')
-    for (const item of menu.items) {
-      if (
-        item === null ||
-        Array.isArray(item) ||
-        typeof item !== 'object' ||
-        typeof item.id !== 'string' ||
-        typeof item.title !== 'string' ||
-        !['action', 'separator'].includes(String(item.kind)) ||
-        (item.icon !== undefined && typeof item.icon !== 'string') ||
-        (item.disabled !== undefined && typeof item.disabled !== 'boolean') ||
-        (item.danger !== undefined && typeof item.danger !== 'boolean')
-      )
-        throw new TypeError('Invalid connection menu item')
-    }
+  return json.map(parseConnectionMenu)
+}
+
+function parseConnectionMenu(value: unknown): ConnectionMenu {
+  const menu = objectResult(value)
+  const pluginId = menu.pluginId
+  const pluginName = menu.pluginName
+  if (
+    (menu.kind !== 'builtin' && menu.kind !== 'plugin') ||
+    typeof menu.providerId !== 'string' ||
+    typeof menu.menuSessionId !== 'string' ||
+    (menu.kind === 'plugin' && typeof pluginId !== 'string') ||
+    (pluginId !== undefined && typeof pluginId !== 'string') ||
+    (pluginName !== undefined && typeof pluginName !== 'string') ||
+    !Array.isArray(menu.items)
+  )
+    throw new TypeError('Invalid connection menu')
+
+  return {
+    kind: menu.kind,
+    providerId: menu.providerId,
+    menuSessionId: menu.menuSessionId,
+    ...(typeof pluginId === 'string' ? { pluginId } : {}),
+    ...(typeof pluginName === 'string' ? { pluginName } : {}),
+    items: menu.items.map(parseConnectionMenuItem),
   }
-  return json as unknown as ConnectionMenu[]
+}
+
+function parseConnectionMenuItem(value: unknown): ConnectionMenuItem {
+  const item = objectResult(value)
+  const icon = item.icon
+  const shortcut = item.shortcut
+  const danger = item.danger
+  const disabled = item.disabled
+  const placement = item.placement
+  const activity = item.activity
+  if (
+    typeof item.id !== 'string' ||
+    typeof item.title !== 'string' ||
+    (item.kind !== 'action' && item.kind !== 'separator') ||
+    (icon !== undefined && typeof icon !== 'string') ||
+    (shortcut !== undefined && typeof shortcut !== 'string') ||
+    (danger !== undefined && typeof danger !== 'boolean') ||
+    (disabled !== undefined && typeof disabled !== 'boolean') ||
+    (placement !== undefined && placement !== 'tail')
+  )
+    throw new TypeError('Invalid connection menu item')
+
+  return {
+    id: item.id,
+    title: item.title,
+    kind: item.kind,
+    ...(typeof icon === 'string' ? { icon } : {}),
+    ...(typeof shortcut === 'string' ? { shortcut } : {}),
+    ...(typeof danger === 'boolean' ? { danger } : {}),
+    ...(typeof disabled === 'boolean' ? { disabled } : {}),
+    ...(placement === 'tail' ? { placement } : {}),
+    ...(activity === undefined ? {} : { activity: parseConnectionMenuActivity(activity) }),
+  }
+}
+
+function parseConnectionMenuActivity(value: unknown): NonNullable<ConnectionMenuItem['activity']> {
+  const activity = objectResult(value)
+  if (
+    typeof activity.label !== 'string' ||
+    (activity.kind !== 'sync' && activity.kind !== 'transfer') ||
+    typeof activity.quiet !== 'boolean'
+  )
+    throw new TypeError('Invalid connection menu activity')
+  return { label: activity.label, kind: activity.kind, quiet: activity.quiet }
 }
