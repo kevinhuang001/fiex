@@ -102,4 +102,6 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 **P1-33 系统代理 IPC（PR #148）：** 将 `system_proxy_info` 改为共享 DTO，校验 Rust 代理来源枚举、字段集合和 enabled/proxy 的一致状态。
 
+**P1-34 最近位置导航 IPC（PR #149）：** 为 Rust `RecentNavigationTarget` 建立共享结果 DTO，校验非空 parent/target 及精确字段集合。
+
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。
