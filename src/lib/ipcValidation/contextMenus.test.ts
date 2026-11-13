@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseCoreMenuItems, parsePluginMenuItems, parsePluginMenuResult } from './menus'
+import { decodeDynamicIpcResult } from '../ipcValidation'
+import { parseCoreMenuItems, parsePluginMenuItems, parsePluginMenuResult } from './contextMenus'
 
 describe('context menu IPC decoding', () => {
   it('constructs explicit Core and plugin menu DTOs and rejects malformed fields', () => {
@@ -128,5 +129,47 @@ describe('context menu IPC decoding', () => {
     expect(() =>
       parsePluginMenuItems([{ id: 'extract', title: 'Extract', kind: 'action', extra: true }]),
     ).toThrow('Invalid plugin context menu item')
+  })
+
+  it('validates the lazy submenu IPC envelope and shared item DTO', () => {
+    expect(
+      decodeDynamicIpcResult(
+        'plugin_context_menu_children',
+        {},
+        {
+          items: [
+            {
+              id: 'openRemote',
+              kind: 'action',
+              title: 'Open remote',
+              parentId: 'remote',
+              shortcut: 'providerDefined',
+            },
+          ],
+        },
+      ),
+    ).toEqual({
+      items: [
+        {
+          id: 'openRemote',
+          kind: 'action',
+          title: 'Open remote',
+          parentId: 'remote',
+          shortcut: 'providerDefined',
+        },
+      ],
+    })
+    expect(() =>
+      decodeDynamicIpcResult('plugin_context_menu_children', {}, { items: [], extra: true }),
+    ).toThrow('Invalid context submenu response')
+    expect(() =>
+      decodeDynamicIpcResult(
+        'plugin_context_menu_children',
+        {},
+        {
+          items: [{ id: 'bad', kind: 'action', title: 'Bad', nested: [] }],
+        },
+      ),
+    ).toThrow('Invalid context submenu item')
   })
 })

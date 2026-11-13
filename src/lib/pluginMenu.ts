@@ -1,13 +1,6 @@
-export interface PluginMenuItem {
-  id: string
-  title: string
-  kind: 'action' | 'submenu' | 'separator'
-  parentId?: string
-  icon?: string
-  disabled?: boolean
-  danger?: boolean
-  shortcut?: string
-}
+import type { MenuChildItem } from './coreMenu'
+
+export type PluginMenuItem = Omit<MenuChildItem, 'activity' | 'placement'>
 
 export interface PluginMenu {
   kind: 'plugin'
