@@ -1,6 +1,6 @@
 import { Check, Copy } from 'lucide-react'
 import { t } from '@/i18n'
-import type { InfoField, InfoSection } from './FileInfoDialog'
+import type { InfoField, InfoSection } from '@/lib/ipcValidation/infoTypes'
 
 export function FileInfoSections({
   sections,

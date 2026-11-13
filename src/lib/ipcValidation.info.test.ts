@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseInfoOpenResult, shouldApplyInfoDelta } from './ipcValidation'
+import { parseInfoFieldDelta, parseInfoOpenResult, shouldApplyInfoDelta } from './ipcValidation'
 
 describe('file info IPC validation', () => {
   it('only applies newer deltas for the active session', () => {
@@ -120,5 +120,50 @@ describe('file info IPC validation', () => {
         ],
       }),
     ).toThrow('Invalid file info response')
+  })
+})
+
+describe('Info wire enum validation', () => {
+  const field = {
+    id: 'name',
+    subsectionId: 'basic',
+    label: 'Name',
+    compute: 'onOpen',
+    status: 'ready',
+  }
+  const section = {
+    id: 'core.metadata',
+    title: 'Metadata',
+    providerId: 'core.metadata',
+    provider: 'Fiex',
+    source: 'core',
+    fields: [field],
+  }
+
+  it.each([
+    { ...section, source: ['core'] },
+    { ...section, fields: [{ ...field, compute: ['onOpen'] }] },
+    { ...section, fields: [{ ...field, status: ['ready'] }] },
+  ])('rejects an enum encoded as an array in the Info response', (invalidSection) => {
+    expect(() =>
+      parseInfoOpenResult({ sessionId: 'info-session', sections: [invalidSection] }),
+    ).toThrow('Invalid file info response')
+  })
+
+  it('rejects a field update whose status is an array', () => {
+    expect(() =>
+      parseInfoFieldDelta({
+        sessionId: 'info-session',
+        revision: 1,
+        updates: [
+          {
+            providerId: section.providerId,
+            subsectionId: field.subsectionId,
+            fieldId: field.id,
+            status: ['ready'],
+          },
+        ],
+      }),
+    ).toThrow('Invalid file info update')
   })
 })

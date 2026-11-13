@@ -1,9 +1,16 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
-import type { InfoFieldDelta, InfoOpenResult } from '@/components/FileInfoDialog'
+import type { InfoField, InfoFieldDelta, InfoOpenResult, InfoSection } from './infoTypes'
 import { objectResult } from './json'
 
-const FIELD_STATUSES = ['idle', 'pending', 'ready', 'unavailable', 'error']
-const COMPUTE_MODES = ['onOpen', 'onDemand']
+const FIELD_STATUSES = [
+  'idle',
+  'pending',
+  'ready',
+  'unavailable',
+  'error',
+] satisfies InfoField['status'][]
+const COMPUTE_MODES = ['onOpen', 'onDemand'] satisfies InfoField['compute'][]
+const SECTION_SOURCES = ['core', 'plugin'] satisfies InfoSection['source'][]
 
 export function shouldApplyInfoDelta(
   delta: { sessionId: string; revision: number },
@@ -34,8 +41,8 @@ function infoField(value: JsonValue): boolean {
     value.subsectionId.length > 0 &&
     typeof value.label === 'string' &&
     value.label.length > 0 &&
-    COMPUTE_MODES.includes(String(value.compute)) &&
-    FIELD_STATUSES.includes(String(value.status)) &&
+    COMPUTE_MODES.some((mode) => mode === value.compute) &&
+    FIELD_STATUSES.some((status) => status === value.status) &&
     (value.value === undefined || typeof value.value === 'string') &&
     (value.error === undefined || typeof value.error === 'string')
   )
@@ -69,7 +76,7 @@ export function parseInfoOpenResult(value: unknown): InfoOpenResult {
         rawSection.id !== rawSection.providerId ||
         providerIds.has(rawSection.providerId) ||
         typeof rawSection.provider !== 'string' ||
-        !['core', 'plugin'].includes(String(rawSection.source)) ||
+        !SECTION_SOURCES.some((source) => source === rawSection.source) ||
         (rawSection.pluginId !== undefined && typeof rawSection.pluginId !== 'string') ||
         (rawSection.error !== undefined && typeof rawSection.error !== 'string') ||
         !Array.isArray(rawSection.fields) ||
@@ -118,7 +125,7 @@ export function parseInfoFieldDelta(value: unknown): InfoFieldDelta {
         !rawUpdate.subsectionId ||
         typeof rawUpdate.fieldId !== 'string' ||
         !rawUpdate.fieldId ||
-        !FIELD_STATUSES.includes(String(rawUpdate.status)) ||
+        !FIELD_STATUSES.some((status) => status === rawUpdate.status) ||
         (rawUpdate.value !== undefined && typeof rawUpdate.value !== 'string') ||
         (rawUpdate.error !== undefined && typeof rawUpdate.error !== 'string')
       )

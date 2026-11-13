@@ -1,7 +1,7 @@
 import type { JsonValue } from '../../sdk/ui/src/index'
 import type { CoreMenu } from '@/components/explorer/context-menu/useContextMenu'
 import type { PickerResponse } from '@/components/explorer/context-menu/OpenWithPicker'
-import type { InfoFieldDelta, InfoOpenResult } from '@/components/FileInfoDialog'
+import type { InfoFieldDelta, InfoOpenResult } from '@/lib/ipcValidation/infoTypes'
 import type { PluginMenu } from '@/components/plugins/PluginMenuNode'
 import type { Catalog } from '@/components/settings/ProviderSettings'
 import type { InstallPreview } from '@/components/settings/installer/types'
