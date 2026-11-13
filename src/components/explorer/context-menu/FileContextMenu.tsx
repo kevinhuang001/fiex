@@ -29,10 +29,10 @@ import {
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { OpenWithPicker } from './OpenWithPicker'
 import { useContextMenu } from './useContextMenu'
-import { hasTopLevelMenuActions } from './menuVisibility'
-import { buildMoreMenuPlan, isMoreAction } from './moreMenu'
+import { hasTopLevelMenuActions } from '@/features/explorer/model/menuVisibility'
+import { buildMoreMenuPlan, isMoreAction } from '@/features/explorer/model/moreMenu'
 import { executeCoreMenu } from './execute'
-import type { CoreMenu, CoreMenuItem } from './useContextMenu'
+import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 import type { ContextMenuProps } from './types'
 
 const icons = {

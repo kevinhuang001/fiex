@@ -3,8 +3,8 @@ import { call } from '@/lib/api'
 import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
+import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 import type { ContextMenuProps } from './types'
-import type { CoreMenu, CoreMenuItem } from './useContextMenu'
 
 export interface CoreAction {
   kind: 'coreAction'

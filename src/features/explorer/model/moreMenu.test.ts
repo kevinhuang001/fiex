@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildMoreMenuPlan } from './moreMenu'
-import type { CoreMenu } from './useContextMenu'
+import type { CoreMenu } from '@/lib/coreMenu'
 
 const menus: CoreMenu[] = [
   {

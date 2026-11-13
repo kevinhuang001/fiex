@@ -2,28 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
 import type { ShortcutAction } from '@/lib/shortcuts'
 import { SHORTCUT_ACTIONS } from '@/lib/shortcuts/defaults'
+import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 import { call } from '@/lib/api'
 import { validPluginMenuItems, type PluginMenu } from '@/components/plugins/PluginMenuNode'
 import type { ContextMenuProps } from './types'
-
-export interface CoreMenuItem {
-  id: string
-  kind: 'action' | 'submenu' | 'separator'
-  title: string
-  parentId?: string
-  icon?: string
-  shortcut?: ShortcutAction
-  disabled?: boolean
-  danger?: boolean
-  placement?: 'tail'
-  activity?: { label: string; kind: 'sync' | 'transfer'; quiet: boolean }
-}
-export interface CoreMenu {
-  kind: 'builtin'
-  providerId: string
-  menuSessionId: string
-  items: CoreMenuItem[]
-}
 
 interface CoreSnapshot {
   key: string
