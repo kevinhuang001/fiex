@@ -3,6 +3,18 @@ import type { ListColumns } from './listColumns'
 
 export type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
 
+export interface AppErrorEvent {
+  id: number
+  at: number
+  source: string
+  code: string
+  message: string
+  operation: string | null
+  retryable: boolean
+  occurrences: number
+  lastAt: number
+}
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */
