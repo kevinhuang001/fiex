@@ -11,6 +11,8 @@ const fixtureConnections: RemoteConnection[] = [
     mountPath: 'fiex://mount/demo-webdav/',
     saved: true,
     autostart: false,
+    canRead: true,
+    canWrite: true,
   },
   {
     id: 'demo-ssh',
@@ -20,6 +22,8 @@ const fixtureConnections: RemoteConnection[] = [
     mountPath: 'fiex-plugin-view://demo-ssh',
     saved: true,
     autostart: false,
+    canRead: true,
+    canWrite: false,
   },
 ]
 
