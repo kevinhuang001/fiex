@@ -1,8 +1,8 @@
 import { parseResourceContext } from '../../sdk/ui/src/resources.js'
-import type { StateGetArgs } from './tauriCommandMap'
 import { objectResult, parseJsonValue } from './ipcValidation/json'
 import {
   parseConnectionOpenResult,
+  parseStateGetArgs,
   parseStateGetResult,
   parseListing,
   parseEntry,
@@ -39,7 +39,7 @@ export function decodeDynamicIpcResult(
   value: unknown,
 ): unknown {
   if (command === 'connection_open') return parseConnectionOpenResult(value)
-  if (command === 'state_get') return parseStateGetResult(args as StateGetArgs, value)
+  if (command === 'state_get') return parseStateGetResult(parseStateGetArgs(args), value)
   if (command === 'list_directory') return parseListing(value)
   if (command === 'file_info') return parseEntry(parseJsonValue(value))
   if (command === 'file_info_open') return parseInfoOpenResult(value)
