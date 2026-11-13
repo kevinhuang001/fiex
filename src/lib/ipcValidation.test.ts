@@ -215,6 +215,9 @@ describe('IPC boundary validation', () => {
         elapsedMs: 2,
         truncated: false,
         skipped: 0,
+        scanned: 1,
+        incomplete: false,
+        replace: false,
       }),
     ).toMatchObject({ entries: [entry], done: true })
     expect(() =>
@@ -224,6 +227,9 @@ describe('IPC boundary validation', () => {
         elapsedMs: 2,
         truncated: false,
         skipped: 0,
+        scanned: 1,
+        incomplete: false,
+        replace: false,
       }),
     ).toThrow('Invalid file entry from IPC')
   })

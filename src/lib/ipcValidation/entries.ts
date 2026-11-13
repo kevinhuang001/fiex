@@ -25,6 +25,18 @@ const ENTRY_KEYS = [
   'sync',
 ]
 const LISTING_KEYS = ['allowedOps', 'virtualVolume', 'path', 'entries', 'warnings', 'defaultView']
+const SEARCH_BATCH_KEYS = [
+  'entries',
+  'done',
+  'elapsedMs',
+  'truncated',
+  'skipped',
+  'scanned',
+  'incomplete',
+  'warning',
+  'engine',
+  'replace',
+]
 
 function isEntrySync(value: unknown): value is Entry['sync'] {
   return (
@@ -95,11 +107,17 @@ export function parseEntry(value: JsonValue): Entry {
 export function parseSearchBatch(value: unknown): Batch {
   const batch = objectResult(value)
   if (
+    !onlyKeys(batch, SEARCH_BATCH_KEYS) ||
     !Array.isArray(batch.entries) ||
     typeof batch.done !== 'boolean' ||
-    typeof batch.elapsedMs !== 'number' ||
+    !isUnsignedInteger(batch.elapsedMs) ||
     typeof batch.truncated !== 'boolean' ||
-    typeof batch.skipped !== 'number'
+    !isUnsignedInteger(batch.skipped) ||
+    !isUnsignedInteger(batch.scanned) ||
+    typeof batch.incomplete !== 'boolean' ||
+    typeof batch.replace !== 'boolean' ||
+    (batch.warning !== undefined && typeof batch.warning !== 'string') ||
+    (batch.engine !== undefined && typeof batch.engine !== 'string')
   )
     throw new TypeError('Invalid search batch from IPC')
   const result: Batch = {
@@ -108,16 +126,12 @@ export function parseSearchBatch(value: unknown): Batch {
     elapsedMs: batch.elapsedMs,
     truncated: batch.truncated,
     skipped: batch.skipped,
+    scanned: batch.scanned,
+    incomplete: batch.incomplete,
+    replace: batch.replace,
   }
-  if (batch.scanned !== undefined && typeof batch.scanned === 'number')
-    result.scanned = batch.scanned
-  if (batch.incomplete !== undefined && typeof batch.incomplete === 'boolean')
-    result.incomplete = batch.incomplete
-  if (batch.warning !== undefined && typeof batch.warning === 'string')
-    result.warning = batch.warning
-  if (batch.engine !== undefined && typeof batch.engine === 'string') result.engine = batch.engine
-  if (batch.replace !== undefined && typeof batch.replace === 'boolean')
-    result.replace = batch.replace
+  if (typeof batch.warning === 'string') result.warning = batch.warning
+  if (typeof batch.engine === 'string') result.engine = batch.engine
   return result
 }
 
