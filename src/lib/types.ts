@@ -15,6 +15,23 @@ export interface AppErrorEvent {
   lastAt: number
 }
 
+export interface LogRecord {
+  id: number
+  at: number
+  source: string
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
+  operationId: string | null
+  durationMs: number | null
+  message: string
+  detail?: string
+}
+
+export interface LogPage {
+  entries: LogRecord[]
+  cursor: number
+  hasMore: boolean
+}
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */
