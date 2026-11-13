@@ -25,6 +25,7 @@ import type {
   Location,
   OperationResult,
   RemoteConnection,
+  SystemProxyInfo,
   Terminal,
 } from './types'
 import type { MarketplacePlugin, PluginInfo } from './plugins'
@@ -185,7 +186,7 @@ export interface TauriCommandResults {
   state_put: void
   state_remove: void
   system_fonts: string[]
-  system_proxy_info: { enabled: boolean; source: string; proxy: string | null }
+  system_proxy_info: SystemProxyInfo
   terminal_close: void
   terminal_resize: void
   terminal_write: void

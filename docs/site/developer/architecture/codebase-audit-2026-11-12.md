@@ -100,4 +100,6 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 **P1-32 已安装插件目录 IPC（PR #147）：** 按 Rust `PluginInfo` 校验完整权限状态、能力列表、schema 版本、超时范围及字段集合；验证 nullable author/icon/extensions，并将 description 改为必需字段。
 
+**P1-33 系统代理 IPC（PR #148）：** 将 `system_proxy_info` 改为共享 DTO，校验 Rust 代理来源枚举、字段集合和 enabled/proxy 的一致状态。
+
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。
