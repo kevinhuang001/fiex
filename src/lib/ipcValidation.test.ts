@@ -201,7 +201,11 @@ describe('IPC boundary validation', () => {
       extension: 'txt',
       mime: 'text/plain',
       linkTarget: null,
+      allowedOps: ['stat', 'read'],
       tags: [],
+      hasCache: false,
+      pinned: false,
+      uploaded: false,
       sync: null,
     }
     expect(
@@ -255,7 +259,11 @@ describe('IPC boundary validation', () => {
       extension: 'txt',
       mime: 'text/plain',
       linkTarget: null,
+      allowedOps: ['stat', 'read'],
       tags: [],
+      hasCache: false,
+      pinned: false,
+      uploaded: false,
       sync: null,
     }
     expect(
