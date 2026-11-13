@@ -24,6 +24,7 @@ import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/pr
 import { decodeSimpleIpcResult } from './ipcValidation/simpleResults'
 import { decodeSimpleCollectionIpcResult } from './ipcValidation/simpleCollections'
 import { decodeRuntimeCatalogIpcResult } from './ipcValidation/runtimeCatalogs'
+import { decodeRemoteConnectionIpcResult } from './ipcValidation/remoteConnections'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -103,5 +104,7 @@ export function decodeDynamicIpcResult(
   if (simpleCollectionResult) return simpleCollectionResult.value
   const runtimeCatalogResult = decodeRuntimeCatalogIpcResult(command, value)
   if (runtimeCatalogResult) return runtimeCatalogResult.value
+  const remoteConnectionResult = decodeRemoteConnectionIpcResult(command, value)
+  if (remoteConnectionResult) return remoteConnectionResult.value
   return value === undefined ? undefined : parseJsonValue(value)
 }

@@ -185,10 +185,10 @@ export interface RemoteConnection {
   kind: string
   pluginId: string
   mountPath: string
-  saved?: boolean
-  autostart?: boolean
+  saved: boolean
+  autostart: boolean
   /** Provider can enumerate and read this mount. */
-  canRead?: boolean
+  canRead: boolean
   /** Provider can upload/create inside this mount. */
-  canWrite?: boolean
+  canWrite: boolean
 }
