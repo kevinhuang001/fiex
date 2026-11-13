@@ -18,6 +18,9 @@ export interface ResolvedPreview {
     contributionId?: string
     timeoutMs?: number
     context?: unknown
+    state?: unknown
+    size?: number
+    extension?: string
   }
 }
 
