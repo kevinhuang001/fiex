@@ -63,11 +63,11 @@ export interface PluginInfo {
   id: string
   name: string
   version: string
-  description?: string
+  description: string
   icon?: string
 
   enabled: boolean
-  author?: { name: string; url?: string }
+  author?: PluginAuthor
   approved: boolean
   declaredPermissions: string[]
   grantedPermissions: string[]

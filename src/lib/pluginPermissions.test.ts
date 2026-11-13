@@ -8,6 +8,7 @@ function plugin(declaredPermissions: string[]): PluginInfo {
     id: 'org.example.test',
     name: '测试插件',
     version: '1.0.0',
+    description: '',
     enabled: true,
     approved: true,
     declaredPermissions,
