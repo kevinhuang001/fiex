@@ -1,8 +1,8 @@
 import { t } from '@/i18n'
 import { useExplorer } from '@/features/explorer/hooks/useExplorer'
+import { batchRenameEntries } from '@/features/explorer/operations/batchRename'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
-import { basename } from '@/lib/files'
 import { loadSavedTabs, saveTabs } from '@/lib/tabs'
 import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -139,38 +139,13 @@ export function useAppController() {
     if (targets.length > 1) setBatchRename(targets)
   }
   const applyBatchRename = async (renames: { path: string; name: string }[]) => {
-    // Two-phase rename: move every source to a unique temporary name first,
-    // then to its final name. This supports swaps (a↔b) and avoids a target
-    // colliding with another source that has not moved yet.
-    const staged: { original: string; temp: string; name: string }[] = []
-    const final: { path: string; original: string; temp: string }[] = []
-    try {
-      for (const [index, item] of renames.entries()) {
-        const tempName = `.fiex-batch-${crypto.randomUUID().slice(0, 8)}-${index}`
-        const temp = await call('rename_entry', { path: item.path, name: tempName })
-        staged.push({ original: item.path, temp, name: item.name })
-      }
-      for (const item of staged) {
-        const path = await call('rename_entry', { path: item.temp, name: item.name })
-        final.push({ path, original: item.original, temp: item.temp })
-      }
-      setBatchRename(null)
-      x.setSelected([])
-      x.reload()
-      notify(t('已重命名 {0} 个项目', final.length))
-    } catch (error) {
-      // Park finalized targets back under temporary names first, so swaps
-      // (a↔b) do not collide when restoring.
-      for (const item of final.reverse()) {
-        await call('rename_entry', { path: item.path, name: basename(item.temp) }).catch(() => {})
-      }
-      for (const item of staged.reverse()) {
-        await call('rename_entry', { path: item.temp, name: basename(item.original) }).catch(
-          () => {},
-        )
-      }
-      throw error
-    }
+    const renamed = await batchRenameEntries(renames, (path, name) =>
+      call('rename_entry', { path, name }),
+    )
+    setBatchRename(null)
+    x.setSelected([])
+    x.reload()
+    notify(t('已重命名 {0} 个项目', renamed.length))
   }
 
   const {
