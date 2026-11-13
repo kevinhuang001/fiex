@@ -6,7 +6,6 @@ import type { PluginMenu } from './pluginMenu'
 import type { Catalog } from '@/components/settings/ProviderSettings'
 import type { InstallPreview } from '@/components/settings/installer/types'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
-import type { LogRecord } from '@/components/settings/plugins/PluginLogViewer'
 import type { ShellChoice } from '@/components/terminal/TerminalPanel'
 import type { ConnectionMenu } from './connectionMenu'
 import type { DropPlan } from './types'
@@ -22,6 +21,7 @@ import type {
   EntryDecoration,
   Ide,
   Listing,
+  LogPage,
   Location,
   OperationResult,
   RemoteConnection,
@@ -116,7 +116,7 @@ export interface TauriCommandResults {
   plugin_file_dialog: string | null
   plugin_files_dialog: string[] | null
   plugin_invoke: JsonValue
-  plugin_logs: { entries: LogRecord[]; cursor: number }
+  plugin_logs: LogPage
   plugin_logs_clear: void
   plugin_network_domains: string[]
   plugin_marketplace: MarketplacePlugin[]

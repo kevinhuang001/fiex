@@ -2,6 +2,7 @@ import { redactDiagnostic } from '@/lib/redactDiagnostic'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from '@/lib/api'
+import type { LogRecord } from '@/lib/types'
 import {
   Copy,
   Download,
@@ -13,15 +14,6 @@ import {
   Trash2,
   Circle,
 } from 'lucide-react'
-
-export interface LogRecord {
-  id: number
-  at: number
-  source: string
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
-  message: string
-  detail?: string
-}
 
 const levels = ['all', 'trace', 'debug', 'info', 'warn', 'error'] as const
 type LevelFilter = (typeof levels)[number]
