@@ -17,6 +17,7 @@ import type { ListColumns } from './listColumns'
 import type { Platform } from './platform'
 import type { Theme } from './themes'
 import type {
+  AppErrorEvent,
   Entry,
   EntryDecoration,
   Ide,
@@ -71,7 +72,7 @@ export interface TauriCommandResults {
   eject_device: void
   eject_usb: void
   empty_trash: number
-  errors_pending: Array<{ id: number; source: string; code: string; message: string }>
+  errors_pending: AppErrorEvent[]
   file_info: Entry
   file_info_cancel: void
   file_info_compute: InfoFieldDelta
