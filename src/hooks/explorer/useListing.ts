@@ -10,7 +10,7 @@ import { PaintedListingCache } from '@/features/explorer/model/paintedListingCac
 import { useDirectorySnapshot } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
-import type { Navigation } from './useNavigation'
+import type { Navigation } from '@/features/explorer/model/useNavigation'
 
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and current-directory capabilities. Path, history and tab
