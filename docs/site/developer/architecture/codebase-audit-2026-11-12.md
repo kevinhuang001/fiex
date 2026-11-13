@@ -98,4 +98,6 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 | P1-31 插件市场 IPC      | PR #146                      | 严格校验市场条目的 Rust 序列化字段、作者 nullable DTO、权限/域名/命令字符串列表及 JSON extensions；移除 Rust 未提供的市场 icon 类型假设                                                                                                                                                                                                                 |
 | P1 其余及之后           | 后续小 PR                    | 继续扩展 typed IPC 和模块边界，再逐个迁移 Explorer 操作、菜单和 Rust use cases                                                                                                                                                                                                                                                                          |
 
+**P1-32 已安装插件目录 IPC（PR #147）：** 按 Rust `PluginInfo` 校验完整权限状态、能力列表、schema 版本、超时范围及字段集合；验证 nullable author/icon/extensions，并将 description 改为必需字段。
+
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。

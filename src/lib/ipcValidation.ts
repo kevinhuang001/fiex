@@ -28,6 +28,7 @@ import { decodeRemoteConnectionIpcResult } from './ipcValidation/remoteConnectio
 import { parsePendingErrors } from './ipcValidation/appErrors'
 import { parsePluginLogPage } from './ipcValidation/pluginLogs'
 import { parseMarketplacePlugins } from './ipcValidation/marketplace'
+import { parsePluginCatalog } from './ipcValidation/pluginCatalog'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -104,6 +105,7 @@ export function decodeDynamicIpcResult(
   if (command === 'errors_pending') return parsePendingErrors(value)
   if (command === 'plugin_logs') return parsePluginLogPage(value)
   if (command === 'plugin_marketplace') return parseMarketplacePlugins(value)
+  if (command === 'plugins_list') return parsePluginCatalog(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
