@@ -1,43 +1,8 @@
-import type { EntryDecoration } from '../types'
 import type { Theme } from '../themes'
 import type { Catalog, ProviderPreferences } from '@/components/settings/ProviderSettings'
 import type { InstallPreview } from '@/components/settings/installer/types'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
-
-export function parseEntryDecorations(value: unknown): EntryDecoration[] {
-  const json = parseJsonValue(value)
-  if (!Array.isArray(json)) throw new TypeError('Invalid decorations list')
-  const decorations: Record<string, unknown>[] = []
-  for (const decoration of json) {
-    if (
-      decoration === null ||
-      Array.isArray(decoration) ||
-      typeof decoration !== 'object' ||
-      typeof decoration.path !== 'string'
-    )
-      throw new TypeError('Invalid decoration')
-    const normalized = { ...decoration }
-    for (const key of ['label', 'description', 'icon', 'iconPath'] as const) {
-      // Rust serializes `Option::None` as JSON null unless the DTO explicitly
-      // skips absent fields. These optional presentation values are absent to
-      // TypeScript callers, so normalize null to an omitted property here.
-      if (decoration[key] === null) {
-        delete normalized[key]
-      } else if (decoration[key] !== undefined && typeof decoration[key] !== 'string') {
-        throw new TypeError(`Invalid decoration ${key}`)
-      }
-    }
-    if (
-      decoration.providers !== undefined &&
-      (!Array.isArray(decoration.providers) ||
-        !decoration.providers.every((provider) => typeof provider === 'string'))
-    )
-      throw new TypeError('Invalid decoration providers')
-    decorations.push(normalized)
-  }
-  return decorations as unknown as EntryDecoration[]
-}
 
 export function parseThemes(value: unknown): Theme[] {
   const json = parseJsonValue(value)

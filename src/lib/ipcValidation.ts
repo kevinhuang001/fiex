@@ -12,8 +12,8 @@ import {
 import { parseInfoOpenResult, parseInfoFieldDelta } from './ipcValidation/info'
 import { parseConnectionMenus } from './ipcValidation/menus'
 import { parsePluginMenuResult, parseContextMenuChildItems } from './ipcValidation/contextMenus'
+import { parseEntryDecorations } from './ipcValidation/decorations'
 import {
-  parseEntryDecorations,
   parseThemes,
   parseProviderCatalog,
   parseProviderPreferences,
@@ -28,6 +28,7 @@ export * from './ipcValidation/info'
 export * from './ipcValidation/directory'
 export * from './ipcValidation/menus'
 export * from './ipcValidation/contextMenus'
+export * from './ipcValidation/decorations'
 export * from './ipcValidation/providers'
 export * from './ipcValidation/previews'
 

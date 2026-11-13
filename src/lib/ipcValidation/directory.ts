@@ -1,5 +1,5 @@
 import type { DirectoryViewUpdate } from '../listing'
-import { parseEntryDecorations } from './providers'
+import { parseEntryDecorations } from './decorations'
 import { objectResult } from './json'
 import { parseListing } from './entries'
 
