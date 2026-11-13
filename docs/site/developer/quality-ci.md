@@ -9,6 +9,7 @@ Fiex 的验证按前端、Rust、桌面平台和文档站分层。阅读[软件�
 npm run format:check
 npm run lint
 npm run check:boundary-types
+npm run check:architecture-boundaries
 npm run check:size
 npm run check:tauri-contracts
 npm run check:i18n
@@ -29,7 +30,7 @@ Clippy 使用与 CI 相同的 `ci-driver` feature；需要先安装当前桌面�
 1. **Scope policy 形式化检查**：Kani 对 `fiex-scope-policy` 中的边界授权属性进行证明。
 2. **Scope policy 覆盖率**：Rust 代码覆盖率 job 对该 policy crate 执行至少 85% 行覆盖率门槛检查。
 3. **Scope policy mutation**：对派生授权决策做 mutation testing，确认测试能发现授权逻辑被反转或移除等变化。
-4. **前端检查**：格式、Lint、类型边界、文件大小、Tauri command contract、i18n、Vitest 和前端构建。
+4. **前端检查**：格式、Lint、严格类型边界、feature 导入方向、文件大小、Tauri command contract、i18n、Vitest 和前端构建。
 5. **Playwright E2E**：在浏览器 UI harness 中运行用户流程并保留截图/报告 artifact。
 6. **macOS / Windows / Linux 桌面 job**：Rust workspace tests、Clippy、桌面 bundle 构建和原生依赖检查。
 7. **真实插件 IPC**：编译 SDK mock plugin，以隔离插件目录启动 Core host smoke、并发、搜索和 locale 示例；Windows 另有无控制台标准句柄检查，macOS 有 Trash recovery regression。

@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint src e2e 'scripts/**/*.mjs' '*.ts' '*.js'",
     "check:boundary-types": "tsc --noEmit -p tsconfig.boundary.json",
+    "check:architecture-boundaries": "node scripts/check-architecture-boundaries.mjs",
     "check:size": "node scripts/check-file-size.mjs",
     "check:tauri-contracts": "node scripts/check-tauri-command-contracts.mjs",
     "audit:native": "node scripts/audit-native-deps.mjs",
