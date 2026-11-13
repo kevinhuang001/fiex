@@ -141,6 +141,7 @@
 | PERF-01  | 大目录浏览、搜索、日志和缓存有实现上限；性能保护必须允许有界取消与继续浏览。                                         | E2E：10,000 项目录虚拟化；Rust：search result cap、directory_cache budget、IPC/body/stream bounds tests；尚无稳定的跨平台 p95 性能门槛。   |
 | PORT-01  | Core 按 CI target 构建 macOS arm64、Windows x64 和 Linux x64；系统差异行为需相应平台用例，不从编译通过推断运行正确。 | PLAT：ci.yml desktop matrix；macOS Trash Put Back regression；recording.yml 原生拖放/文件系统集成任务独立运行。                            |
 | FM-01    | Scope policy 对跨对象、过期身份和授权边界按 fail-closed 决策。                                                       | FM：ci.yml 的 Kani proof、coverage 和 mutation jobs；边界明细见 PLUG-SCOPE-01。                                                            |
+| ARCH-01  | Feature 代码只能依赖共享模块和领域模型；不得直接依赖组件或 React Hook 层。                                           | UT：`src/lib/architectureBoundaries.test.ts` 覆盖允许和拒绝方向；CI：`check-architecture-boundaries.mjs` 扫描 feature 导入。               |
 | BUILD-01 | 每个发布安装包先通过对应平台构建、测试、lint/clippy 和依赖自包含审计，再发布。                                       | CI：ci.yml 的 frontend、Browser UI、Desktop matrix、audit:native 与 publish job；workflow 通过不代表未覆盖系统环境也通过。                 |
 | DOC-01   | 用户指南、插件开发、协议、需求矩阵和限制说明共用 VitePress 站点，页面路径与当前代码基线一致。                        | Docs CI：docs.yml 安装锁定 Node 依赖并执行 VitePress build；页面构建不验证产品行为。                                                       |
 
@@ -167,6 +168,7 @@
 | src-tauri/src/core/search/tests.rs                  | SEARCH-02 through SEARCH-04                                                    |
 | src-tauri/src/plugins/providers/context_menu/tests/ | OPS-SEL、OPS-TRASH、OPS-OPEN、PLUG-EVENT                                       |
 | src-tauri/src/plugins/provider_registry/tests.rs    | PLUG-VFS-04（重新握手清除旧能力与实例快照）                                    |
+| src/lib/architectureBoundaries.test.ts              | ARCH-01（feature 的允许与禁止依赖方向）                                        |
 | src-tauri/src/plugins/security/ and resource/ tests | PLUG-PERM、PLUG-SCOPE、PLUG-FS、PLUG-NET、PLUG-CMD                             |
 | src-tauri/src/remote/ tests                         | CONN、REMOTE                                                                   |
 

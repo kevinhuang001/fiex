@@ -78,6 +78,7 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run check:boundary-types
+      - run: npm run check:architecture-boundaries
       - run: npm run check:size
       - run: npm run check:tauri-contracts
       - run: npm run check:i18n
