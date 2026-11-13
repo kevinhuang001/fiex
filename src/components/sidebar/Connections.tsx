@@ -2,31 +2,13 @@ import { t } from '@/i18n'
 import { Pencil, Pin, Plus, Puzzle, RefreshCw, Server, TerminalSquare, Trash2 } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
-import { isJsonObject } from '@/lib/ipcValidation'
+import { parseConnectionMenuAction } from '@/lib/connectionMenu'
+import type { ConnectionMenu, ConnectionMenuItem } from '@/lib/connectionMenu'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
-
-interface ConnectionMenuItem {
-  id: string
-  kind: 'action' | 'separator'
-  title: string
-  icon?: string
-  danger?: boolean
-  disabled?: boolean
-  placement?: 'tail'
-}
-
-export interface ConnectionMenu {
-  kind: 'builtin' | 'plugin'
-  providerId: string
-  pluginId?: string
-  pluginName?: string
-  menuSessionId: string
-  items: ConnectionMenuItem[]
-}
 
 const menuIcons = {
   pencil: Pencil,
@@ -141,15 +123,18 @@ export function Connections({
         )
         updateActivity(activityId, { indeterminate: true })
       }
-      const result = await call('plugin_connection_menu_execute', {
-        connectionId: connection.id,
-        providerId: source.providerId,
-        itemId: item.id,
-        menuSessionId: source.menuSessionId,
-      })
-      if (isJsonObject(result) && result.kind === 'coreAction') {
+      const result = parseConnectionMenuAction(
+        await call('plugin_connection_menu_execute', {
+          connectionId: connection.id,
+          providerId: source.providerId,
+          itemId: item.id,
+          menuSessionId: source.menuSessionId,
+        }),
+        connection.id,
+      )
+      if (result) {
         if (result.command === 'editConnection') onEditConnection(connection)
-        if (result.command === 'closeConnection') onRemoveConnection(connection.id)
+        else onRemoveConnection(connection.id)
       } else {
         await x.refreshConnections()
         if (item.id === 'connection.syncNow') x.reload()

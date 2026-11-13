@@ -140,20 +140,40 @@ describe('IPC boundary validation', () => {
   })
 
   it('validates connection menu items and streamed search entries', () => {
-    expect(
+    const menus = parseConnectionMenus([
+      {
+        kind: 'plugin',
+        providerId: 'plugin:sync',
+        pluginId: 'sync',
+        menuSessionId: 'session-2',
+        items: [
+          {
+            id: 'sync.now',
+            kind: 'action',
+            title: 'Sync now',
+            activity: { label: 'Syncing', kind: 'sync', quiet: true },
+          },
+        ],
+      },
+    ])
+    expect(menus).toHaveLength(1)
+    expect(menus[0].items[0].activity).toEqual({ label: 'Syncing', kind: 'sync', quiet: true })
+    expect(() => parseConnectionMenus([{ kind: 'plugin', items: [] }])).toThrow(
+      'Invalid connection menu',
+    )
+    expect(() =>
       parseConnectionMenus([
         {
           kind: 'plugin',
           providerId: 'plugin:sync',
           pluginId: 'sync',
           menuSessionId: 'session-2',
-          items: [{ id: 'sync.now', kind: 'action', title: 'Sync now' }],
+          items: [
+            { id: 'sync.now', kind: 'action', title: 'Sync now', activity: { kind: 'sync' } },
+          ],
         },
       ]),
-    ).toHaveLength(1)
-    expect(() => parseConnectionMenus([{ kind: 'plugin', items: [] }])).toThrow(
-      'Invalid connection menu',
-    )
+    ).toThrow('Invalid connection menu activity')
 
     const entry = {
       path: '/home/report.txt',
