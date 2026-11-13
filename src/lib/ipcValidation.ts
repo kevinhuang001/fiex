@@ -21,6 +21,7 @@ import {
   parseRemoteConnectionConfig,
 } from './ipcValidation/providers'
 import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/previews'
+import { decodeSimpleIpcResult } from './ipcValidation/simpleResults'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -94,5 +95,7 @@ export function decodeDynamicIpcResult(
   }
   if (command === 'plugin_toolbar_invoke') return parseJsonValue(value)
   if (command === 'remote_connection_config') return parseRemoteConnectionConfig(value)
+  const simpleResult = decodeSimpleIpcResult(command, value)
+  if (simpleResult) return simpleResult.value
   return value === undefined ? undefined : parseJsonValue(value)
 }

@@ -49,6 +49,16 @@ describe('IPC boundary validation', () => {
     ).toThrow('Invalid saved state key')
   })
 
+  it('validates simple Tauri results at the dynamic dispatch boundary', () => {
+    expect(() => decodeDynamicIpcResult('create_entry', {}, 12)).toThrow(
+      'Invalid create_entry IPC result',
+    )
+    expect(decodeDynamicIpcResult('create_entry', {}, '/home/report.txt')).toBe('/home/report.txt')
+    expect(() => decodeDynamicIpcResult('open_path', {}, { unexpected: true })).toThrow(
+      'Invalid open_path IPC result',
+    )
+  })
+
   it('validates both connection navigation variants', () => {
     expect(parseConnectionOpenResult({ kind: 'vfs', path: 'fiex://mount/home' })).toEqual({
       kind: 'vfs',
