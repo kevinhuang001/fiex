@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { useSyncExternalStore } from 'react'
 import { call, native } from '@/lib/api'
+import type { JsonValue } from '../../sdk/ui/src/index'
 
 export interface PluginField {
   id: string
@@ -45,14 +46,17 @@ export interface MarketplacePlugin {
   name: string
   version: string
   description: string
-  icon?: string
-  author?: { name: string; url?: string }
+  author: PluginAuthor | null
   permissions: string[]
   requestedNetworkDomains: string[]
   commands: string[]
-  extensions?: PluginExtensions
+  extensions: JsonValue
   asset: string
   repository: string
+}
+export interface PluginAuthor {
+  name: string
+  url?: string | null
 }
 export interface PluginInfo {
   schemaVersion: number
@@ -154,13 +158,20 @@ export const PLUGIN_CATEGORIES = [
     },
   },
 ] as const
-export function pluginCategories(extensions?: PluginExtensions, commands: string[] = []): string[] {
+export function pluginCategories(
+  extensions?: PluginExtensions | JsonValue | null,
+  commands: string[] = [],
+): string[] {
+  const extensionObject =
+    extensions && typeof extensions === 'object' && !Array.isArray(extensions)
+      ? (extensions as unknown as Record<string, unknown>)
+      : undefined
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
     // A plugin that only decorates connection menus still belongs to the
     // connection family.
-    if (id === 'connections' && extensions?.connectionContextMenus) return true
-    const value = extensions?.[id as keyof PluginExtensions]
+    if (id === 'connections' && extensionObject?.connectionContextMenus) return true
+    const value = extensionObject?.[id]
     return Boolean(value) && (Array.isArray(value) ? value.length > 0 : true)
   }).map(({ id }) => id)
   if (!present.length && commands.length) present.push('commands')

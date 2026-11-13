@@ -98,7 +98,7 @@ export function MarketplaceList({
                 <article className="plugin-store-card" key={entry.id}>
                   <div className="plugin-store-card-head">
                     <div className={`plugin-store-icon ${isInstalled ? 'installed' : ''}`}>
-                      {pluginIcon(entry.icon)}
+                      {pluginIcon()}
                     </div>
                     <div className="plugin-store-main">
                       <div className="plugin-store-title">
