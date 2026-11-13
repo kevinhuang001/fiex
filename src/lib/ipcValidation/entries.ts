@@ -2,50 +2,98 @@ import type { JsonValue } from '../../../sdk/ui/src/index'
 import { normalizeListColumns } from '../listColumns'
 import type { StateGetArgs, StateGetResult, ConnectionOpenResult } from '../tauriCommandMap'
 import type { Batch, Entry, Listing, Location, OperationResult } from '../types'
-import { objectResult, parseJsonValue } from './json'
+import { isJsonObject, objectResult, parseJsonValue } from './json'
+
+const ENTRY_KEYS = [
+  'path',
+  'name',
+  'isDir',
+  'isSymlink',
+  'size',
+  'modified',
+  'created',
+  'extension',
+  'mime',
+  'linkTarget',
+  'allowedOps',
+  'tags',
+  'hasCache',
+  'pinned',
+  'uploaded',
+  'sync',
+]
+
+function onlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+function unsignedInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+  )
+}
+
+function isEntrySync(value: unknown): value is Entry['sync'] {
+  return (
+    value === null ||
+    (typeof value === 'string' &&
+      ['synced', 'partial', 'cloud', 'pinned', 'pending', 'conflict'].includes(value))
+  )
+}
+
+function parseEntryTag(value: unknown): Entry['tags'][number] {
+  if (
+    !isJsonObject(value) ||
+    !onlyKeys(value, ['name', 'color']) ||
+    typeof value.name !== 'string' ||
+    !unsignedInteger(value.color) ||
+    value.color > 7
+  )
+    throw new TypeError('Invalid file tag from IPC')
+  return { name: value.name, color: value.color }
+}
 
 export function parseEntry(value: JsonValue): Entry {
   if (
-    value === null ||
-    Array.isArray(value) ||
-    typeof value !== 'object' ||
+    !isJsonObject(value) ||
+    !onlyKeys(value, ENTRY_KEYS) ||
     typeof value.path !== 'string' ||
     typeof value.name !== 'string' ||
     typeof value.isDir !== 'boolean' ||
     typeof value.isSymlink !== 'boolean' ||
-    typeof value.size !== 'number' ||
-    typeof value.modified !== 'number' ||
-    typeof value.created !== 'number' ||
+    !unsignedInteger(value.size) ||
+    !unsignedInteger(value.modified) ||
+    !unsignedInteger(value.created) ||
     typeof value.extension !== 'string' ||
     typeof value.mime !== 'string' ||
     !(value.linkTarget === null || typeof value.linkTarget === 'string') ||
     !Array.isArray(value.tags) ||
-    !(
-      value.sync === null ||
-      ['synced', 'partial', 'cloud', 'pinned', 'pending', 'conflict'].includes(String(value.sync))
-    )
+    !Array.isArray(value.allowedOps) ||
+    !value.allowedOps.every((operation) => typeof operation === 'string') ||
+    typeof value.hasCache !== 'boolean' ||
+    typeof value.pinned !== 'boolean' ||
+    typeof value.uploaded !== 'boolean' ||
+    !isEntrySync(value.sync)
   )
     throw new TypeError('Invalid file entry from IPC')
-  for (const tag of value.tags) {
-    if (
-      tag === null ||
-      Array.isArray(tag) ||
-      typeof tag !== 'object' ||
-      typeof tag.name !== 'string' ||
-      typeof tag.color !== 'number'
-    )
-      throw new TypeError('Invalid file tag from IPC')
+  return {
+    path: value.path,
+    name: value.name,
+    isDir: value.isDir,
+    isSymlink: value.isSymlink,
+    size: value.size,
+    modified: value.modified,
+    created: value.created,
+    extension: value.extension,
+    mime: value.mime,
+    linkTarget: value.linkTarget,
+    allowedOps: value.allowedOps,
+    tags: value.tags.map(parseEntryTag),
+    hasCache: value.hasCache,
+    pinned: value.pinned,
+    uploaded: value.uploaded,
+    sync: value.sync,
   }
-  if (
-    value.allowedOps !== undefined &&
-    (!Array.isArray(value.allowedOps) || !value.allowedOps.every((op) => typeof op === 'string'))
-  )
-    throw new TypeError('Invalid file operations from IPC')
-  for (const key of ['hasCache', 'pinned', 'uploaded'] as const) {
-    if (value[key] !== undefined && typeof value[key] !== 'boolean')
-      throw new TypeError(`Invalid ${key} flag from IPC`)
-  }
-  return value as unknown as Entry
 }
 export function parseSearchBatch(value: unknown): Batch {
   const batch = objectResult(value)
