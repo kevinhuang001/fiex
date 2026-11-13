@@ -167,16 +167,27 @@ export function parseConnectionOpenResult(value: unknown): ConnectionOpenResult 
 }
 export function parseLocations(value: JsonValue): Location[] {
   if (!Array.isArray(value)) throw new TypeError('Invalid saved locations')
+  const locations: Location[] = []
   for (const item of value) {
     if (
-      item === null ||
-      Array.isArray(item) ||
-      typeof item !== 'object' ||
+      !isJsonObject(item) ||
+      !onlyKeys(item, [
+        'name',
+        'path',
+        'kind',
+        'available',
+        'total',
+        'removable',
+        'filesystem',
+        'device',
+        'mounted',
+        'usbfs',
+      ]) ||
       typeof item.name !== 'string' ||
       typeof item.path !== 'string' ||
       typeof item.kind !== 'string' ||
-      typeof item.available !== 'number' ||
-      typeof item.total !== 'number' ||
+      !isUnsignedInteger(item.available) ||
+      !isUnsignedInteger(item.total) ||
       typeof item.removable !== 'boolean' ||
       typeof item.filesystem !== 'string' ||
       typeof item.device !== 'string' ||
@@ -184,8 +195,20 @@ export function parseLocations(value: JsonValue): Location[] {
       typeof item.usbfs !== 'boolean'
     )
       throw new TypeError('Invalid saved location')
+    locations.push({
+      name: item.name,
+      path: item.path,
+      kind: item.kind,
+      available: item.available,
+      total: item.total,
+      removable: item.removable,
+      filesystem: item.filesystem,
+      device: item.device,
+      mounted: item.mounted,
+      usbfs: item.usbfs,
+    })
   }
-  return value as unknown as Location[]
+  return locations
 }
 export function parseStateGetResult<A extends StateGetArgs>(
   args: A,
