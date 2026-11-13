@@ -18,6 +18,18 @@ const FIELD_STATUSES = [
 const COMPUTE_MODES = ['onOpen', 'onDemand'] satisfies InfoField['compute'][]
 const SECTION_SOURCES = ['core', 'plugin'] satisfies InfoSection['source'][]
 
+function isInfoFieldStatus(value: unknown): value is InfoField['status'] {
+  return FIELD_STATUSES.some((status) => status === value)
+}
+
+function isInfoComputeMode(value: unknown): value is InfoField['compute'] {
+  return COMPUTE_MODES.some((mode) => mode === value)
+}
+
+function isInfoSectionSource(value: unknown): value is InfoSection['source'] {
+  return SECTION_SOURCES.some((source) => source === value)
+}
+
 export function shouldApplyInfoDelta(
   delta: { sessionId: string; revision: number },
   activeSession: string,
@@ -47,8 +59,8 @@ function parseInfoField(value: JsonValue): InfoField | null {
     value.subsectionId.length > 0 &&
     typeof value.label === 'string' &&
     value.label.length > 0 &&
-    COMPUTE_MODES.some((mode) => mode === value.compute) &&
-    FIELD_STATUSES.some((status) => status === value.status) &&
+    isInfoComputeMode(value.compute) &&
+    isInfoFieldStatus(value.status) &&
     (value.value === undefined || typeof value.value === 'string') &&
     (value.error === undefined || typeof value.error === 'string')
   ) {
@@ -56,8 +68,8 @@ function parseInfoField(value: JsonValue): InfoField | null {
       id: value.id,
       subsectionId: value.subsectionId,
       label: value.label,
-      compute: value.compute as InfoField['compute'],
-      status: value.status as InfoField['status'],
+      compute: value.compute,
+      status: value.status,
       ...(typeof value.value === 'string' ? { value: value.value } : {}),
       ...(typeof value.error === 'string' ? { error: value.error } : {}),
     }
@@ -85,7 +97,7 @@ function parseInfoSection(value: JsonValue): InfoSection | null {
     !value.providerId ||
     value.id !== value.providerId ||
     typeof value.provider !== 'string' ||
-    !SECTION_SOURCES.some((source) => source === value.source) ||
+    !isInfoSectionSource(value.source) ||
     (value.pluginId !== undefined && typeof value.pluginId !== 'string') ||
     (value.error !== undefined && typeof value.error !== 'string') ||
     !Array.isArray(value.fields)
@@ -108,7 +120,7 @@ function parseInfoSection(value: JsonValue): InfoSection | null {
     title: value.title,
     providerId: value.providerId,
     provider: value.provider,
-    source: value.source as InfoSection['source'],
+    source: value.source,
     ...(typeof value.pluginId === 'string' ? { pluginId: value.pluginId } : {}),
     fields,
     ...(typeof value.error === 'string' ? { error: value.error } : {}),
@@ -125,7 +137,7 @@ function parseInfoFieldUpdate(value: JsonValue): InfoFieldUpdate | null {
     !value.subsectionId ||
     typeof value.fieldId !== 'string' ||
     !value.fieldId ||
-    !FIELD_STATUSES.some((status) => status === value.status) ||
+    !isInfoFieldStatus(value.status) ||
     (value.value !== undefined && typeof value.value !== 'string') ||
     (value.error !== undefined && typeof value.error !== 'string')
   )
@@ -135,7 +147,7 @@ function parseInfoFieldUpdate(value: JsonValue): InfoFieldUpdate | null {
     providerId: value.providerId,
     subsectionId: value.subsectionId,
     fieldId: value.fieldId,
-    status: value.status as InfoField['status'],
+    status: value.status,
     ...(typeof value.value === 'string' ? { value: value.value } : {}),
     ...(typeof value.error === 'string' ? { error: value.error } : {}),
   }

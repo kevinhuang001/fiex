@@ -200,8 +200,11 @@ describe('Info wire enum validation', () => {
 
   it.each([
     { ...section, source: ['core'] },
+    { ...section, source: 'system' },
     { ...section, fields: [{ ...field, compute: ['onOpen'] }] },
+    { ...section, fields: [{ ...field, compute: 'onDemandOnly' }] },
     { ...section, fields: [{ ...field, status: ['ready'] }] },
+    { ...section, fields: [{ ...field, status: 'working' }] },
   ])('rejects an enum encoded as an array in the Info response', (invalidSection) => {
     expect(() =>
       parseInfoOpenResult({ sessionId: 'info-session', sections: [invalidSection] }),
@@ -219,6 +222,23 @@ describe('Info wire enum validation', () => {
             subsectionId: field.subsectionId,
             fieldId: field.id,
             status: ['ready'],
+          },
+        ],
+      }),
+    ).toThrow('Invalid file info update')
+  })
+
+  it('rejects an unknown field update status', () => {
+    expect(() =>
+      parseInfoFieldDelta({
+        sessionId: 'info-session',
+        revision: 1,
+        updates: [
+          {
+            providerId: section.providerId,
+            subsectionId: field.subsectionId,
+            fieldId: field.id,
+            status: 'working',
           },
         ],
       }),
