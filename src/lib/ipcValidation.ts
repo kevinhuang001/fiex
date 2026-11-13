@@ -30,6 +30,7 @@ import { parsePluginLogPage } from './ipcValidation/pluginLogs'
 import { parseMarketplacePlugins } from './ipcValidation/marketplace'
 import { parsePluginCatalog } from './ipcValidation/pluginCatalog'
 import { parseSystemProxyInfo } from './ipcValidation/systemProxy'
+import { parseRecentNavigationTarget } from './ipcValidation/recentNavigation'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -108,6 +109,7 @@ export function decodeDynamicIpcResult(
   if (command === 'plugin_marketplace') return parseMarketplacePlugins(value)
   if (command === 'plugins_list') return parsePluginCatalog(value)
   if (command === 'system_proxy_info') return parseSystemProxyInfo(value)
+  if (command === 'recent_navigation_target') return parseRecentNavigationTarget(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)

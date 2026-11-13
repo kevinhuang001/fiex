@@ -24,6 +24,7 @@ import type {
   LogPage,
   Location,
   OperationResult,
+  RecentNavigationTarget,
   RemoteConnection,
   SystemProxyInfo,
   Terminal,
@@ -153,7 +154,7 @@ export interface TauriCommandResults {
   provider_preferences: import('@/components/settings/ProviderSettings').ProviderPreferences
   search_providers: JsonValue[]
   read_preview: string
-  recent_navigation_target: { parent: string; target: string }
+  recent_navigation_target: RecentNavigationTarget
   recycle: OperationResult
   register_drag: string[]
   remote_cached: boolean

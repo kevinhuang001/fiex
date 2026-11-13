@@ -38,6 +38,11 @@ export interface SystemProxyInfo {
   proxy: string | null
 }
 
+export interface RecentNavigationTarget {
+  parent: string
+  target: string
+}
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */
