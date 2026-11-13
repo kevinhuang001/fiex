@@ -6,13 +6,15 @@ use crate::core::{
     ignores::IgnoreSet,
 };
 use crate::infrastructure::cache::disk;
-use crate::infrastructure::cache::lru::LruMap;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
     path::Path,
-    sync::{Arc, Mutex, OnceLock},
+    sync::Arc,
 };
+
+mod memory;
+use memory::{cached, remove_cached, remove_cached_many, snapshot, update_cached};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,15 +22,6 @@ pub(crate) struct DirectorySnapshot {
     pub listing: Listing,
 }
 
-fn snapshot(key: &str) -> Option<DirectorySnapshot> {
-    let memory = cache().lock().unwrap_or_else(|e| e.into_inner()).get(key);
-    if let Some(data) = memory {
-        return Some(data.as_ref().clone());
-    }
-    let data = disk::load::<DirectorySnapshot>(key)?;
-    remember(key, Arc::new(data.clone()));
-    Some(data)
-}
 pub(crate) fn read_snapshot(
     path: &str,
     hidden: bool,
@@ -67,118 +60,6 @@ pub(crate) fn cached_entry(directory: &str, path: &str) -> Result<Option<Entry>,
     }))
 }
 
-const MAX_DIRECTORIES: usize = 10_000;
-const MAX_ENTRIES: usize = 500_000;
-#[derive(Default)]
-struct DirectoryCache {
-    values: LruMap<String, Arc<DirectorySnapshot>>,
-    entry_count: usize,
-}
-impl DirectoryCache {
-    fn get(&mut self, identity: &str) -> Option<Arc<DirectorySnapshot>> {
-        self.values.get_mut(identity).cloned()
-    }
-
-    fn remember(&mut self, identity: &str, data: Arc<DirectorySnapshot>) {
-        if let Some(previous) = self.values.remove(identity) {
-            self.entry_count = self
-                .entry_count
-                .saturating_sub(previous.listing.entries.len());
-        }
-        if data.listing.entries.len() > MAX_ENTRIES {
-            return;
-        }
-        while self.values.len() >= MAX_DIRECTORIES
-            || self.entry_count.saturating_add(data.listing.entries.len()) > MAX_ENTRIES
-        {
-            let Some((_, previous)) = self.values.pop_lru() else {
-                break;
-            };
-            self.entry_count = self
-                .entry_count
-                .saturating_sub(previous.listing.entries.len());
-        }
-        self.entry_count = self.entry_count.saturating_add(data.listing.entries.len());
-        let _ = self.values.insert(identity.to_owned(), data);
-    }
-
-    fn mutate(&mut self, identity: &str, update: impl FnOnce(&mut DirectorySnapshot)) {
-        let (previous_count, next_count) = match self.values.get_mut(identity) {
-            Some(snapshot) => {
-                let snapshot = Arc::make_mut(snapshot);
-                let previous_count = snapshot.listing.entries.len();
-                update(snapshot);
-                (previous_count, snapshot.listing.entries.len())
-            }
-            None => return,
-        };
-        self.entry_count = self
-            .entry_count
-            .saturating_sub(previous_count)
-            .saturating_add(next_count);
-        if next_count > MAX_ENTRIES {
-            self.remove(identity);
-        } else {
-            while self.entry_count > MAX_ENTRIES {
-                let Some((_, removed)) = self.values.pop_lru() else {
-                    break;
-                };
-                self.entry_count = self
-                    .entry_count
-                    .saturating_sub(removed.listing.entries.len());
-            }
-        }
-    }
-
-    fn remove(&mut self, identity: &str) {
-        if let Some(snapshot) = self.values.remove(identity) {
-            self.entry_count = self
-                .entry_count
-                .saturating_sub(snapshot.listing.entries.len());
-        }
-    }
-
-    fn remove_many(&mut self, identities: &HashSet<String>) {
-        for identity in identities {
-            self.remove(identity);
-        }
-    }
-}
-fn cache() -> &'static Mutex<DirectoryCache> {
-    static CACHE: OnceLock<Mutex<DirectoryCache>> = OnceLock::new();
-    CACHE.get_or_init(Default::default)
-}
-fn remember(identity: &str, data: Arc<DirectorySnapshot>) {
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remember(identity, data);
-}
-fn cached(identity: &str) -> Option<DirectorySnapshot> {
-    let snapshot = cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(identity);
-    snapshot.map(|snapshot| snapshot.as_ref().clone())
-}
-fn update_cached(identity: &str, update: impl FnOnce(&mut DirectorySnapshot)) {
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .mutate(identity, update);
-}
-fn remove_cached(identity: &str) {
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove(identity);
-}
-fn remove_cached_many(identities: &HashSet<String>) {
-    cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove_many(identities);
-}
 #[cfg(test)]
 pub(crate) fn store(path: &str, listing: &Listing) {
     let revision = super::changes::revision(path);
@@ -198,12 +79,10 @@ pub(crate) fn store_at_revision(path: &str, listing: &Listing, revision: u64) {
         return;
     }
     let data = Arc::new(DirectorySnapshot { listing: merged });
-    {
-        let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
-        if super::changes::revision(path) != revision {
-            return;
-        }
-        values.remember(&identity, Arc::clone(&data));
+    if !memory::remember_if(&identity, Arc::clone(&data), || {
+        super::changes::revision(path) == revision
+    }) {
+        return;
     }
     let persistence_path = path.to_owned();
     let persistence_identity = identity.clone();

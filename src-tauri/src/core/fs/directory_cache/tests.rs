@@ -18,32 +18,6 @@ fn item(path: &str, name: &str, directory: bool) -> Entry {
     }
 }
 #[test]
-fn memory_entry_budget_tracks_in_place_mutations() {
-    let mut cache = DirectoryCache::default();
-    cache.remember(
-        "test-budget",
-        std::sync::Arc::new(DirectorySnapshot {
-            listing: listing(
-                "applications://folder/test-budget",
-                vec![
-                    item("applications://app/test-budget-one", "one", false),
-                    item("applications://app/test-budget-two", "two", false),
-                ],
-            ),
-        }),
-    );
-    assert_eq!(cache.entry_count, 2);
-
-    cache.mutate("test-budget", |snapshot| {
-        snapshot.listing.entries.pop();
-    });
-    assert_eq!(cache.entry_count, 1);
-
-    cache.remove("test-budget");
-    assert_eq!(cache.entry_count, 0);
-}
-
-#[test]
 fn local_listing_never_builds_directory_snapshots() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().to_str().unwrap();
