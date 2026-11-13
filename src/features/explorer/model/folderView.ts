@@ -1,4 +1,4 @@
-import type { Group, Preferences, Sort, View } from './types'
+import type { Group, Preferences, Sort, View } from '@/lib/types'
 
 /** Per-folder presentation remembered across sessions. */
 export interface FolderViewState {

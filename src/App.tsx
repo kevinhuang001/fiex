@@ -27,7 +27,7 @@ import {
   patchFolderView,
   saveActiveFolderView,
   saveFolderView,
-} from '@/lib/folderView'
+} from '@/features/explorer/model/folderView'
 import { Download, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'

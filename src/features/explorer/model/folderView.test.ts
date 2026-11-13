@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Preferences } from './types'
+import type { Preferences } from '@/lib/types'
 import {
   folderViewPreferences,
   loadFolderView,
