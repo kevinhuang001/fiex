@@ -216,7 +216,7 @@ export type StateGetResult<A extends StateGetArgs> = A extends { namespace: 'lay
     : A extends { namespace: 'explorer'; key: 'lastPath' }
       ? string | null
       : A extends { namespace: 'explorer'; key: 'preferences' }
-        ? JsonValue
+        ? JsonValue | null
         : A extends { namespace: 'picker'; key: 'sort' }
           ? PickerSortState | null
           : A extends { namespace: 'picker'; key: 'group' }

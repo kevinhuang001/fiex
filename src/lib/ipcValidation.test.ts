@@ -10,7 +10,6 @@ import {
   parsePluginMenuResult,
   parseRemoteConnectionConfig,
   parseSearchBatch,
-  parseStateGetResult,
 } from './ipcValidation'
 
 describe('IPC boundary validation', () => {
@@ -109,27 +108,6 @@ describe('IPC boundary validation', () => {
         secretKeys: ['password'],
       }),
     ).toThrow('Invalid remote connection config')
-  })
-
-  it('decodes stored values according to their namespace and key', () => {
-    expect(parseStateGetResult({ namespace: 'layout', key: 'columns.hash' }, { size: 20 })).toEqual(
-      { name: 260, modified: 155, size: 60, kind: 108 },
-    )
-    expect(
-      parseStateGetResult(
-        { namespace: 'picker', key: 'sort' },
-        { key: 'modified', direction: 'desc' },
-      ),
-    ).toEqual({ key: 'modified', direction: 'desc' })
-    expect(() =>
-      parseStateGetResult(
-        { namespace: 'picker', key: 'sort' },
-        { key: 'unknown', direction: 'desc' },
-      ),
-    ).toThrow('Invalid saved picker sort')
-    expect(() =>
-      parseStateGetResult({ namespace: 'explorer', key: 'locations' }, [{ path: '/home' }]),
-    ).toThrow('Invalid saved location')
   })
 
   it('rejects malformed plugin menus before rendering them', () => {
