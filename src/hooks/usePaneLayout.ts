@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Preferences } from '@/lib/types'
-import { useExplorer, type Explorer } from './useExplorer'
+import { useExplorer, type Explorer } from '@/features/explorer/hooks/useExplorer'
 
 type Side = 'left' | 'right'
 type TabPane = { right: ReturnType<Explorer['snapshotNavigation']> | null; active: Side }

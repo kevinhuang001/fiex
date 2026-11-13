@@ -1,5 +1,5 @@
 import type { DialogState } from '@/lib/dialogs'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { createActions } from './create'

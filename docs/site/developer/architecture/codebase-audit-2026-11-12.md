@@ -6,7 +6,7 @@
 
 ## 当前结构与依赖方向
 
-前端已有可复用的业务分区，但主要按代码种类分布。Explorer 的视图在 `components/browser`，状态和流程在 `hooks/explorer`，路径、列表与展示模型在 `lib`。文件操作及菜单也横跨组件、hooks 与 lib。Rust 则已有 foundation、builtins、platform crates；Tauri 主 crate 仍组合 desktop、core、plugins、remote 和 infrastructure。
+前端已有可复用的业务分区，但主要按代码种类分布。Explorer 的视图在 `components/browser`，导航、列表、监听等状态 hooks 归属 `features/explorer/hooks`，纯展示与列表模型归属 `features/explorer/model`。文件操作及菜单也横跨组件、hooks 与 lib。Rust 则已有 foundation、builtins、platform crates；Tauri 主 crate 仍组合 desktop、core、plugins、remote 和 infrastructure。
 
 ```mermaid
 flowchart LR
@@ -55,15 +55,15 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 ## 分阶段实施记录
 
-| 阶段                   | 状态              | 交付                                                                                                                                                                                                                   |
-| ---------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0-01 基线             | PR #92            | 锁定 Core/SDK 基线、记录现有目录/测试/大文件/CI 现状，并将审计页加入唯一 VitePress 文档站点                                                                                                                            |
-| Explorer feature 起步  | PR #92            | 迁移 `formatDisplayFileName` 与相邻测试到 `src/features/explorer/model`，更新唯一调用方                                                                                                                                |
-| P0-02 保护网           | 进行中            | PR #92 补双面板排序 UI 回归；PR #93 增加 Trash“放回原处”端到端回归；PR #94 增加过期目录响应竞态 E2E；PR #96 补插件重新握手后能力索引替换测试；PR #103 补传输中源变化后的回滚；仍需覆盖 Provider I/O 故障与平台原生场景 |
-| P4-01 大文件例外清理   | PR #96            | 将 ProviderRegistry 单测拆分到同目录测试模块；核心文件现为 216 行，移除其大文件例外（44 项降至 43 项）                                                                                                                 |
-| P2-01 Explorer feature | PR #98–#102、#104 | 将导航状态、流式搜索、目录视图、列表比较/缓存及列表网格布局/拖拽模型迁移到 Explorer feature；共享偏好合同与 IPC 归一化留在 lib                                                                                         |
-| P1-01 架构边界         | PR #97            | 新增 AST 导入检查，禁止 feature 层依赖 components/hooks；进入前端 CI；Vitest 覆盖允许和拒绝方向                                                                                                                        |
-| P1-02 Info IPC         | PR #95            | Info 合同由 IPC 层定义并由 UI 消费，严格类型检查覆盖 Info 解码器，回归测试拒绝把枚举值编码为数组                                                                                                                       |
-| P1 其余及之后          | 后续小 PR         | 扩展模块边界与 typed IPC 检查，再逐个迁移 Explorer、文件操作、菜单和 Rust use cases                                                                                                                                    |
+| 阶段                   | 状态                   | 交付                                                                                                                                                                                                                   |
+| ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0-01 基线             | PR #92                 | 锁定 Core/SDK 基线、记录现有目录/测试/大文件/CI 现状，并将审计页加入唯一 VitePress 文档站点                                                                                                                            |
+| Explorer feature 起步  | PR #92                 | 迁移 `formatDisplayFileName` 与相邻测试到 `src/features/explorer/model`，更新唯一调用方                                                                                                                                |
+| P0-02 保护网           | 进行中                 | PR #92 补双面板排序 UI 回归；PR #93 增加 Trash“放回原处”端到端回归；PR #94 增加过期目录响应竞态 E2E；PR #96 补插件重新握手后能力索引替换测试；PR #103 补传输中源变化后的回滚；仍需覆盖 Provider I/O 故障与平台原生场景 |
+| P4-01 大文件例外清理   | PR #96                 | 将 ProviderRegistry 单测拆分到同目录测试模块；核心文件现为 216 行，移除其大文件例外（44 项降至 43 项）                                                                                                                 |
+| P2-01 Explorer feature | PR #98–#102、#104–#105 | 将导航、列表生命周期 hooks、流式搜索、目录视图、列表比较/缓存及列表网格布局/拖拽模型迁移到 Explorer feature；共享偏好合同与 IPC 归一化留在 lib                                                                         |
+| P1-01 架构边界         | PR #97                 | 新增 AST 导入检查，禁止 feature 层依赖 components/hooks；进入前端 CI；Vitest 覆盖允许和拒绝方向                                                                                                                        |
+| P1-02 Info IPC         | PR #95                 | Info 合同由 IPC 层定义并由 UI 消费，严格类型检查覆盖 Info 解码器，回归测试拒绝把枚举值编码为数组                                                                                                                       |
+| P1 其余及之后          | 后续小 PR              | 扩展模块边界与 typed IPC 检查，再逐个迁移 Explorer、文件操作、菜单和 Rust use cases                                                                                                                                    |
 
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。

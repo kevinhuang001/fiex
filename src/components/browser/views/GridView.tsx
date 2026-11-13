@@ -3,7 +3,7 @@ import { NameCell, rowVars, Thumbnail } from './shared'
 import { VirtualFileGrid } from '../VirtualFileGrid'
 import { groups, kind, size } from '@/lib/files'
 import type { Entry, Preferences } from '@/lib/types'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { SharedRow } from './shared'
 import type { CSSProperties, RefObject } from 'react'
 

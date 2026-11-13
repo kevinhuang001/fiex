@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { call, native } from '@/lib/api'
 import { startFileDrag } from '@/lib/drag'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { Entry } from '@/lib/types'
 import type { Props } from './shared'
 import type {

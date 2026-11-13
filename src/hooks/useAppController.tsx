@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { useExplorer } from '@/hooks/useExplorer'
+import { useExplorer } from '@/features/explorer/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { basename } from '@/lib/files'

@@ -1,7 +1,7 @@
 import type { DialogState } from '@/lib/dialogs'
 import type { OperationResult, TransferConflict } from '@/lib/types'
 import type { ActivityKind } from '@/hooks/useActivity'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { Dispatch, SetStateAction } from 'react'
 
 export type Clipboard = { paths: string[]; moving: boolean } | null

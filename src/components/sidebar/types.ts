@@ -1,4 +1,4 @@
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { useMenuPosition } from '@/lib/menuPosition'
 import type { Preferences, RemoteConnection } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'

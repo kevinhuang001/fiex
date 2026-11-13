@@ -1,4 +1,4 @@
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { DialogState } from '@/lib/dialogs'
 import type { Entry, Tag, RemoteConnection } from '@/lib/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

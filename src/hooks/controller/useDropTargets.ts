@@ -1,4 +1,4 @@
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { DropPlan } from '@/lib/types'
 import { call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'

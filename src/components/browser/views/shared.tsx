@@ -6,7 +6,7 @@ import { asset } from '@/lib/api'
 import { useDecorationIcon } from '@/lib/decorationIcons'
 import { formatDisplayFileName } from '@/features/explorer/model/fileNameDisplay'
 import { isImage } from '@/lib/files'
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type {
   DecorationField,
   DecorationStyle,

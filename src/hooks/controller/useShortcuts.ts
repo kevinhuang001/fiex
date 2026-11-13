@@ -1,4 +1,4 @@
-import type { Explorer } from '@/hooks/useExplorer'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { useExplorerShortcuts } from '@/hooks/useExplorerShortcuts'
 import type { DialogState } from '@/lib/dialogs'
 import { shortcutLabel } from '@/lib/shortcuts'
