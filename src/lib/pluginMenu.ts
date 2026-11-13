@@ -10,6 +10,8 @@ export interface PluginMenuItem {
 }
 
 export interface PluginMenu {
+  kind: 'plugin'
+  providerId: string
   pluginId: string
   menuSessionId: string
   items: PluginMenuItem[]

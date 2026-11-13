@@ -3,7 +3,7 @@ import { t } from '@/i18n'
 import { invoke, isTauri, convertFileSrc, Channel } from '@tauri-apps/api/core'
 import { decodeDynamicIpcResult, serializeIpcJson, parseSearchBatch } from './ipcValidation'
 import type { CoreMenu } from './coreMenu'
-import type { PluginMenu } from '@/components/plugins/PluginMenuNode'
+import type { PluginMenu } from './pluginMenu'
 import type {
   StateGetArgs,
   StateGetResult,

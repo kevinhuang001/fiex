@@ -1,9 +1,9 @@
 import type { ConnectionMenu } from '../connectionMenu'
-import type { CoreMenu } from '../coreMenu'
-import type { PluginMenu } from '../pluginMenu'
-import { isJsonObject, objectResult, parseJsonValue } from './json'
-import { validPluginMenuItems } from '../pluginMenu'
+import type { CoreMenu, CoreMenuItem } from '../coreMenu'
+import { SHORTCUT_ACTIONS, type ShortcutAction } from '../shortcuts'
+import { validPluginMenuItems, type PluginMenu, type PluginMenuItem } from '../pluginMenu'
 import type { ConnectionMenuItem } from '../connectionMenu'
+import { objectResult, parseJsonValue } from './json'
 
 export function parsePluginMenuResult(value: unknown, source: 'core'): CoreMenu[]
 export function parsePluginMenuResult(value: unknown, source: 'plugins'): PluginMenu[]
@@ -17,34 +17,151 @@ export function parsePluginMenuResult(
 ): CoreMenu[] | PluginMenu[] {
   const json = parseJsonValue(value)
   if (!Array.isArray(json)) throw new TypeError('Invalid context menu response')
-  const menus = json.map((menu) => {
-    if (menu === null || Array.isArray(menu) || typeof menu !== 'object')
-      throw new TypeError('Invalid context menu')
-    if (
-      typeof menu.menuSessionId !== 'string' ||
-      (source === 'core'
-        ? menu.kind !== 'builtin' ||
-          typeof menu.providerId !== 'string' ||
-          !validCoreItems(menu.items)
-        : typeof menu.pluginId !== 'string' || !validPluginMenuItems(menu.items))
-    )
-      throw new TypeError('Invalid context menu')
-    return menu
-  })
-  return menus as unknown as CoreMenu[] | PluginMenu[]
+  if (source === 'core') return json.map(parseCoreMenu)
+  return json.map(parsePluginMenu)
 }
 
-function validCoreItems(items: unknown): boolean {
-  if (!Array.isArray(items) || items.length > 100) return false
-  return items.every(
-    (item) =>
-      isJsonObject(item) &&
-      typeof item.id === 'string' &&
-      typeof item.title === 'string' &&
-      ['action', 'submenu', 'separator'].includes(String(item.kind)) &&
-      (item.parentId === undefined || typeof item.parentId === 'string'),
+function parseCoreMenu(value: unknown): CoreMenu {
+  const menu = objectResult(value)
+  if (
+    !hasOnlyKeys(menu, ['kind', 'providerId', 'menuSessionId', 'items']) ||
+    menu.kind !== 'builtin' ||
+    typeof menu.providerId !== 'string' ||
+    typeof menu.menuSessionId !== 'string' ||
+    !Array.isArray(menu.items) ||
+    menu.items.length > 100
   )
+    throw new TypeError('Invalid context menu')
+
+  return {
+    kind: 'builtin',
+    providerId: menu.providerId,
+    menuSessionId: menu.menuSessionId,
+    items: menu.items.map(parseCoreMenuItem),
+  }
 }
+
+function parseCoreMenuItem(value: unknown): CoreMenuItem {
+  const item = objectResult(value)
+  const optionalStringFields = ['parentId', 'icon'] as const
+  const optionalBooleanFields = ['disabled', 'danger'] as const
+  const shortcut = item.shortcut
+  const placement = item.placement
+  const activity = item.activity
+  if (
+    !hasOnlyKeys(item, [
+      'id',
+      'kind',
+      'title',
+      ...optionalStringFields,
+      'shortcut',
+      ...optionalBooleanFields,
+      'placement',
+      'activity',
+    ]) ||
+    typeof item.id !== 'string' ||
+    typeof item.title !== 'string' ||
+    (item.kind !== 'action' && item.kind !== 'submenu' && item.kind !== 'separator') ||
+    optionalStringFields.some((key) => item[key] !== undefined && typeof item[key] !== 'string') ||
+    (shortcut !== undefined && !isShortcutAction(shortcut)) ||
+    optionalBooleanFields.some(
+      (key) => item[key] !== undefined && typeof item[key] !== 'boolean',
+    ) ||
+    (placement !== undefined && placement !== 'tail')
+  )
+    throw new TypeError('Invalid Core context menu item')
+
+  return {
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    ...(typeof item.parentId === 'string' ? { parentId: item.parentId } : {}),
+    ...(typeof item.icon === 'string' ? { icon: item.icon } : {}),
+    ...(isShortcutAction(shortcut) ? { shortcut } : {}),
+    ...(typeof item.disabled === 'boolean' ? { disabled: item.disabled } : {}),
+    ...(typeof item.danger === 'boolean' ? { danger: item.danger } : {}),
+    ...(placement === 'tail' ? { placement } : {}),
+    ...(activity === undefined ? {} : { activity: parseCoreMenuActivity(activity) }),
+  }
+}
+
+function parseCoreMenuActivity(value: unknown): NonNullable<CoreMenuItem['activity']> {
+  const activity = objectResult(value)
+  if (
+    !hasOnlyKeys(activity, ['label', 'kind', 'quiet']) ||
+    typeof activity.label !== 'string' ||
+    (activity.kind !== 'sync' && activity.kind !== 'transfer') ||
+    typeof activity.quiet !== 'boolean'
+  )
+    throw new TypeError('Invalid Core context menu activity')
+  return { label: activity.label, kind: activity.kind, quiet: activity.quiet }
+}
+
+function parsePluginMenu(value: unknown): PluginMenu {
+  const menu = objectResult(value)
+  if (
+    !hasOnlyKeys(menu, ['kind', 'providerId', 'pluginId', 'menuSessionId', 'items']) ||
+    menu.kind !== 'plugin' ||
+    typeof menu.providerId !== 'string' ||
+    typeof menu.pluginId !== 'string' ||
+    typeof menu.menuSessionId !== 'string' ||
+    !Array.isArray(menu.items) ||
+    menu.items.length > 100 ||
+    menu.items.some((item) => !hasOnlyKeys(objectResult(item), PLUGIN_MENU_ITEM_KEYS)) ||
+    !validPluginMenuItems(menu.items)
+  )
+    throw new TypeError('Invalid context menu')
+
+  return {
+    kind: 'plugin',
+    providerId: menu.providerId,
+    pluginId: menu.pluginId,
+    menuSessionId: menu.menuSessionId,
+    items: menu.items.map(parsePluginMenuItem),
+  }
+}
+
+const PLUGIN_MENU_ITEM_KEYS = [
+  'id',
+  'title',
+  'kind',
+  'parentId',
+  'icon',
+  'disabled',
+  'danger',
+  'shortcut',
+] as const
+
+function parsePluginMenuItem(value: unknown): PluginMenuItem {
+  const item = objectResult(value)
+  if (
+    typeof item.id !== 'string' ||
+    typeof item.title !== 'string' ||
+    (item.kind !== 'action' && item.kind !== 'submenu' && item.kind !== 'separator')
+  )
+    throw new TypeError('Invalid plugin context menu item')
+
+  return {
+    id: item.id,
+    title: item.title,
+    kind: item.kind,
+    ...(typeof item.parentId === 'string' ? { parentId: item.parentId } : {}),
+    ...(typeof item.icon === 'string' ? { icon: item.icon } : {}),
+    ...(typeof item.disabled === 'boolean' ? { disabled: item.disabled } : {}),
+    ...(typeof item.danger === 'boolean' ? { danger: item.danger } : {}),
+    ...(typeof item.shortcut === 'string' ? { shortcut: item.shortcut } : {}),
+  }
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key))
+}
+
+function isShortcutAction(value: unknown): value is ShortcutAction {
+  return typeof value === 'string' && shortcutActions.has(value)
+}
+
+const shortcutActions = new Set<string>(SHORTCUT_ACTIONS)
 
 export function parseConnectionMenus(value: unknown): ConnectionMenu[] {
   const json = parseJsonValue(value)
