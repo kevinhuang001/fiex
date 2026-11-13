@@ -50,6 +50,58 @@ describe('file info IPC validation', () => {
     expect(parseInfoOpenResult(response)).toEqual(response)
   })
 
+  it('constructs Info DTOs and keeps optional values only when they are strings', () => {
+    expect(
+      parseInfoOpenResult({
+        sessionId: 'info-session',
+        sections: [
+          {
+            id: 'plugin:org.example',
+            title: 'Details',
+            providerId: 'plugin:org.example',
+            provider: 'Example',
+            source: 'plugin',
+            pluginId: 'org.example',
+            error: 'provider warning',
+            fields: [
+              {
+                id: 'checksum',
+                subsectionId: 'details',
+                label: 'Checksum',
+                compute: 'onDemand',
+                status: 'ready',
+                value: 'abc123',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: 'info-session',
+      sections: [
+        {
+          id: 'plugin:org.example',
+          title: 'Details',
+          providerId: 'plugin:org.example',
+          provider: 'Example',
+          source: 'plugin',
+          pluginId: 'org.example',
+          error: 'provider warning',
+          fields: [
+            {
+              id: 'checksum',
+              subsectionId: 'details',
+              label: 'Checksum',
+              compute: 'onDemand',
+              status: 'ready',
+              value: 'abc123',
+            },
+          ],
+        },
+      ],
+    })
+  })
+
   it('rejects malformed file info sections before rendering them', () => {
     expect(() =>
       parseInfoOpenResult({
@@ -121,6 +173,12 @@ describe('file info IPC validation', () => {
       }),
     ).toThrow('Invalid file info response')
   })
+
+  it('rejects unknown keys at the Info response envelope', () => {
+    expect(() =>
+      parseInfoOpenResult({ sessionId: 'info-session', sections: [], revision: 1 }),
+    ).toThrow('Invalid file info response')
+  })
 })
 
 describe('Info wire enum validation', () => {
@@ -164,6 +222,42 @@ describe('Info wire enum validation', () => {
           },
         ],
       }),
+    ).toThrow('Invalid file info update')
+  })
+
+  it('constructs decoded Info field updates', () => {
+    expect(
+      parseInfoFieldDelta({
+        sessionId: 'info-session',
+        revision: 2,
+        updates: [
+          {
+            providerId: 'core.metadata',
+            subsectionId: 'basic',
+            fieldId: 'name',
+            status: 'ready',
+            value: 'report.txt',
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionId: 'info-session',
+      revision: 2,
+      updates: [
+        {
+          providerId: 'core.metadata',
+          subsectionId: 'basic',
+          fieldId: 'name',
+          status: 'ready',
+          value: 'report.txt',
+        },
+      ],
+    })
+  })
+
+  it('rejects unknown keys at the Info field delta envelope', () => {
+    expect(() =>
+      parseInfoFieldDelta({ sessionId: 'info-session', revision: 1, updates: [], stale: true }),
     ).toThrow('Invalid file info update')
   })
 })
