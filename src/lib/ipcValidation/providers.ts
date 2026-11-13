@@ -4,26 +4,50 @@ import type { InstallPreview } from '@/components/settings/installer/types'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
 
+function isThemeMode(value: unknown): value is Theme['mode'] {
+  return value === 'light' || value === 'dark'
+}
+
+function parseThemeTokens(value: unknown): Record<string, string> | null {
+  if (!isJsonObject(value)) return null
+  const tokens: Record<string, string> = {}
+  for (const [key, token] of Object.entries(value)) {
+    if (typeof token !== 'string') return null
+    tokens[key] = token
+  }
+  return tokens
+}
+
 export function parseThemes(value: unknown): Theme[] {
   const json = parseJsonValue(value)
   if (!Array.isArray(json)) throw new TypeError('Invalid plugin theme list')
+  const themes: Theme[] = []
   for (const theme of json) {
     if (
-      theme === null ||
-      Array.isArray(theme) ||
-      typeof theme !== 'object' ||
+      !isJsonObject(theme) ||
+      Object.keys(theme).some(
+        (key) => !['id', 'name', 'mode', 'tokens', 'darkTokens'].includes(key),
+      ) ||
       typeof theme.id !== 'string' ||
       typeof theme.name !== 'string' ||
-      !['light', 'dark'].includes(String(theme.mode)) ||
-      !isJsonObject(theme.tokens) ||
-      !Object.values(theme.tokens).every((token) => typeof token === 'string') ||
-      (theme.darkTokens !== undefined &&
-        (!isJsonObject(theme.darkTokens) ||
-          !Object.values(theme.darkTokens).every((token) => typeof token === 'string')))
+      !isThemeMode(theme.mode)
     )
       throw new TypeError('Invalid plugin theme')
+
+    const tokens = parseThemeTokens(theme.tokens)
+    const darkTokens =
+      theme.darkTokens === undefined ? undefined : parseThemeTokens(theme.darkTokens)
+    if (!tokens || (theme.darkTokens !== undefined && !darkTokens))
+      throw new TypeError('Invalid plugin theme')
+    themes.push({
+      id: theme.id,
+      name: theme.name,
+      mode: theme.mode,
+      tokens,
+      ...(darkTokens ? { darkTokens } : {}),
+    })
   }
-  return json as unknown as Theme[]
+  return themes
 }
 
 export function parseProviderCatalog(value: unknown): { features: Catalog } {
