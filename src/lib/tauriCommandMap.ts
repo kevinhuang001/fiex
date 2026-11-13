@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../sdk/ui/src/index'
-import type { CoreMenu } from '@/components/explorer/context-menu/useContextMenu'
+import type { CoreMenu } from './coreMenu'
 import type { PickerResponse } from '@/components/explorer/context-menu/OpenWithPicker'
 import type { InfoFieldDelta, InfoOpenResult } from '@/lib/ipcValidation/infoTypes'
 import type { PluginMenu } from '@/components/plugins/PluginMenuNode'

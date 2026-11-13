@@ -3,7 +3,7 @@ import { t } from '@/i18n'
 import { fixtureRemoteEntries, fixtureRemoteRoot } from '../data'
 import { state } from '../handlers/shared'
 import { handleFiles } from '../handlers/files'
-import type { CoreMenu, CoreMenuItem } from '@/components/explorer/context-menu/useContextMenu'
+import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 import type { ShortcutAction } from '@/lib/shortcuts'
 
 const sessions = new Map<

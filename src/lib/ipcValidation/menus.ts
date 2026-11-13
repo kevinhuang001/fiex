@@ -1,5 +1,5 @@
 import type { ConnectionMenu } from '@/components/sidebar/Connections'
-import type { CoreMenu } from '@/components/explorer/context-menu/useContextMenu'
+import type { CoreMenu } from '../coreMenu'
 import type { PluginMenu } from '@/components/plugins/PluginMenuNode'
 import { isJsonObject, parseJsonValue } from './json'
 import { validPluginMenuItems } from '../pluginMenu'

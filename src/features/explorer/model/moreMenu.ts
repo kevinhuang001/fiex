@@ -1,4 +1,4 @@
-import type { CoreMenu, CoreMenuItem } from './useContextMenu'
+import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 
 const MORE_ACTION_IDS = new Set(['duplicate', 'delete'])
 
