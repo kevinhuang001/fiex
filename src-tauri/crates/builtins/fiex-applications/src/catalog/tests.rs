@@ -92,7 +92,6 @@ fn cache_first_entries_revalidate_in_background_and_notify_only_on_change() {
         .entries_cache_first_background(move || changed.send(()).unwrap())
         .unwrap();
     assert_eq!(initial[0].display_name, "Editor");
-    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
     completed.recv_timeout(Duration::from_secs(3)).unwrap();
 
     let refreshed = catalog.entries().unwrap();

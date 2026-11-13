@@ -1,7 +1,15 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
 import { normalizeListColumns } from '../listColumns'
 import type { StateGetArgs, StateGetResult, ConnectionOpenResult } from '../tauriCommandMap'
-import type { Batch, Entry, Listing, Location, OperationResult } from '../types'
+import type {
+  Batch,
+  Entry,
+  FileVersion,
+  Listing,
+  Location,
+  OperationResult,
+  TransferConflict,
+} from '../types'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
 
 const ENTRY_KEYS = [
@@ -153,14 +161,53 @@ export function parseListing(value: unknown): Listing {
 export function parseOperationResult(value: unknown): OperationResult {
   const result = objectResult(value)
   if (
+    !onlyKeys(result, ['paths', 'errors', 'skipped', 'conflicts']) ||
     !Array.isArray(result.paths) ||
     !result.paths.every((path) => typeof path === 'string') ||
     !Array.isArray(result.errors) ||
     !result.errors.every((error) => typeof error === 'string') ||
-    typeof result.skipped !== 'number'
+    !unsignedInteger(result.skipped) ||
+    !Array.isArray(result.conflicts)
   )
     throw new TypeError('Invalid file operation result from IPC')
-  return result as unknown as OperationResult
+  return {
+    paths: result.paths,
+    errors: result.errors,
+    skipped: result.skipped,
+    conflicts: result.conflicts.map(parseTransferConflict),
+  }
+}
+
+function parseFileVersion(value: unknown): FileVersion {
+  if (
+    !isJsonObject(value) ||
+    !onlyKeys(value, ['path', 'size', 'modified', 'isDir']) ||
+    typeof value.path !== 'string' ||
+    !unsignedInteger(value.size) ||
+    !unsignedInteger(value.modified) ||
+    typeof value.isDir !== 'boolean'
+  )
+    throw new TypeError('Invalid file version from IPC')
+  return {
+    path: value.path,
+    size: value.size,
+    modified: value.modified,
+    isDir: value.isDir,
+  }
+}
+
+function parseTransferConflict(value: unknown): TransferConflict {
+  if (
+    !isJsonObject(value) ||
+    !onlyKeys(value, ['key', 'source', 'destination']) ||
+    typeof value.key !== 'string'
+  )
+    throw new TypeError('Invalid file transfer conflict from IPC')
+  return {
+    key: value.key,
+    source: parseFileVersion(value.source),
+    destination: parseFileVersion(value.destination),
+  }
 }
 export function parseConnectionOpenResult(value: unknown): ConnectionOpenResult {
   const result = objectResult(value)
