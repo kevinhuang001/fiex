@@ -3,21 +3,14 @@ import { call } from '@/lib/api'
 import { requestDirectoryRefresh } from '@/lib/listing'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
-import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
+import { parseCoreMenuAction } from '@/lib/coreMenu'
+import type { CoreMenu, CoreMenuAction, CoreMenuItem } from '@/lib/coreMenu'
 import type { ContextMenuProps } from './types'
-
-export interface CoreAction {
-  kind: 'coreAction'
-  command: string
-  paths: string[]
-  path: string
-  directory: string
-}
 
 /** Fixed Core-owned UI command adapter. Availability and selection are decided
  * by the backend provider/session, not reconstructed from the current pane. */
 export function applyCoreAction(
-  effect: CoreAction,
+  effect: CoreMenuAction,
   props: ContextMenuProps,
   chooseOpenWith?: (path: string) => void,
 ) {
@@ -110,22 +103,15 @@ export async function executeCoreMenu(
 ) {
   let onProgress: ReturnType<typeof progressChannel> | undefined = quietProgressChannel()
   const execute = async () => {
-    const effect = await call('plugin_context_menu_execute', {
-      menuSessionId: menu.menuSessionId,
-      itemId: item.id,
-      onProgress,
-    })
-    if (
-      effect !== null &&
-      !Array.isArray(effect) &&
-      typeof effect === 'object' &&
-      effect.kind === 'coreAction' &&
-      typeof effect.command === 'string' &&
-      Array.isArray(effect.paths) &&
-      typeof effect.path === 'string' &&
-      typeof effect.directory === 'string'
-    ) {
-      await applyCoreAction(effect as unknown as CoreAction, props, chooseOpenWith)
+    const effect = parseCoreMenuAction(
+      await call('plugin_context_menu_execute', {
+        menuSessionId: menu.menuSessionId,
+        itemId: item.id,
+        onProgress,
+      }),
+    )
+    if (effect) {
+      await applyCoreAction(effect, props, chooseOpenWith)
       return true
     }
     requestDirectoryRefresh([props.x.path])
