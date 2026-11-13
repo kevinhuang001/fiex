@@ -1,10 +1,10 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
-import { normalizeListColumns } from '../listColumns'
-import type { StateGetArgs, StateGetResult, ConnectionOpenResult } from '../tauriCommandMap'
-import type { Batch, Entry, Listing, Location } from '../types'
-import { isJsonObject, isUnsignedInteger, objectResult, onlyKeys, parseJsonValue } from './json'
+import type { ConnectionOpenResult } from '../tauriCommandMap'
+import type { Batch, Entry, Listing } from '../types'
+import { isJsonObject, isUnsignedInteger, objectResult, onlyKeys } from './json'
 
 export { parseOperationResult } from './operations'
+export { parseLocations, parseStateGetResult } from './state'
 
 const ENTRY_KEYS = [
   'path',
@@ -186,92 +186,4 @@ export function parseConnectionOpenResult(value: unknown): ConnectionOpenResult 
     }
   }
   throw new TypeError('Invalid connection navigation response')
-}
-export function parseLocations(value: JsonValue): Location[] {
-  if (!Array.isArray(value)) throw new TypeError('Invalid saved locations')
-  const locations: Location[] = []
-  for (const item of value) {
-    if (
-      !isJsonObject(item) ||
-      !onlyKeys(item, [
-        'name',
-        'path',
-        'kind',
-        'available',
-        'total',
-        'removable',
-        'filesystem',
-        'device',
-        'mounted',
-        'usbfs',
-      ]) ||
-      typeof item.name !== 'string' ||
-      typeof item.path !== 'string' ||
-      typeof item.kind !== 'string' ||
-      !isUnsignedInteger(item.available) ||
-      !isUnsignedInteger(item.total) ||
-      typeof item.removable !== 'boolean' ||
-      typeof item.filesystem !== 'string' ||
-      typeof item.device !== 'string' ||
-      typeof item.mounted !== 'boolean' ||
-      typeof item.usbfs !== 'boolean'
-    )
-      throw new TypeError('Invalid saved location')
-    locations.push({
-      name: item.name,
-      path: item.path,
-      kind: item.kind,
-      available: item.available,
-      total: item.total,
-      removable: item.removable,
-      filesystem: item.filesystem,
-      device: item.device,
-      mounted: item.mounted,
-      usbfs: item.usbfs,
-    })
-  }
-  return locations
-}
-export function parseStateGetResult<A extends StateGetArgs>(
-  args: A,
-  value: unknown,
-): StateGetResult<A> {
-  if (value === null) return null as StateGetResult<A>
-  const json = parseJsonValue(value)
-  if (args.namespace === 'layout') {
-    return normalizeListColumns(json) as StateGetResult<A>
-  }
-  if (args.namespace === 'explorer') {
-    if (args.key === 'locations') return parseLocations(json) as StateGetResult<A>
-    if (args.key === 'lastPath') {
-      if (typeof json !== 'string') throw new TypeError('Invalid saved start path')
-      return json as unknown as StateGetResult<A>
-    }
-    if (args.key === 'preferences') {
-      if (json === null || Array.isArray(json) || typeof json !== 'object')
-        throw new TypeError('Invalid saved preferences')
-      return json as StateGetResult<A>
-    }
-  }
-  if (args.namespace === 'picker') {
-    if (args.key === 'sort') {
-      if (
-        json === null ||
-        Array.isArray(json) ||
-        typeof json !== 'object' ||
-        !['name', 'modified', 'size', 'kind'].includes(String(json.key)) ||
-        !['asc', 'desc'].includes(String(json.direction))
-      )
-        throw new TypeError('Invalid saved picker sort')
-      return { key: json.key, direction: json.direction } as StateGetResult<A>
-    }
-    if (args.key === 'group') {
-      if (!['none', 'kind', 'modified', 'size'].includes(String(json)))
-        throw new TypeError('Invalid saved picker group')
-      return json as StateGetResult<A>
-    }
-    if (typeof json !== 'string') throw new TypeError('Invalid saved picker directory')
-    return json as StateGetResult<A>
-  }
-  return json as StateGetResult<A>
 }
