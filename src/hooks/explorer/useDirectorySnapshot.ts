@@ -8,7 +8,7 @@ import {
   sameDirectoryDecorations,
   sameListingMetadata,
   type PaintedListingCache,
-} from './paintedListingCache'
+} from '@/features/explorer/model/paintedListingCache'
 import type { Entry, EntryDecoration, Listing, Location, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 

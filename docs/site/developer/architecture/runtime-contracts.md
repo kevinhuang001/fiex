@@ -30,7 +30,7 @@ Rust 日志、插件日志、错误详情和导出前先清理凭据头、OAuth 
 
 ## 对应验证
 
-- 列表快照、父子失效与 presentation 一致性：Rust 的 core/fs/directory_cache/tests.rs；前端的 listingDiff.test.ts、paintedListingCache.test.ts、entryPresentation.test.ts。
+- 列表快照、父子失效与 presentation 一致性：Rust 的 core/fs/directory_cache/tests.rs；前端的 listingDiff.test.ts、features/explorer/model/paintedListingCache.test.ts、entryPresentation.test.ts。
 - 成功写入与失败事务：Rust 的 core/fs/tests.rs、core/transfers/copy/tests.rs，以及 provider/fs/streams tests。
 - 错误去重和操作系统权限错误路由：src/lib/errorCenter.test.ts。
 - 日志 secret 清理和写入顺序：src/lib/redactDiagnostic.test.ts、src-tauri/src/infrastructure/logging/tests.rs。
