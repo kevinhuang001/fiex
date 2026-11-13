@@ -10,7 +10,7 @@ import {
   type PaintedListingCache,
 } from '@/features/explorer/model/paintedListingCache'
 import type { Entry, EntryDecoration, Listing, Location, Preferences } from '@/lib/types'
-import type { Navigation } from './useNavigation'
+import type { Navigation } from '@/features/explorer/model/useNavigation'
 
 /** Listing stream reconciliation, including the cache-before-refresh paint. */
 export interface DirectorySnapshotState {

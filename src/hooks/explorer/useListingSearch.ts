@@ -4,7 +4,7 @@ import { call, search } from '@/lib/api'
 import { t } from '@/i18n'
 import { mergeSearchBatch } from '@/features/explorer/model/searchBatch'
 import type { Entry, Preferences } from '@/lib/types'
-import type { Navigation } from './useNavigation'
+import type { Navigation } from '@/features/explorer/model/useNavigation'
 
 interface ListingSearchOptions {
   enabled: boolean
