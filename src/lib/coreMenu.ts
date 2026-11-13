@@ -70,17 +70,28 @@ export function parseCoreMenuAction(value: unknown): CoreMenuAction | null {
   }
 }
 
-export interface CoreMenuItem {
+/** Shared wire shape for lazily returned menu rows before their owner is known. */
+export interface MenuChildItem {
   id: string
   kind: 'action' | 'submenu' | 'separator'
   title: string
   parentId?: string
   icon?: string
-  shortcut?: ShortcutAction
+  shortcut?: string
   disabled?: boolean
   danger?: boolean
   placement?: 'tail'
-  activity?: { label: string; kind: 'sync' | 'transfer'; quiet: boolean }
+  activity?: MenuActivity
+}
+
+export interface MenuActivity {
+  label: string
+  kind: 'sync' | 'transfer'
+  quiet: boolean
+}
+
+export interface CoreMenuItem extends Omit<MenuChildItem, 'shortcut'> {
+  shortcut?: ShortcutAction
 }
 
 export interface CoreMenu {

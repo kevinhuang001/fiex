@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../sdk/ui/src/index'
-import type { CoreMenu } from './coreMenu'
+import type { CoreMenu, MenuChildItem } from './coreMenu'
 import type { PickerResponse } from '@/components/explorer/context-menu/OpenWithPicker'
 import type { InfoFieldDelta, InfoOpenResult } from '@/lib/ipcValidation/infoTypes'
 import type { PluginMenu } from './pluginMenu'
@@ -107,7 +107,7 @@ export interface TauriCommandResults {
   plugin_connection_menu_execute: JsonValue
   plugin_connection_menu_resolve: ConnectionMenu[]
   plugin_context_directory: string
-  plugin_context_menu_children: { items: JsonValue[] }
+  plugin_context_menu_children: { items: MenuChildItem[] }
   plugin_context_menu_execute: JsonValue
   plugin_context_menu_resolve: CoreMenu[] | PluginMenu[]
   plugin_decorations: EntryDecoration[]

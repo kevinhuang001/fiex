@@ -10,7 +10,8 @@ import {
   parseLocations,
 } from './ipcValidation/entries'
 import { parseInfoOpenResult, parseInfoFieldDelta } from './ipcValidation/info'
-import { parsePluginMenuResult, parseConnectionMenus } from './ipcValidation/menus'
+import { parseConnectionMenus } from './ipcValidation/menus'
+import { parsePluginMenuResult, parseContextMenuChildItems } from './ipcValidation/contextMenus'
 import {
   parseEntryDecorations,
   parseThemes,
@@ -26,6 +27,7 @@ export * from './ipcValidation/entries'
 export * from './ipcValidation/info'
 export * from './ipcValidation/directory'
 export * from './ipcValidation/menus'
+export * from './ipcValidation/contextMenus'
 export * from './ipcValidation/providers'
 export * from './ipcValidation/previews'
 
@@ -52,8 +54,9 @@ export function decodeDynamicIpcResult(
   }
   if (command === 'plugin_context_menu_children') {
     const result = objectResult(value)
-    if (!Array.isArray(result.items)) throw new TypeError('Invalid context submenu response')
-    return { items: result.items }
+    if (Object.keys(result).some((key) => key !== 'items') || !Array.isArray(result.items))
+      throw new TypeError('Invalid context submenu response')
+    return { items: parseContextMenuChildItems(result.items) }
   }
   if (
     command === 'plugin_context_menu_execute' ||
