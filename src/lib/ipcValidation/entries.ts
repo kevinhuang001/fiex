@@ -1,16 +1,10 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
 import { normalizeListColumns } from '../listColumns'
 import type { StateGetArgs, StateGetResult, ConnectionOpenResult } from '../tauriCommandMap'
-import type {
-  Batch,
-  Entry,
-  FileVersion,
-  Listing,
-  Location,
-  OperationResult,
-  TransferConflict,
-} from '../types'
-import { isJsonObject, objectResult, parseJsonValue } from './json'
+import type { Batch, Entry, Listing, Location } from '../types'
+import { isJsonObject, isUnsignedInteger, objectResult, onlyKeys, parseJsonValue } from './json'
+
+export { parseOperationResult } from './operations'
 
 const ENTRY_KEYS = [
   'path',
@@ -31,16 +25,6 @@ const ENTRY_KEYS = [
   'sync',
 ]
 
-function onlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
-  return Object.keys(value).every((key) => allowed.includes(key))
-}
-
-function unsignedInteger(value: unknown): value is number {
-  return (
-    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
-  )
-}
-
 function isEntrySync(value: unknown): value is Entry['sync'] {
   return (
     value === null ||
@@ -54,7 +38,7 @@ function parseEntryTag(value: unknown): Entry['tags'][number] {
     !isJsonObject(value) ||
     !onlyKeys(value, ['name', 'color']) ||
     typeof value.name !== 'string' ||
-    !unsignedInteger(value.color) ||
+    !isUnsignedInteger(value.color) ||
     value.color > 7
   )
     throw new TypeError('Invalid file tag from IPC')
@@ -69,9 +53,9 @@ export function parseEntry(value: JsonValue): Entry {
     typeof value.name !== 'string' ||
     typeof value.isDir !== 'boolean' ||
     typeof value.isSymlink !== 'boolean' ||
-    !unsignedInteger(value.size) ||
-    !unsignedInteger(value.modified) ||
-    !unsignedInteger(value.created) ||
+    !isUnsignedInteger(value.size) ||
+    !isUnsignedInteger(value.modified) ||
+    !isUnsignedInteger(value.created) ||
     typeof value.extension !== 'string' ||
     typeof value.mime !== 'string' ||
     !(value.linkTarget === null || typeof value.linkTarget === 'string') ||
@@ -158,57 +142,6 @@ export function parseListing(value: unknown): Listing {
   }
 }
 
-export function parseOperationResult(value: unknown): OperationResult {
-  const result = objectResult(value)
-  if (
-    !onlyKeys(result, ['paths', 'errors', 'skipped', 'conflicts']) ||
-    !Array.isArray(result.paths) ||
-    !result.paths.every((path) => typeof path === 'string') ||
-    !Array.isArray(result.errors) ||
-    !result.errors.every((error) => typeof error === 'string') ||
-    !unsignedInteger(result.skipped) ||
-    !Array.isArray(result.conflicts)
-  )
-    throw new TypeError('Invalid file operation result from IPC')
-  return {
-    paths: result.paths,
-    errors: result.errors,
-    skipped: result.skipped,
-    conflicts: result.conflicts.map(parseTransferConflict),
-  }
-}
-
-function parseFileVersion(value: unknown): FileVersion {
-  if (
-    !isJsonObject(value) ||
-    !onlyKeys(value, ['path', 'size', 'modified', 'isDir']) ||
-    typeof value.path !== 'string' ||
-    !unsignedInteger(value.size) ||
-    !unsignedInteger(value.modified) ||
-    typeof value.isDir !== 'boolean'
-  )
-    throw new TypeError('Invalid file version from IPC')
-  return {
-    path: value.path,
-    size: value.size,
-    modified: value.modified,
-    isDir: value.isDir,
-  }
-}
-
-function parseTransferConflict(value: unknown): TransferConflict {
-  if (
-    !isJsonObject(value) ||
-    !onlyKeys(value, ['key', 'source', 'destination']) ||
-    typeof value.key !== 'string'
-  )
-    throw new TypeError('Invalid file transfer conflict from IPC')
-  return {
-    key: value.key,
-    source: parseFileVersion(value.source),
-    destination: parseFileVersion(value.destination),
-  }
-}
 export function parseConnectionOpenResult(value: unknown): ConnectionOpenResult {
   const result = objectResult(value)
   if (result.kind === 'vfs' && typeof result.path === 'string')

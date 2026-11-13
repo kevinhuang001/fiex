@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseOperationResult } from './entries'
+import { parseOperationResult } from './operations'
 
 const operationResult = {
   paths: ['/workspace/report.txt'],
