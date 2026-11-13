@@ -123,6 +123,8 @@ describe('IPC boundary validation', () => {
       parsePluginMenuResult(
         [
           {
+            kind: 'plugin',
+            providerId: 'archive.contextMenu',
             pluginId: 'archive',
             menuSessionId: 'session-1',
             items: [{ id: 'extract', title: 'Extract', kind: 'action' }],
