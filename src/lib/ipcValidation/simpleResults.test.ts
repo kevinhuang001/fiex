@@ -45,6 +45,18 @@ describe('simple Tauri result validation', () => {
     )
   })
 
+  it.each(['macos', 'windows', 'linux'])('accepts the Rust %s platform result', (platform) => {
+    expect(decodeSimpleIpcResult('platform', platform)).toEqual({ value: platform })
+    expect(decodeDynamicIpcResult('platform', {}, platform)).toBe(platform)
+  })
+
+  it.each(['', 'darwin', 'win32', 'freebsd', null])(
+    'rejects unsupported platform result %s',
+    (value) => {
+      expect(() => decodeSimpleIpcResult('platform', value)).toThrow('Invalid platform IPC result')
+    },
+  )
+
   it('leaves commands with structured result decoders unhandled', () => {
     expect(decodeSimpleIpcResult('list_directory', { entries: [] })).toBeNull()
   })

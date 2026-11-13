@@ -106,4 +106,6 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 **P1-35 内部拖放 IPC（PR #150）：** 将 `DropPlan.references` 从 `unknown[]` 收窄为 SDK `ResourceRef[]`，并校验路径/引用数量一致、路径非空和引用结构。
 
+**P1-36 平台及搜索目录 IPC（PR #151）：** 按受支持 OS 联合类型校验 `platform`，并将 `search_providers` 从通用 JSON 列表收窄为 Rust 搜索引擎 DTO，验证 priority、builtin 和模式枚举。
+
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。
