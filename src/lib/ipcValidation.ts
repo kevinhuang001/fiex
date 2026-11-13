@@ -1,5 +1,5 @@
 import { parseResourceContext } from '../../sdk/ui/src/resources.js'
-import { objectResult, parseJsonValue } from './ipcValidation/json'
+import { isJsonObject, objectResult, onlyKeys, parseJsonValue } from './ipcValidation/json'
 import {
   parseConnectionOpenResult,
   parseStateGetArgs,
@@ -96,15 +96,14 @@ export function decodeDynamicIpcResult(
   if (command === 'preview_candidates') return parsePreviewCandidates(value)
   if (command === 'preview_open') return parseResolvedPreview(value)
   if (command === 'plugin_before_open') {
-    const result = objectResult(value)
-    if (typeof result.handled !== 'boolean') throw new TypeError('Invalid before-open result')
-    return { handled: result.handled }
+    if (!isJsonObject(value) || !onlyKeys(value, ['handled']) || typeof value.handled !== 'boolean')
+      throw new TypeError('Invalid before-open result')
+    return { handled: value.handled }
   }
   if (command === 'plugin_describe_resources') {
     if (!Array.isArray(value)) throw new TypeError('Invalid resource context list')
     return value.map(parseResourceContext)
   }
-  if (command === 'plugin_toolbar_invoke') return parseJsonValue(value)
   if (command === 'remote_connection_config') return parseRemoteConnectionConfig(value)
   if (command === 'errors_pending') return parsePendingErrors(value)
   if (command === 'plugin_logs') return parsePluginLogPage(value)

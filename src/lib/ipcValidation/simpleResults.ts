@@ -1,6 +1,7 @@
 import { isUnsignedInteger } from './json'
 
-type SimpleResultKind = 'void' | 'string' | 'nullableString' | 'count' | 'boolean' | 'platform'
+type SimpleResultKind =
+  'void' | 'emptyObject' | 'string' | 'nullableString' | 'count' | 'boolean' | 'platform'
 
 const SIMPLE_RESULT_KINDS: Record<string, SimpleResultKind> = {
   begin_operation: 'void',
@@ -35,6 +36,7 @@ const SIMPLE_RESULT_KINDS: Record<string, SimpleResultKind> = {
   open_in_ide: 'void',
   open_path: 'void',
   platform: 'platform',
+  plugin_toolbar_invoke: 'emptyObject',
   open_terminal: 'void',
   open_with_picker_execute: 'void',
   plugin_activate: 'void',
@@ -99,6 +101,11 @@ export function decodeSimpleIpcResult(command: string, value: unknown): { value:
 
   if (kind === 'void') {
     if (value !== null && value !== undefined) throw invalid()
+    return { value: undefined }
+  }
+  if (kind === 'emptyObject') {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length)
+      throw invalid()
     return { value: undefined }
   }
   if (kind === 'string') {
