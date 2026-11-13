@@ -203,6 +203,9 @@ jobs:
           command -v patchelf
       - uses: dtolnay/rust-toolchain@stable
         with:
+          # PR #93 passed on 1.99.1; hold desktop jobs there while validating
+          # Rust 1.100's changed Cargo build directory on Windows.
+          toolchain: 1.99.1
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
       - name: Configure sccache
