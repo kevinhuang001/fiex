@@ -31,6 +31,7 @@ import { parseMarketplacePlugins } from './ipcValidation/marketplace'
 import { parsePluginCatalog } from './ipcValidation/pluginCatalog'
 import { parseSystemProxyInfo } from './ipcValidation/systemProxy'
 import { parseRecentNavigationTarget } from './ipcValidation/recentNavigation'
+import { parseDropPlan } from './ipcValidation/dropPlan'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -110,6 +111,7 @@ export function decodeDynamicIpcResult(
   if (command === 'plugins_list') return parsePluginCatalog(value)
   if (command === 'system_proxy_info') return parseSystemProxyInfo(value)
   if (command === 'recent_navigation_target') return parseRecentNavigationTarget(value)
+  if (command === 'internal_drop') return parseDropPlan(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
