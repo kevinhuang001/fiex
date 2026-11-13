@@ -32,6 +32,12 @@ export interface LogPage {
   hasMore: boolean
 }
 
+export interface SystemProxyInfo {
+  enabled: boolean
+  source: 'windows-system' | 'macos-system' | 'environment'
+  proxy: string | null
+}
+
 export interface Tag {
   name: string
   /** Finder tag colour index (0–7). */
