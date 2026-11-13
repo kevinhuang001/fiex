@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePluginMenuResult } from './menus'
+import { parseCoreMenuItems, parsePluginMenuItems, parsePluginMenuResult } from './menus'
 
 describe('context menu IPC decoding', () => {
   it('constructs explicit Core and plugin menu DTOs and rejects malformed fields', () => {
@@ -92,5 +92,41 @@ describe('context menu IPC decoding', () => {
         'plugins',
       ),
     ).toThrow('Invalid context menu')
+  })
+
+  it('decodes lazy submenu pages without requiring their parent in the page', () => {
+    expect(
+      parseCoreMenuItems([
+        {
+          id: 'copyPath',
+          kind: 'action',
+          title: 'Copy path',
+          parentId: 'more',
+          activity: { label: 'Copying', kind: 'transfer', quiet: false },
+        },
+      ]),
+    ).toEqual([
+      {
+        id: 'copyPath',
+        kind: 'action',
+        title: 'Copy path',
+        parentId: 'more',
+        activity: { label: 'Copying', kind: 'transfer', quiet: false },
+      },
+    ])
+    expect(() =>
+      parseCoreMenuItems([
+        { id: 'invalid', kind: 'action', title: 'Invalid', shortcut: 'invalid' },
+      ]),
+    ).toThrow('Invalid Core context menu item')
+
+    expect(
+      parsePluginMenuItems([
+        { id: 'extract', title: 'Extract', kind: 'action', parentId: 'archive' },
+      ]),
+    ).toEqual([{ id: 'extract', title: 'Extract', kind: 'action', parentId: 'archive' }])
+    expect(() =>
+      parsePluginMenuItems([{ id: 'extract', title: 'Extract', kind: 'action', extra: true }]),
+    ).toThrow('Invalid plugin context menu item')
   })
 })

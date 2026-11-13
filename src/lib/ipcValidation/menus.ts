@@ -37,8 +37,16 @@ function parseCoreMenu(value: unknown): CoreMenu {
     kind: 'builtin',
     providerId: menu.providerId,
     menuSessionId: menu.menuSessionId,
-    items: menu.items.map(parseCoreMenuItem),
+    items: parseCoreMenuItems(menu.items),
   }
+}
+
+/** Decode Core submenu items with the same DTO checks used for root menus. */
+export function parseCoreMenuItems(value: unknown): CoreMenuItem[] {
+  const items = parseJsonValue(value)
+  if (!Array.isArray(items) || items.length > 100)
+    throw new TypeError('Invalid Core context menu items')
+  return items.map(parseCoreMenuItem)
 }
 
 function parseCoreMenuItem(value: unknown): CoreMenuItem {
@@ -105,19 +113,24 @@ function parsePluginMenu(value: unknown): PluginMenu {
     typeof menu.providerId !== 'string' ||
     typeof menu.pluginId !== 'string' ||
     typeof menu.menuSessionId !== 'string' ||
-    !Array.isArray(menu.items) ||
-    menu.items.length > 100 ||
-    menu.items.some((item) => !hasOnlyKeys(objectResult(item), PLUGIN_MENU_ITEM_KEYS)) ||
-    !validPluginMenuItems(menu.items)
+    !Array.isArray(menu.items)
   )
     throw new TypeError('Invalid context menu')
+
+  let items: PluginMenuItem[]
+  try {
+    items = parsePluginMenuItems(menu.items)
+  } catch {
+    throw new TypeError('Invalid context menu')
+  }
+  if (!validPluginMenuItems(items)) throw new TypeError('Invalid context menu')
 
   return {
     kind: 'plugin',
     providerId: menu.providerId,
     pluginId: menu.pluginId,
     menuSessionId: menu.menuSessionId,
-    items: menu.items.map(parsePluginMenuItem),
+    items,
   }
 }
 
@@ -132,12 +145,36 @@ const PLUGIN_MENU_ITEM_KEYS = [
   'shortcut',
 ] as const
 
+/** Decode plugin submenu rows; their parent may be in an earlier lazy page. */
+export function parsePluginMenuItems(value: unknown): PluginMenuItem[] {
+  const items = parseJsonValue(value)
+  if (!Array.isArray(items) || items.length > 100)
+    throw new TypeError('Invalid plugin context menu items')
+
+  const decoded = items.map(parsePluginMenuItem)
+  const ids = new Set<string>()
+  for (const item of decoded) {
+    if (!/^[\w.-]{1,80}$/.test(item.id) || ids.has(item.id) || item.title.length > 128)
+      throw new TypeError('Invalid plugin context menu item')
+    ids.add(item.id)
+  }
+  return decoded
+}
+
 function parsePluginMenuItem(value: unknown): PluginMenuItem {
   const item = objectResult(value)
   if (
+    !hasOnlyKeys(item, PLUGIN_MENU_ITEM_KEYS) ||
     typeof item.id !== 'string' ||
     typeof item.title !== 'string' ||
-    (item.kind !== 'action' && item.kind !== 'submenu' && item.kind !== 'separator')
+    item.title.length > 128 ||
+    !/^[\w.-]{1,80}$/.test(item.id) ||
+    (item.kind !== 'action' && item.kind !== 'submenu' && item.kind !== 'separator') ||
+    (item.parentId !== undefined && typeof item.parentId !== 'string') ||
+    (item.icon !== undefined && typeof item.icon !== 'string') ||
+    (item.disabled !== undefined && typeof item.disabled !== 'boolean') ||
+    (item.danger !== undefined && typeof item.danger !== 'boolean') ||
+    (item.shortcut !== undefined && typeof item.shortcut !== 'string')
   )
     throw new TypeError('Invalid plugin context menu item')
 

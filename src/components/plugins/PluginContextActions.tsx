@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { parsePluginMenuItems } from '@/lib/ipcValidation'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -105,8 +106,7 @@ export function PluginContextActions({
         menuSessionId: menu.menuSessionId,
         parentId: submenuId,
       })
-      const children = response.items
-      if (!Array.isArray(children)) throw new Error('Invalid submenu response')
+      const children = parsePluginMenuItems(response.items)
       setMenus((previous) =>
         previous.map((candidate) => {
           if (candidate.menuSessionId !== menu.menuSessionId) return candidate
