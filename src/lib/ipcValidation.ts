@@ -23,6 +23,7 @@ import {
 import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/previews'
 import { decodeSimpleIpcResult } from './ipcValidation/simpleResults'
 import { decodeSimpleCollectionIpcResult } from './ipcValidation/simpleCollections'
+import { decodeRuntimeCatalogIpcResult } from './ipcValidation/runtimeCatalogs'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -100,5 +101,7 @@ export function decodeDynamicIpcResult(
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
   if (simpleCollectionResult) return simpleCollectionResult.value
+  const runtimeCatalogResult = decodeRuntimeCatalogIpcResult(command, value)
+  if (runtimeCatalogResult) return runtimeCatalogResult.value
   return value === undefined ? undefined : parseJsonValue(value)
 }
