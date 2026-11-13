@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { decodeDynamicIpcResult } from '../ipcValidation'
 import { parseStateGetResult } from './state'
 
 describe('stored state IPC validation', () => {
@@ -40,5 +41,21 @@ describe('stored state IPC validation', () => {
     expect(() => parseStateGetResult({ namespace: 'picker', key: 'group' }, 'extension')).toThrow(
       'Invalid saved picker group',
     )
+  })
+
+  it('validates state_get arguments before dynamic result decoding', () => {
+    expect(decodeDynamicIpcResult('state_get', { namespace: 'picker', key: 'group' }, 'kind')).toBe(
+      'kind',
+    )
+    expect(() =>
+      decodeDynamicIpcResult('state_get', { namespace: 'picker', key: 'unknown' }, 'kind'),
+    ).toThrow('Invalid saved state key')
+    expect(() =>
+      decodeDynamicIpcResult(
+        'state_get',
+        { namespace: 'picker', key: 'group', extra: true },
+        'kind',
+      ),
+    ).toThrow('Invalid saved state key')
   })
 })

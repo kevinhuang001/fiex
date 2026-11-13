@@ -22,6 +22,7 @@ import {
 } from './ipcValidation/providers'
 import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/previews'
 import { decodeSimpleIpcResult } from './ipcValidation/simpleResults'
+import { decodeSimpleCollectionIpcResult } from './ipcValidation/simpleCollections'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -97,5 +98,7 @@ export function decodeDynamicIpcResult(
   if (command === 'remote_connection_config') return parseRemoteConnectionConfig(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
+  const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
+  if (simpleCollectionResult) return simpleCollectionResult.value
   return value === undefined ? undefined : parseJsonValue(value)
 }
