@@ -144,7 +144,7 @@ export interface TauriCommandResults {
   plugin_task: JsonValue | null
   plugin_status: Array<[string, boolean]>
   plugin_themes: Theme[]
-  plugin_toolbar_invoke: JsonValue
+  plugin_toolbar_invoke: void
   plugin_uninstall: void
   plugin_view_asset: string
   plugins_list: PluginInfo[]

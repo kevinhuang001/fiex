@@ -45,6 +45,17 @@ describe('simple Tauri result validation', () => {
     )
   })
 
+  it('requires toolbar invocations to return the empty Rust DTO', () => {
+    expect(decodeSimpleIpcResult('plugin_toolbar_invoke', {})).toEqual({ value: undefined })
+    expect(decodeDynamicIpcResult('plugin_toolbar_invoke', {}, {})).toBeUndefined()
+    expect(() => decodeDynamicIpcResult('plugin_toolbar_invoke', {}, { result: true })).toThrow(
+      'Invalid plugin_toolbar_invoke IPC result',
+    )
+    expect(() => decodeDynamicIpcResult('plugin_toolbar_invoke', {}, null)).toThrow(
+      'Invalid plugin_toolbar_invoke IPC result',
+    )
+  })
+
   it.each(['macos', 'windows', 'linux'])('accepts the Rust %s platform result', (platform) => {
     expect(decodeSimpleIpcResult('platform', platform)).toEqual({ value: platform })
     expect(decodeDynamicIpcResult('platform', {}, platform)).toBe(platform)
