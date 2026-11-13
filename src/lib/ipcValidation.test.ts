@@ -45,6 +45,7 @@ describe('IPC boundary validation', () => {
         connectionId: 'account-1',
         assetPath: '/plugins/mail/index.html',
         state: { folder: 'inbox' },
+        tabTitle: null,
       }),
     ).toMatchObject({ kind: 'pluginView', pluginId: 'mail', state: { folder: 'inbox' } })
     expect(() => parseConnectionOpenResult({ kind: 'vfs', path: 42 })).toThrow(
