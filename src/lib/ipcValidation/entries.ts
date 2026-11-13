@@ -161,15 +161,20 @@ export function parseListing(value: unknown): Listing {
 
 export function parseConnectionOpenResult(value: unknown): ConnectionOpenResult {
   const result = objectResult(value)
-  if (result.kind === 'vfs' && typeof result.path === 'string')
+  if (
+    result.kind === 'vfs' &&
+    onlyKeys(result, ['kind', 'path']) &&
+    typeof result.path === 'string'
+  )
     return { kind: 'vfs', path: result.path }
   if (
     result.kind === 'pluginView' &&
+    onlyKeys(result, ['kind', 'pluginId', 'connectionId', 'assetPath', 'state', 'tabTitle']) &&
     typeof result.pluginId === 'string' &&
     typeof result.connectionId === 'string' &&
     typeof result.assetPath === 'string' &&
     'state' in result &&
-    (result.tabTitle === undefined || typeof result.tabTitle === 'string')
+    (result.tabTitle === null || typeof result.tabTitle === 'string')
   ) {
     return {
       kind: 'pluginView',
