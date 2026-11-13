@@ -180,3 +180,94 @@ fn failed_multi_file_copy_rolls_back_previously_committed_destinations() {
     assert_eq!(std::fs::read(first).unwrap(), b"first");
     assert_eq!(std::fs::read(second).unwrap(), b"changed after planning");
 }
+
+#[cfg(unix)]
+#[test]
+fn provider_write_failure_rolls_back_previously_committed_destinations() {
+    use crate::core::transfers::{Action, Resolution};
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::AtomicBool;
+
+    // Root can write through mode 0500, so this permission-based provider
+    // failure is meaningful only for ordinary users such as CI runners.
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+
+    let source = tempfile::tempdir().unwrap();
+    let target = tempfile::tempdir().unwrap();
+    let first = source.path().join("first.txt");
+    let source_folder = source.path().join("bundle");
+    let nested_source = source_folder.join("nested.txt");
+    let target_folder = target.path().join("bundle");
+    std::fs::write(&first, b"first").unwrap();
+    std::fs::create_dir(&source_folder).unwrap();
+    std::fs::write(&nested_source, b"nested").unwrap();
+    std::fs::create_dir(&target_folder).unwrap();
+
+    let (source_scope, source_ref) = super::binding(source.path(), &source_folder);
+    let source_broker = crate::core::fs::ResourceBroker::resolve(
+        &source_scope,
+        "core:provider-write-failure",
+        &source_ref,
+    )
+    .unwrap();
+    let (target_scope, target_ref) = super::binding(target.path(), &target_folder);
+    let target_broker = crate::core::fs::ResourceBroker::resolve(
+        &target_scope,
+        "core:provider-write-failure",
+        &target_ref,
+    )
+    .unwrap();
+    let source_version = source_broker.stat().unwrap();
+    let target_version = target_broker.stat().unwrap();
+    let key = format!(
+        "{}\0{}\0{}\0{}\0{}\0{}",
+        source_folder.display(),
+        target_folder.display(),
+        source_version["modified"].as_u64().unwrap_or(0),
+        target_version["modified"].as_u64().unwrap_or(0),
+        source_version["size"].as_u64().unwrap_or(0),
+        target_version["size"].as_u64().unwrap_or(0),
+    );
+    let paths = [
+        first.to_string_lossy().into_owned(),
+        source_folder.to_string_lossy().into_owned(),
+    ];
+    let destination = target.path().to_string_lossy().into_owned();
+    let blocked_permissions = std::fs::Permissions::from_mode(0o500);
+    let writable_permissions = std::fs::Permissions::from_mode(0o700);
+
+    let transfer_result = transfer(
+        &paths,
+        &destination,
+        false,
+        false,
+        &[],
+        &[Resolution {
+            key,
+            action: Action::Replace,
+        }],
+        &AtomicBool::new(false),
+        &|done, _, _| {
+            if done == 2 {
+                std::fs::set_permissions(&target_folder, blocked_permissions.clone()).unwrap();
+            }
+        },
+    );
+    // Restore permissions before assertions and temporary-directory cleanup.
+    std::fs::set_permissions(&target_folder, writable_permissions).unwrap();
+    let result = transfer_result.unwrap();
+
+    assert!(result.paths.is_empty());
+    assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+    assert!(
+        result.errors[0].to_lowercase().contains("permission"),
+        "{:?}",
+        result.errors
+    );
+    assert!(!target.path().join("first.txt").exists());
+    assert!(!target_folder.join("nested.txt").exists());
+    assert_eq!(std::fs::read(&first).unwrap(), b"first");
+    assert_eq!(std::fs::read(nested_source).unwrap(), b"nested");
+}
