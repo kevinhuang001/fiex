@@ -1,7 +1,8 @@
 import type { ShortcutMap, ShortcutStyle } from './shortcuts'
 import type { ListColumns } from './listColumns'
+import type { ResourceRef } from '../../sdk/ui/src/index'
 
-export type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
+export type DropPlan = { paths: string[]; moving: boolean; references: ResourceRef[] }
 
 export interface AppErrorEvent {
   id: number

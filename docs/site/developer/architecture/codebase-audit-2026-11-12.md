@@ -104,4 +104,6 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 **P1-34 最近位置导航 IPC（PR #149）：** 为 Rust `RecentNavigationTarget` 建立共享结果 DTO，校验非空 parent/target 及精确字段集合。
 
+**P1-35 内部拖放 IPC（PR #150）：** 将 `DropPlan.references` 从 `unknown[]` 收窄为 SDK `ResourceRef[]`，并校验路径/引用数量一致、路径非空和引用结构。
+
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。
