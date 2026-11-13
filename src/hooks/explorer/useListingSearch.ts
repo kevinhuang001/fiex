@@ -2,7 +2,7 @@ import { startTransition, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { call, search } from '@/lib/api'
 import { t } from '@/i18n'
-import { mergeSearchBatch } from './searchBatch'
+import { mergeSearchBatch } from '@/features/explorer/model/searchBatch'
 import type { Entry, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
