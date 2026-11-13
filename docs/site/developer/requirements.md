@@ -115,6 +115,7 @@
 | PLUG-VFS-01   | VFS 节点 ID 在 mount 内稳定且不等同于路径；插件不能选择别的 mount、伪造 URI 或通过名称遍历出根目录。                                      | Rust：plugins/vfs/tests.rs、plugins/mounts/tests.rs、providers/fs/tests.rs。                                                                                                                                                  |
 | PLUG-VFS-02   | Provider 静态 operations 是上限；当前连接/节点的 discovery、allowedOps 和 preflight 只能进一步收窄操作。                                  | Rust：plugins/vfs/tests.rs、plugins/providers/fs/tests.rs、core/fs/preflight/operations.rs tests、built-in native_vfs operation tests。                                                                                       |
 | PLUG-VFS-03   | VFS 大文件读写分块；只有 commit 才发布写入，abort/错误/取消释放流和暂存内容。                                                             | Rust：providers/fs/streams.rs tests、core/fs/tests.rs 的事务与句柄所有权、SDK filesystem stream tests。                                                                                                                       |
+| PLUG-VFS-04   | 插件 Host 重启后必须通过新的初始化握手重新登记能力，旧进程的实例与权限快照不能覆盖新声明。                                                | Rust：`plugins/provider_registry.rs` 的 `a_new_handshake_replaces_capabilities_after_plugin_restart`。                                                                                                                        |
 | PLUG-INFO-01  | 插件静态声明 Provider 标题、隐藏 Subsection 和 field；onDemand 请求只包含用户点选的 `(subsectionId, fieldId)`，不使用旧式一次性描述接口。 | E2E：browsing.spec.ts 的 **Info computes only the on-demand field the user selects**；Rust：Info Session 与 manifest validation tests；UI：`FileInfoSections.test.tsx`。                                                      |
 
 ## 连接、缓存与远程文件
@@ -165,6 +166,7 @@
 | src-tauri/src/core/fs/tests.rs and tests/           | OPS-XFER、OPS-TRASH、PLUG-SCOPE                                                |
 | src-tauri/src/core/search/tests.rs                  | SEARCH-02 through SEARCH-04                                                    |
 | src-tauri/src/plugins/providers/context_menu/tests/ | OPS-SEL、OPS-TRASH、OPS-OPEN、PLUG-EVENT                                       |
+| src-tauri/src/plugins/provider_registry/tests.rs    | PLUG-VFS-04（重新握手清除旧能力与实例快照）                                    |
 | src-tauri/src/plugins/security/ and resource/ tests | PLUG-PERM、PLUG-SCOPE、PLUG-FS、PLUG-NET、PLUG-CMD                             |
 | src-tauri/src/remote/ tests                         | CONN、REMOTE                                                                   |
 
