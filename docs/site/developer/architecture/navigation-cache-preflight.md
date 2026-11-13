@@ -35,7 +35,7 @@ Preflight 可检查额外、动态的 provider 策略，例如系统应用能否
 
 ## 对应验证
 
-- Frontend 结果合并与快照稳定：src/hooks/explorer/searchBatch.test.ts、src/lib/listingDiff.test.ts、src/hooks/explorer/paintedListingCache.test.ts。
+- Frontend 结果合并与快照稳定：src/features/explorer/model/searchBatch.test.ts、src/lib/listingDiff.test.ts、src/hooks/explorer/paintedListingCache.test.ts。
 - Core 目录图、取消和失效：src-tauri/src/core/fs/directory_cache/tests.rs。
 - 搜索流、忽略和内容边界：src-tauri/src/core/search/tests.rs。
 - 传输与能力负面路径：src-tauri/src/core/fs/preflight、src-tauri/src/core/fs/tests.rs、src-tauri/src/plugins/resource/file_capabilities/tests.rs。
