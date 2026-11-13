@@ -1,4 +1,4 @@
-import { useDirectoryColumns } from '@/hooks/useDirectoryColumns'
+import { useDirectoryColumns } from '@/features/explorer/hooks/useDirectoryColumns'
 import { t, getLocale } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { useEffect, useMemo, useRef } from 'react'
