@@ -4,8 +4,6 @@ import type {
   ProviderEntry,
   ProviderPreferences,
 } from '@/components/settings/ProviderSettings'
-import type { InstallPreview } from '@/components/settings/installer/types'
-import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
 
 function onlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
@@ -179,37 +177,4 @@ export function parseRemoteConnectionConfig(value: unknown): {
     pluginId: typeof config.pluginId === 'string' ? config.pluginId : null,
     settings: Object.fromEntries(settings),
   }
-}
-
-export function parseInstallPreview(value: unknown): InstallPreview
-export function parseInstallPreview(value: unknown, local: true): LocalPreview
-export function parseInstallPreview(
-  value: unknown,
-  local?: boolean,
-): InstallPreview | LocalPreview {
-  const preview = objectResult(value)
-  if (
-    typeof preview.ticket !== 'string' ||
-    typeof preview.id !== 'string' ||
-    typeof preview.name !== 'string' ||
-    typeof preview.version !== 'string' ||
-    !Array.isArray(preview.permissions) ||
-    !preview.permissions.every((permission) => typeof permission === 'string') ||
-    !Array.isArray(preview.requestedNetworkDomains) ||
-    !preview.requestedNetworkDomains.every((domain) => typeof domain === 'string') ||
-    !Array.isArray(preview.commands) ||
-    !preview.commands.every((command) => typeof command === 'string') ||
-    typeof preview.signed !== 'boolean' ||
-    typeof preview.trusted !== 'boolean'
-  )
-    throw new TypeError('Invalid plugin installation preview')
-  if (
-    !local &&
-    (typeof preview.requestedNetworkAll !== 'boolean' ||
-      typeof preview.isUpdate !== 'boolean' ||
-      typeof preview.permissionsChanged !== 'boolean' ||
-      typeof preview.repository !== 'string')
-  )
-    throw new TypeError('Invalid plugin installation preview')
-  return preview as unknown as InstallPreview | LocalPreview
 }

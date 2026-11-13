@@ -10,6 +10,7 @@ import {
   parseLocations,
 } from './ipcValidation/entries'
 import { parseInfoOpenResult, parseInfoFieldDelta } from './ipcValidation/info'
+import { parseInstallPreview } from './ipcValidation/installation'
 import { parseConnectionMenus } from './ipcValidation/menus'
 import { parsePluginMenuResult, parseContextMenuChildItems } from './ipcValidation/contextMenus'
 import { parseEntryDecorations } from './ipcValidation/decorations'
@@ -17,7 +18,6 @@ import {
   parseThemes,
   parseProviderCatalog,
   parseProviderPreferences,
-  parseInstallPreview,
   parseRemoteConnectionConfig,
 } from './ipcValidation/providers'
 import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/previews'
@@ -25,6 +25,7 @@ import { parsePreviewCandidates, parseResolvedPreview } from './ipcValidation/pr
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
 export * from './ipcValidation/info'
+export * from './ipcValidation/installation'
 export * from './ipcValidation/directory'
 export * from './ipcValidation/menus'
 export * from './ipcValidation/contextMenus'
