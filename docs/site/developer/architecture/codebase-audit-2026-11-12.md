@@ -139,3 +139,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P4-02 PR #224：** 将装饰查询、Locale、呈现缓存和图标通知作为服务注入 `useEntryDecorations`，并把该 hook 纳入严格类型边界；Core 的装饰请求字段映射留在组合适配层。补齐 effect 的请求代次清理与 key 依赖，消除该 hook 的 React Hooks lint 警告。完整 `useListing` 组合 hook 仍未纳入 strict boundary，因为它的 API 依赖会卷入 E2E fixture、Terminal 和设置界面中大量未迁移的严格类型错误。
 
 **P4-02 PR #225：** 将整个 `useListing` 面板流程加入严格类型边界。IPC、Tauri 事件、路径判断、刷新和错误文案统一由 `useExplorer` 组合层注入；列表 hook 只协调子 hook、React 状态和模型。现有服务适配器仍集中在 `features/explorer/services/listingAdapters.ts`，新增 `useListing.ts` 边界检查后仍满足 300 行门禁。ARCH-01 追溯已更新。
+
+**P4-02 PR #226：** 将导航和列表适配器从 `useExplorer` 移到应用/面板组合层；`useExplorer` 只接收 `ExplorerServices` 并连接两个已严格检查的子 hook。新增 `useExplorer.ts` 到 strict boundary，至此 Explorer 导航、搜索、位置、装饰、列表与面板组合 hook 全部受 `exactOptionalPropertyTypes` 和 `noUncheckedIndexedAccess` 检查。应用控制器仍作为最外层系统组合入口，不纳入 Explorer feature 边界。
