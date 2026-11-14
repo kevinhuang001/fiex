@@ -111,3 +111,7 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 **P1-37 Provider 动作结果 IPC（PR #152）：** 将 `toolbar.invoke` 的空 Rust DTO 映射为 `void` 并验证空对象；按 Rust `HookResult` 拒绝 `plugin_before_open` 的额外字段。
 
 每个后续阶段都应更新该快照的基线引用或新增日期版本，连同受影响模块的测试和需求追溯一起审查。
+
+### 架构依赖门禁补强
+
+本轮将 P1-01 扩展到完整 `src/` 导入图：运行时循环依赖一律失败；类型级循环采用显式基线，新增循环组件或把新模块卷入既有循环都会失败。当前基线仍含一组历史类型循环，源于 IPC DTO、共享模型与组件类型耦合，后续应通过迁移共享类型继续缩小，不能把它描述为零循环。Rust workspace 增加 crate 层次与 DAG 检查，在每个 Desktop matrix target 执行；检查基于 `cargo metadata --no-deps`，覆盖整个 workspace。

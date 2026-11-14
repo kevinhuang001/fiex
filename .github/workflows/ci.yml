@@ -209,6 +209,8 @@ jobs:
           toolchain: 1.99.1
           targets: ${{ matrix.target }}
           components: rustfmt, clippy
+      - name: Check Rust crate dependency layers
+        run: node scripts/check-rust-crate-architecture.mjs
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
       - name: Enable sccache
