@@ -71,7 +71,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setPendingSelection((current) => (current?.generation === generation ? null : current))
   }, [])
   // Start folder resolution is asynchronous; the first path arrives here.
-  const startAt = (start: string) => {
+  const startAt = useCallback((start: string) => {
     setPendingSelection(null)
     setPath(start)
     setHistory([start])
@@ -83,7 +83,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setSelected([])
     setRenaming(null)
     setError('')
-  }
+  }, [])
   const back = () => {
     if (cursor > 0) {
       setPendingSelection(null)
