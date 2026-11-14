@@ -9,6 +9,7 @@ import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import {
   explorerPathBarProps,
+  explorerDialogProps,
   explorerStatusBarProps,
   explorerTabsProps,
 } from '@/components/explorer/appShellBindings'
@@ -263,7 +264,7 @@ export default function App() {
         onClose={() => app.setBatchRename(null)}
         onApply={app.applyBatchRename}
       />
-      <ExplorerDialogs {...app} />
+      <ExplorerDialogs {...explorerDialogProps(app)} />
       <ErrorDialogHost />
       <PluginServices />
     </div>
