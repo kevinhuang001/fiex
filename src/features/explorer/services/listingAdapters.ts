@@ -1,6 +1,7 @@
 import { getLocale, t } from '@/i18n'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
+import { parent } from '@/lib/files'
 import {
   cachePresentationPatch,
   cachePresentations,
@@ -97,4 +98,17 @@ export const explorerListingServices = {
   decorations: entryDecorationServices,
   locations: listingLocationServices,
   search: listingSearchServices,
+}
+
+export const explorerNavigationServices = {
+  readSearchMode: () => localStorage.getItem('fiex:search-mode'),
+  writeSearchMode: (mode: 'name' | 'content') => localStorage.setItem('fiex:search-mode', mode),
+  parentPath: parent,
+  resolveParentPath: (path: string, fallback: string) =>
+    path.startsWith('applications://') ? call('file_parent', { path }) : Promise.resolve(fallback),
+}
+
+export const explorerServices = {
+  navigation: explorerNavigationServices,
+  listing: explorerListingServices,
 }
