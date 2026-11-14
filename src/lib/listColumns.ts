@@ -13,8 +13,18 @@ export interface ListColumns {
 
 export type ListColumnKey = keyof ListColumns
 
-export const LIST_COLUMNS_DEFAULT: ListColumns = { name: 260, modified: 155, size: 75, kind: 108 }
-export const LIST_COLUMNS_MIN: ListColumns = { name: 140, modified: 110, size: 60, kind: 70 }
+export const LIST_COLUMNS_DEFAULT: Required<ListColumns> = {
+  name: 260,
+  modified: 155,
+  size: 75,
+  kind: 108,
+}
+export const LIST_COLUMNS_MIN: Required<ListColumns> = {
+  name: 140,
+  modified: 110,
+  size: 60,
+  kind: 70,
+}
 /** No column may swallow the whole window by accident. */
 export const LIST_COLUMNS_MAX = 640
 /** The flexible name column never shrinks below this. */
@@ -37,8 +47,8 @@ export function normalizeListColumns(value: unknown): ListColumns {
   }
   return {
     name: read('name'),
-    modified: read('modified')!,
-    size: read('size')!,
-    kind: read('kind')!,
+    modified: read('modified'),
+    size: read('size'),
+    kind: read('kind'),
   }
 }
