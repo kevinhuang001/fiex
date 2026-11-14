@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 2,
+  "id": "org.fiex.mock-vfs",
+  "name": "Core VFS Process Restart Fixture",
+  "version": "0.1.0",
+  "description": "Read-only VFS provider used by Core process-restart smoke tests.",
+  "runtime": {
+    "protocolVersion": "8.0",
+    "entrypoints": {
+      "linux-x86_64": "mock_vfs_plugin",
+      "macos-aarch64": "mock_vfs_plugin",
+      "macos-x86_64": "mock_vfs_plugin",
+      "windows-x86_64": "mock_vfs_plugin.exe"
+    }
+  },
+  "permissions": {
+    "network": { "enabled": false, "domains": [] },
+    "commands": { "enabled": false, "allow": [] },
+    "folders": {
+      "read": { "enabled": false },
+      "create": { "enabled": false },
+      "delete": { "enabled": false },
+      "rename": { "enabled": false }
+    },
+    "files": {
+      "read": { "enabled": false },
+      "write": { "enabled": false },
+      "create": { "enabled": false },
+      "delete": { "enabled": false },
+      "rename": { "enabled": false }
+    },
+    "metadata": { "enabled": false }
+  },
+  "extensions": {
+    "vfs": { "title": "Restart smoke fixture" }
+  }
+}
