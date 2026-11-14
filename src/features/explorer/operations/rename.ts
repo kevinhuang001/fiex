@@ -1,5 +1,8 @@
 import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
+import { canRenameEntry } from '../model/renamePolicy'
+
+export { canRenameEntry } from '../model/renamePolicy'
 
 export type SingleRenameResult =
   | { status: 'renamed'; path: string }
@@ -7,10 +10,6 @@ export type SingleRenameResult =
   | { status: 'failed'; message: string }
 
 export type RenameInvoker = (path: string, name: string) => Promise<string>
-
-export function canRenameEntry(entry: Entry | undefined): boolean {
-  return Boolean(entry?.allowedOps?.includes('rename'))
-}
 
 /** Apply one rename after checking the capability reported for the entry. */
 export async function renameSingleEntry(
