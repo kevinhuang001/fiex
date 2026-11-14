@@ -6,10 +6,11 @@ export function commonPlaces(locations: Location[]): Location[] {
   const result = locations.filter((item) =>
     ['favorite', 'applications', 'recent', 'trash'].includes(item.kind),
   )
-  for (const [kind, name, path] of [
+  const fallbackPlaces: Array<[string, string, string]> = [
     ['recent', '最近使用', 'recent://'],
     ['trash', isWindows() ? '回收站' : '废纸篓', 'trash://'],
-  ]) {
+  ]
+  for (const [kind, name, path] of fallbackPlaces) {
     if (!result.some((item) => item.kind === kind))
       result.push({
         kind,
