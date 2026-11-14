@@ -66,7 +66,7 @@ export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOps
         const source = `${shown.join('\n')}${
           paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
         }`
-        await run(
+        const removed = await run(
           t('正在彻底删除…'),
           () => call('delete_permanently', { paths }),
           t('删除：\n{0}', source),
@@ -78,6 +78,7 @@ export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOps
           undefined,
           (removed) => (removed === undefined || removed > 0 ? [x.path] : []),
         )
+        if (removed === undefined) return
         x.setSelected([])
       },
     })
