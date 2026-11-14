@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import type { AppController } from '@/hooks/useAppController'
+import type { Platform } from '@/lib/platform'
 import { Columns2, Folder, Plus, X } from 'lucide-react'
 import { WindowControls } from '@/components/WindowControls'
 
@@ -18,6 +18,19 @@ type DragState = {
   settling: boolean
 }
 
+interface ExplorerTabsProps {
+  left: { tabs: string[]; tab: number }
+  panePaths: (string | null)[]
+  paneActives: ('left' | 'right')[]
+  displayName: (path: string) => string
+  switchWorkspaceTab: (index: number) => void
+  closeWorkspaceTab: (index: number) => void
+  newWorkspaceTab: () => void
+  moveWorkspaceTab: (from: number, to: number) => void
+  control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
+  platform: Platform
+}
+
 export function ExplorerTabs({
   left,
   panePaths,
@@ -29,9 +42,7 @@ export function ExplorerTabs({
   moveWorkspaceTab,
   control,
   platform,
-}: Pick<
-  AppController,
-  | 'left'
+}: ExplorerTabsProps) {  | 'left'
   | 'panePaths'
   | 'paneActives'
   | 'displayName'

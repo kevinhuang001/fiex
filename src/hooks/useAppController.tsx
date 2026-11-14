@@ -158,7 +158,7 @@ export function useAppController() {
       document.removeEventListener('click', close)
       document.removeEventListener('keydown', close)
     }
-  }, [menu])
+  }, [menu, setMenu])
   const control = (action: 'close' | 'minimize' | 'toggleMaximize') => {
     if (native) {
       const window = getCurrentWindow()
