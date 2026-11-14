@@ -149,3 +149,47 @@ fn filesystem_change_notification_invalidates_cached_availability() {
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     clear_availability_cache();
 }
+
+#[test]
+fn registered_applications_provider_decision_flows_through_availability_cache() {
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    clear_availability_cache();
+
+    let broker = crate::core::fs::binding::trusted(
+        crate::core::volumes::applications::URI,
+        "core:test-app-preflight-cache",
+    )
+    .unwrap();
+    let name = format!(
+        "fiex-preflight-{}.desktop",
+        crate::plugins::mounts::new_id().unwrap()
+    );
+    let request = PreflightRequest::new(
+        PreflightPhase::Availability,
+        PreflightOperation::CreateFile(CreateFilePreflight {
+            parent_id: crate::core::volumes::applications::URI.into(),
+            name: Some(name.clone()),
+        }),
+    );
+
+    // This crosses ResourceBroker -> ProviderRegistry -> Applications VFS;
+    // the registered provider denies a name that Core has not reserved.
+    assert!(!broker.review_availability_cached(&request));
+    assert!(!broker.review_availability_cached(&request));
+    assert_eq!(availability_cache().lock().unwrap().len(), 1);
+
+    let reserved = crate::core::volumes::applications::reserve_child(
+        crate::core::volumes::applications::URI,
+        &name,
+        false,
+    )
+    .unwrap();
+    // This is the invalidation path used after a provider commit. It must
+    // discard the cached denial so the same provider can observe the new state.
+    changes::committed(&reserved);
+    assert_eq!(availability_cache().lock().unwrap().len(), 0);
+    assert!(broker.review_availability_cached(&request));
+
+    crate::core::volumes::applications::cancel_reservation(&reserved);
+    clear_availability_cache();
+}
