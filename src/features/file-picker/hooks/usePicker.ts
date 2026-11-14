@@ -1,22 +1,24 @@
 import { t, useLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useMenuPosition } from '@/lib/menuPosition'
-import { usePreferences } from '@/hooks/usePreferences'
 import { commonPlaces } from '@/lib/places'
 import type { FilePickerRequest } from '@/lib/filePicker'
 import type { Entry } from '@/lib/types'
-
-import type { PickerDialogState } from './PickerDialogs'
-import type { PickerMenuState } from './PickerMenu'
-import { dirname, type GroupKey, type SortKey } from '@/features/file-picker/types'
-import { groupPickerEntries, visiblePickerEntries } from '@/features/file-picker/model'
+import type {
+  PickerDialogState,
+  PickerMenuState,
+  GroupKey,
+  SortKey,
+  PickerSessionEnvironment,
+} from '../types'
+import { dirname } from '../types'
+import { groupPickerEntries, visiblePickerEntries } from '../model'
 import { usePickerDirectory } from './usePickerDirectory'
 import { usePickerSelection } from './usePickerSelection'
 
 /** Owns every piece of picker state and every side effect so the dialog shell
  * stays a thin composition root. */
-export function usePicker(request: FilePickerRequest) {
-  const [preferences] = usePreferences()
+export function usePicker(request: FilePickerRequest, environment: PickerSessionEnvironment) {
   const [selected, setSelected] = useState<string[]>([])
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [filter, setFilter] = useState('')
@@ -26,7 +28,7 @@ export function usePicker(request: FilePickerRequest) {
   const [dialog, setDialog] = useState<PickerDialogState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const directoryState = usePickerDirectory(request, setError)
+  const directoryState = usePickerDirectory(request, setError, environment.directory)
   const {
     directory,
     setDirectory,
@@ -131,6 +133,7 @@ export function usePicker(request: FilePickerRequest) {
     setBusy,
     setError,
     navigate,
+    services: environment.operations,
   })
   const {
     selectedEntries,
@@ -168,12 +171,14 @@ export function usePicker(request: FilePickerRequest) {
 
   const back = () => {
     const next = history[index - 1]
+    if (!next) return
     setIndex(index - 1)
     setDirectory(next)
     setSelected([])
   }
   const forward = () => {
     const next = history[index + 1]
+    if (!next) return
     setIndex(index + 1)
     setDirectory(next)
     setSelected([])
@@ -202,14 +207,19 @@ export function usePicker(request: FilePickerRequest) {
   const places = commonPlaces(locations).filter(
     (item) => item.kind !== 'applications' && item.kind !== 'trash',
   )
-  const favorites = preferences.favorites || []
+  const favorites = environment.favorites
   const disks = locations.filter((location) => location.kind === 'disk')
 
   const contextMenu = (event: ReactMouseEvent, entry?: Entry) => {
     event.preventDefault()
     event.stopPropagation()
     if (entry) setSelected([entry.path])
-    setMenu({ x: event.clientX, y: event.clientY, entry, kind: entry ? 'row' : 'blank' })
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      ...(entry ? { entry } : {}),
+      kind: entry ? 'row' : 'blank',
+    })
   }
 
   return {

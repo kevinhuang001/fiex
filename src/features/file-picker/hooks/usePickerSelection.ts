@@ -1,18 +1,14 @@
-import { quietProgressChannel } from '@/hooks/useActivity'
-import { reportError } from '@/lib/errorCenter'
-import { settleFilePicker, type FilePickerRequest } from '@/lib/filePicker'
-import { call } from '@/lib/api'
+import type { FilePickerRequest } from '@/lib/filePicker'
 import type { Entry } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
-import type { PickerDialogState } from './PickerDialogs'
-import type { PickerMenuState } from './PickerMenu'
-import { join } from '@/features/file-picker/types'
+import type { PickerDialogState, PickerMenuState, PickerOperationServices } from '../types'
+import { join } from '../types'
 import {
   canConfirmPickerSelection,
   pickerConfirmationDecision,
   selectedPickerEntries,
   togglePickerSelection,
-} from '@/features/file-picker/selectionModel'
+} from '../selectionModel'
 
 type PickerSelectionOptions = {
   request: FilePickerRequest
@@ -31,6 +27,7 @@ type PickerSelectionOptions = {
   setBusy: Dispatch<SetStateAction<boolean>>
   setError: Dispatch<SetStateAction<string>>
   navigate: (path: string) => void
+  services: PickerOperationServices
 }
 
 /** Owns selection rules, picker confirmation, and file mutation actions. */
@@ -51,6 +48,7 @@ export function usePickerSelection({
   setBusy,
   setError,
   navigate,
+  services,
 }: PickerSelectionOptions) {
   const selectedEntries = selectedPickerEntries(visible, selected)
   const canConfirm = canConfirmPickerSelection(request, directory, saveName, selectedEntries)
@@ -66,7 +64,7 @@ export function usePickerSelection({
       replace,
     })
     if (decision.kind === 'replace') setReplace(true)
-    else if (decision.kind === 'settle') settleFilePicker(decision.value)
+    else if (decision.kind === 'settle') services.complete(decision.value)
   }
 
   const openEntry = (entry: Entry) => {
@@ -76,7 +74,7 @@ export function usePickerSelection({
       setSelected([entry.path])
       return
     }
-    settleFilePicker(request.mode === 'openFiles' ? [entry.path] : entry.path)
+    services.complete(request.mode === 'openFiles' ? [entry.path] : entry.path)
   }
 
   const toggle = (entry: Entry, multi: boolean) => {
@@ -94,7 +92,7 @@ export function usePickerSelection({
       setReload((value) => value + 1)
     } catch (cause) {
       setError(String(cause))
-      reportError(cause, 'file-picker')
+      services.reportError(cause, 'file-picker')
     } finally {
       setBusy(false)
     }
@@ -103,16 +101,16 @@ export function usePickerSelection({
   const createFolder = (name: string) => {
     if (!name.trim()) return
     void perform(async () => {
-      const path = await call('create_entry', { path: directory, name: name.trim() })
+      const path = await services.createFolder(directory, name.trim())
       setSelected([path])
     })
   }
   const renameEntry = (entry: Entry, name: string) => {
     if (!name.trim() || name.trim() === entry.name) return
-    void perform(() => call('rename_entry', { path: entry.path, name: name.trim() }))
+    void perform(() => services.rename(entry.path, name.trim()))
   }
   const trashEntry = (entry: Entry) => {
-    void perform(() => call('recycle', { paths: [entry.path], onProgress: quietProgressChannel() }))
+    void perform(() => services.recycle(entry.path))
   }
 
   return {
@@ -124,8 +122,8 @@ export function usePickerSelection({
     createFolder,
     renameEntry,
     trashEntry,
-    confirmReplace: () => settleFilePicker(join(directory, saveName.trim())),
+    confirmReplace: () => services.complete(join(directory, saveName.trim())),
     cancelReplace: () => setReplace(false),
-    cancel: () => settleFilePicker(null),
+    cancel: () => services.complete(null),
   }
 }

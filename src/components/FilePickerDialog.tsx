@@ -1,9 +1,10 @@
 import { t } from '@/i18n'
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { overlayRoot } from '@/lib/portal'
 import { Modal } from '@/components/ui/Modal'
 import { currentFilePicker, subscribeFilePicker, type FilePickerRequest } from '@/lib/filePicker'
+import { usePreferences } from '@/hooks/usePreferences'
 
 import { PickerDialogs } from './file-picker/PickerDialogs'
 import { PickerEntries } from './file-picker/PickerEntries'
@@ -11,7 +12,8 @@ import { PickerFooter } from './file-picker/PickerFooter'
 import { PickerMenu } from './file-picker/PickerMenu'
 import { PickerSidebar } from './file-picker/PickerSidebar'
 import { PickerToolbar } from './file-picker/PickerToolbar'
-import { usePicker } from './file-picker/usePicker'
+import { usePicker } from '@/features/file-picker/hooks/usePicker'
+import { createPickerSessionEnvironment } from './file-picker/pickerSessionAdapter'
 
 export function FilePickerDialog() {
   const pending = useSyncExternalStore(subscribeFilePicker, currentFilePicker, () => null)
@@ -25,7 +27,12 @@ export function FilePickerDialog() {
 }
 
 function Picker({ request }: { request: FilePickerRequest }) {
-  const picker = usePicker(request)
+  const [preferences] = usePreferences()
+  const environment = useMemo(
+    () => createPickerSessionEnvironment(preferences.favorites || []),
+    [preferences.favorites],
+  )
+  const picker = usePicker(request, environment)
   return (
     <Modal
       open

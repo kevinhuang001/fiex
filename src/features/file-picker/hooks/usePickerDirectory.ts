@@ -1,8 +1,4 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { call } from '@/lib/api'
-import { reportError } from '@/lib/errorCenter'
-import { openPresentedDirectory } from '@/lib/listing'
-import { loadPickerSidebarData, pickerSidebarSnapshot } from '@/lib/filePickerData'
 import type { FilePickerRequest } from '@/lib/filePicker'
 import type { Entry, Location, RemoteConnection } from '@/lib/types'
 import {
@@ -11,8 +7,8 @@ import {
   storedDirectory,
   storedGroup,
   storedSort,
-} from './types'
-import type { GroupKey, SortKey } from '@/features/file-picker/types'
+} from '../services/preferences'
+import type { GroupKey, PickerDirectoryServices, PickerSort } from '../types'
 
 function usableConnections(items: RemoteConnection[], mode: FilePickerRequest['mode']) {
   return items.filter(
@@ -22,13 +18,24 @@ function usableConnections(items: RemoteConnection[], mode: FilePickerRequest['m
   )
 }
 
+function isPickerSort(value: unknown): value is PickerSort {
+  if (!value || typeof value !== 'object') return false
+  const sort = value as Record<string, unknown>
+  return ['name', 'modified', 'size', 'kind'].includes(String(sort.key))
+}
+
+function isGroupKey(value: unknown): value is GroupKey {
+  return typeof value === 'string' && ['none', 'kind', 'modified', 'size'].includes(value)
+}
+
 /** Owns picker directory selection, remembered preferences, and directory listing lifecycle. */
 export function usePickerDirectory(
   request: FilePickerRequest,
   setError: Dispatch<SetStateAction<string>>,
+  services: PickerDirectoryServices,
 ) {
-  const initialSidebar = pickerSidebarSnapshot()
-  const rememberedDirectory = useRef(storedDirectory(request.mode))
+  const initialSidebar = services.sidebarSnapshot()
+  const rememberedDirectory = useRef(storedDirectory(services.preferences.storage))
   const navigationChanged = useRef(false)
   const initialDirectory =
     request.directory ||
@@ -46,9 +53,9 @@ export function usePickerDirectory(
   )
   const [history, setHistory] = useState<string[]>(initialDirectory ? [initialDirectory] : [])
   const [index, setIndex] = useState(initialDirectory ? 0 : -1)
-  const [sort, setSort] = useState(storedSort)
+  const [sort, setSort] = useState(() => storedSort(services.preferences.storage))
   const [settingsReady, setSettingsReady] = useState(false)
-  const [group, setGroup] = useState<GroupKey>(storedGroup)
+  const [group, setGroup] = useState<GroupKey>(() => storedGroup(services.preferences.storage))
   const [reload, setReload] = useState(0)
   const locationsRef = useRef(locations)
 
@@ -69,26 +76,23 @@ export function usePickerDirectory(
 
   useEffect(() => {
     let alive = true
-    const lastKey = request.mode === 'saveFile' ? 'lastSaveDirectory' : 'lastOpenDirectory'
-    void Promise.all([
-      call('state_get', {
-        namespace: 'picker',
-        key: 'sort',
-      }),
-      call('state_get', { namespace: 'picker', key: 'group' }),
-      call('state_get', { namespace: 'picker', key: lastKey }),
-    ])
-      .then(([savedSort, savedGroup, savedDirectory]) => {
+    void services
+      .readSettings(request.mode)
+      .then(({ sort: savedSort, group: savedGroup, directory: savedDirectory }) => {
         if (!alive) return
-        if (savedSort && ['name', 'modified', 'size', 'kind'].includes(savedSort.key)) {
+        if (isPickerSort(savedSort)) {
           setSort({
-            key: savedSort.key as SortKey,
+            key: savedSort.key,
             direction: savedSort.direction === 'desc' ? 'desc' : 'asc',
           })
         }
-        if (savedGroup && ['none', 'kind', 'modified', 'size'].includes(savedGroup))
-          setGroup(savedGroup as GroupKey)
-        if (!request.directory && savedDirectory && !navigationChanged.current) {
+        if (isGroupKey(savedGroup)) setGroup(savedGroup)
+        if (
+          !request.directory &&
+          typeof savedDirectory === 'string' &&
+          savedDirectory &&
+          !navigationChanged.current
+        ) {
           rememberedDirectory.current = savedDirectory
           setDirectory(savedDirectory)
           setHistory([savedDirectory])
@@ -102,11 +106,12 @@ export function usePickerDirectory(
     return () => {
       alive = false
     }
-  }, [request.directory, request.mode])
+  }, [request.directory, request.mode, services])
 
   useEffect(() => {
     let alive = true
-    void loadPickerSidebarData()
+    void services
+      .loadSidebarData()
       .then(({ locations, connections }) => {
         if (!alive) return
         setLocations(locations)
@@ -129,7 +134,7 @@ export function usePickerDirectory(
     return () => {
       alive = false
     }
-  }, [request.directory, request.mode])
+  }, [request.directory, request.mode, services])
 
   useEffect(() => {
     let alive = true
@@ -143,41 +148,43 @@ export function usePickerDirectory(
     }
     setError('')
     setLoading(true)
-    void openPresentedDirectory(directory, false, [], (value) => {
-      if (!alive) return
-      setEntries(value.entries || [])
-      setLoading(false)
-      persistPickerDirectory(directory, request.mode)
-      if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
-    }).catch((cause) => {
-      if (!alive) return
-      setLoading(false)
-      const currentLocations = locationsRef.current
-      const home = (currentLocations.find((item) => item.kind === 'home') || currentLocations[0])
-        ?.path
-      if (
-        !request.directory &&
-        rememberedDirectory.current === directory &&
-        home &&
-        home !== directory
-      ) {
-        rememberedDirectory.current = ''
-        setDirectory(home)
-        setHistory([home])
-        setIndex(0)
-        return
-      }
-      setError(String(cause))
-      reportError(cause, 'file-picker')
-    })
+    void services
+      .openDirectory(directory, false, [], (value) => {
+        if (!alive) return
+        setEntries(value.entries || [])
+        setLoading(false)
+        void persistPickerDirectory(directory, request.mode, services.preferences)
+        if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
+      })
+      .catch((cause) => {
+        if (!alive) return
+        setLoading(false)
+        const currentLocations = locationsRef.current
+        const home = (currentLocations.find((item) => item.kind === 'home') || currentLocations[0])
+          ?.path
+        if (
+          !request.directory &&
+          rememberedDirectory.current === directory &&
+          home &&
+          home !== directory
+        ) {
+          rememberedDirectory.current = ''
+          setDirectory(home)
+          setHistory([home])
+          setIndex(0)
+          return
+        }
+        setError(String(cause))
+        services.reportError(cause, 'file-picker')
+      })
     return () => {
       alive = false
     }
-  }, [directory, reload, request.directory, request.mode, setError])
+  }, [directory, reload, request.directory, request.mode, setError, services])
 
   useEffect(() => {
-    if (settingsReady) persistPickerSort(sort, group)
-  }, [sort, group, settingsReady])
+    if (settingsReady) void persistPickerSort(sort, group, services.preferences)
+  }, [sort, group, settingsReady, services])
 
   return {
     directory,
