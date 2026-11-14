@@ -21,8 +21,9 @@ mod locale;
 mod state;
 mod tray;
 use locale::locale_set;
-use tray::{QUITTING, setup_tray};
 mod scheduler;
+mod setup;
+mod window;
 #[macro_use]
 mod plugins;
 pub(crate) mod shell_profile;
@@ -48,7 +49,6 @@ use crate::{
     core::operations::{OperationCancel, Operations},
     core::search::SearchState,
 };
-use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 #[tauri::command]
@@ -226,84 +226,8 @@ pub fn run() {
             unwatch_directory,
             native_icon
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event
-                && window.label() == "main"
-                && !QUITTING.load(Ordering::SeqCst)
-            {
-                api.prevent_close();
-                let _ = window.hide();
-                return;
-            }
-            if matches!(event, tauri::WindowEvent::Destroyed) {
-                crate::plugins::mounts::forget_window(window.label());
-                window
-                    .state::<Watch>()
-                    .lock()
-                    .unwrap()
-                    .retain(|key, _| !key.starts_with(&format!("{}:", window.label())));
-                window
-                    .state::<WindowPaths>()
-                    .0
-                    .lock()
-                    .unwrap()
-                    .remove(window.label());
-                window.state::<DragSessions>().end(window.label());
-            }
-        })
-        .setup(|app| {
-            system::set_desktop_handle(app.handle().clone());
-            scheduler::spawn(app.handle().clone());
-            {
-                use tauri::Emitter;
-                let handle = app.handle().clone();
-                crate::plugins::task_events::set_sink(Box::new(move |event| {
-                    let _ = handle.emit("plugin-task", &event);
-                }));
-                let handle = app.handle().clone();
-                crate::plugins::security::prompt::set_sink(Box::new(move |event| match event {
-                    crate::plugins::security::prompt::PermissionPromptEvent::Requested(request) => {
-                        let _ = handle.emit("plugin-permission-request", &request);
-                    }
-                    crate::plugins::security::prompt::PermissionPromptEvent::Resolved { id } => {
-                        let _ = handle
-                            .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
-                    }
-                }));
-            }
-            #[cfg(feature = "ci-driver")]
-            crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
-            #[cfg(target_os = "macos")]
-            if let Some(window) = app.get_webview_window("main") {
-                crate::platform::macos_material::configure(&window);
-            }
-            setup_tray(app.handle())?;
-            std::thread::spawn(crate::core::fs::initialize_exports);
-            std::thread::spawn(|| {
-                crate::plugins::host::global().start_enabled();
-            });
-            #[cfg(target_os = "windows")]
-            if let Some(window) = app.get_webview_window("main") {
-                use std::ffi::c_void;
-                #[link(name = "dwmapi")]
-                unsafe extern "system" {
-                    fn DwmSetWindowAttribute(
-                        hwnd: *mut c_void,
-                        attribute: u32,
-                        value: *const c_void,
-                        size: u32,
-                    ) -> i32;
-                }
-                if let Ok(hwnd) = window.hwnd() {
-                    let rounded = 2_u32;
-                    unsafe {
-                        DwmSetWindowAttribute(hwnd.0, 33, &rounded as *const _ as *const c_void, 4);
-                    }
-                }
-            }
-            let _ = app;
-            Ok(())
-        })
+        .on_window_event(window::handle_event)
+        .setup(setup::configure)
         .build(tauri::generate_context!())
         .expect("Cannot start Fiex")
         .run(|_, event| {
