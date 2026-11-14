@@ -2,15 +2,13 @@
 //! and only then touch the filesystem.
 
 use super::{
-    conflicts::{Conflict, Decision, Resolution, decide},
+    conflicts::{Decision, decide},
     progress::Progress,
 };
-use crate::{
-    core::ignores::IgnoreSet,
-    core::operations::{
-        CANCELLED, OperationResult, Undo, check_cancelled, copy_stream, copy_tree_with_progress,
-        exists, unique,
-    },
+use crate::core::{
+    fs::path_utils::{entry_exists, unique_copy_destination},
+    ignores::IgnoreSet,
+    operation_types::{CANCELLED, Conflict, OperationResult, Resolution, Undo, check_cancelled},
 };
 use std::{
     collections::HashSet,
@@ -20,7 +18,9 @@ use std::{
 };
 
 mod installation;
+mod staging;
 pub(crate) use installation::*;
+use staging::{copy_stream, copy_tree_with_progress};
 
 mod execution;
 pub(crate) use execution::*;
@@ -81,7 +81,7 @@ impl Plan<'_> {
         if meta.file_type().is_symlink() || !(meta.is_file() || meta.is_dir()) {
             return Err(crate::i18n::t("暂不支持复制或移动符号链接及特殊文件").into());
         }
-        if exists(&dest) {
+        if entry_exists(&dest) {
             let same = dunce::canonicalize(&src).ok() == dunce::canonicalize(&dest).ok();
             if same && self.moving {
                 return Ok(());
@@ -112,7 +112,7 @@ impl Plan<'_> {
                     self.skipped += 1;
                     return Ok(());
                 }
-                Decision::KeepBoth => dest = unique(&dest),
+                Decision::KeepBoth => dest = unique_copy_destination(&dest),
                 Decision::Replace => {
                     if same {
                         return Err(crate::i18n::t("不能用文件替换其自身，请选择保留两者").into());

@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
-import { crateDependencyViolation, stronglyConnectedComponents } from './architecture-graph.mjs'
+import {
+  crateDependencyViolation,
+  coreModuleBoundaryViolations,
+  stronglyConnectedComponents,
+} from './architecture-graph.mjs'
 
 const ROOT = process.cwd()
 const metadata = JSON.parse(
@@ -49,6 +54,24 @@ for (const cycle of stronglyConnectedComponents(graph)) {
   violations.push(`Rust crate dependency cycle: ${cycle.join(' -> ')}`)
 }
 
+function visitRustFiles(directory) {
+  for (const entry of readdirSync(directory)) {
+    const path = resolve(directory, entry)
+    const stat = statSync(path)
+    if (stat.isDirectory()) {
+      if (entry !== 'tests' && entry !== 'test') visitRustFiles(path)
+      continue
+    }
+    if (!entry.endsWith('.rs')) continue
+    const relativePath = relative(ROOT, path).replaceAll('\\', '/')
+    violations.push(...coreModuleBoundaryViolations(relativePath, readFileSync(path, 'utf8')))
+  }
+}
+
+for (const moduleRoot of ['src-tauri/src/core/fs', 'src-tauri/src/core/transfers']) {
+  visitRustFiles(resolve(ROOT, moduleRoot))
+}
+
 if (violations.length) {
   console.error('Rust crate architecture check failed:')
   for (const violation of violations) console.error(`- ${violation}`)
@@ -56,5 +79,5 @@ if (violations.length) {
 }
 
 console.log(
-  `Rust crate architecture check passed: ${packages.length} workspace crates; dependency layers and DAG are valid.`,
+  `Rust architecture check passed: ${packages.length} workspace crates; dependency DAG and Core module boundaries are valid.`,
 )

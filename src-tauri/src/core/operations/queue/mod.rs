@@ -1,6 +1,10 @@
 //! The operation queue: the undo stack and the `Operations` API that feeds it.
 
-use super::{OperationResult, Undo, exists, fs_ops};
+use super::fs_ops;
+use crate::core::{
+    fs::path_utils::entry_exists,
+    operation_types::{OperationResult, Undo},
+};
 use std::{
     fs,
     path::PathBuf,
@@ -124,7 +128,7 @@ impl Operations {
         while let Some(action) = actions.pop() {
             let result = match &action {
                 Undo::Rename(src, dest) => {
-                    if exists(dest) {
+                    if entry_exists(dest) {
                         Err(crate::i18n::t("原位置已有同名项目，无法撤销").into())
                     } else {
                         fs::create_dir_all(dest.parent().ok_or(crate::i18n::t("原路径无效"))?)
@@ -139,7 +143,7 @@ impl Operations {
                 }
                 // Put copies/new files in Trash on undo, preserving any intervening edits.
                 Undo::Replaced(path, backup) => {
-                    if exists(path) {
+                    if entry_exists(path) {
                         Err(crate::i18n::t("目标已改变，无法恢复被替换文件").into())
                     } else {
                         fs::rename(backup.path().join("original"), path).map_err(|e| e.to_string())

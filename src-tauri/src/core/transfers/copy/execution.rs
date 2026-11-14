@@ -70,7 +70,7 @@ pub(crate) fn execute(
                 .map(|task| {
                     let result = if cancel.load(Ordering::Relaxed) {
                         Err(CANCELLED.into())
-                    } else if exists(&task.dest) {
+                    } else if entry_exists(&task.dest) {
                         Err(crate::i18n::t("目标已改变，请重试").into())
                     } else {
                         install_copy(&task.src, &task.dest, ignore, cancel, Some(&progress))
@@ -114,7 +114,7 @@ pub(crate) fn execute(
             files,
         } = task;
         // Re-check immediately before mutation: a new target must get a fresh dialog.
-        if exists(&dest) && !replace {
+        if entry_exists(&dest) && !replace {
             result.errors.push(crate::i18n::format(
                 "{0}: 目标已改变，请重试",
                 &[("0", format!("{}", dest.display()))],
@@ -158,7 +158,7 @@ pub(crate) fn execute(
             Err(e) => {
                 let cancelled = cancel.load(Ordering::Relaxed);
                 if let Some(backup) = backup {
-                    if exists(&dest) {
+                    if entry_exists(&dest) {
                         if cancelled {
                             // The half-written copy belongs to us; drop it and
                             // put the replaced original back before bailing out.
