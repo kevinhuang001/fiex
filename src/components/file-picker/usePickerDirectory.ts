@@ -11,9 +11,8 @@ import {
   storedDirectory,
   storedGroup,
   storedSort,
-  type GroupKey,
-  type SortKey,
 } from './types'
+import type { GroupKey, SortKey } from '@/features/file-picker/types'
 
 function usableConnections(items: RemoteConnection[], mode: FilePickerRequest['mode']) {
   return items.filter(
@@ -37,6 +36,7 @@ export function usePickerDirectory(
     (initialSidebar?.locations.find((item) => item.kind === 'home') || initialSidebar?.locations[0])
       ?.path ||
     ''
+  const initialDirectoryRef = useRef(initialDirectory)
   const [directory, setDirectory] = useState(initialDirectory)
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,6 +50,11 @@ export function usePickerDirectory(
   const [settingsReady, setSettingsReady] = useState(false)
   const [group, setGroup] = useState<GroupKey>(storedGroup)
   const [reload, setReload] = useState(0)
+  const locationsRef = useRef(locations)
+
+  useEffect(() => {
+    locationsRef.current = locations
+  }, [locations])
 
   const navigate = (path: string) => {
     if (!path || path === directory) return false
@@ -97,7 +102,7 @@ export function usePickerDirectory(
     return () => {
       alive = false
     }
-  }, [])
+  }, [request.directory, request.mode])
 
   useEffect(() => {
     let alive = true
@@ -106,13 +111,14 @@ export function usePickerDirectory(
         if (!alive) return
         setLocations(locations)
         setConnections(usableConnections(connections, request.mode))
-        if (!directory) {
+        if (!initialDirectoryRef.current) {
           const target =
             request.directory ||
             rememberedDirectory.current ||
             (locations.find((item) => item.kind === 'home') || locations[0])?.path ||
             ''
           if (target) {
+            initialDirectoryRef.current = target
             setDirectory(target)
             setHistory([target])
             setIndex(0)
@@ -123,7 +129,7 @@ export function usePickerDirectory(
     return () => {
       alive = false
     }
-  }, [])
+  }, [request.directory, request.mode])
 
   useEffect(() => {
     let alive = true
@@ -146,7 +152,9 @@ export function usePickerDirectory(
     }).catch((cause) => {
       if (!alive) return
       setLoading(false)
-      const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
+      const currentLocations = locationsRef.current
+      const home = (currentLocations.find((item) => item.kind === 'home') || currentLocations[0])
+        ?.path
       if (
         !request.directory &&
         rememberedDirectory.current === directory &&
@@ -165,7 +173,7 @@ export function usePickerDirectory(
     return () => {
       alive = false
     }
-  }, [directory, reload])
+  }, [directory, reload, request.directory, request.mode, setError])
 
   useEffect(() => {
     if (settingsReady) persistPickerSort(sort, group)
