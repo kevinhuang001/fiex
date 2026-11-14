@@ -56,3 +56,21 @@ export const CRATE_DEPENDENCY_LAYERS = Object.freeze({
 export function crateDependencyViolation(sourceLayer, targetLayer) {
   return !CRATE_DEPENDENCY_LAYERS[sourceLayer]?.has(targetLayer)
 }
+
+export function coreModuleBoundaryViolations(filePath, source) {
+  const normalizedPath = filePath.replaceAll('\\', '/')
+  if (!/^src-tauri\/src\/core\/(?:fs|transfers)\//.test(normalizedPath)) return []
+  if (
+    /(?:^|\/)tests?\//.test(normalizedPath) ||
+    /(?:^|\/)(?:tests?|[^/]+_tests?)\.rs$/.test(normalizedPath)
+  )
+    return []
+
+  return source
+    .split('\n')
+    .flatMap((line, index) =>
+      /(?:crate::)?core::operations\b/.test(line)
+        ? [`${normalizedPath}:${index + 1} depends on the operations façade`]
+        : [],
+    )
+}

@@ -6,8 +6,8 @@ use super::{
 };
 use crate::core::volumes::applications;
 use crate::core::{
-    operations::{OperationResult, check_cancelled},
-    transfers::{Action, Resolution},
+    operation_types::{Action, Resolution},
+    operation_types::{OperationResult, check_cancelled},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;
 use fiex_provider_contracts::TransferKind;

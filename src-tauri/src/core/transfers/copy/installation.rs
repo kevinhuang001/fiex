@@ -36,7 +36,7 @@ pub(crate) fn install_copy(
         Some(&report),
     )?;
     if staged.is_dir() {
-        if exists(dest) {
+        if entry_exists(dest) {
             return Err(crate::i18n::t("目标已改变，请重试").into());
         }
         fs::rename(&staged, dest).map_err(|e| e.to_string())?;
@@ -70,7 +70,7 @@ pub(crate) fn install_copy(
 
 pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<usize, String> {
     check_cancelled(cancel)?;
-    if exists(dest) {
+    if entry_exists(dest) {
         return Err(crate::i18n::t("目标已改变，请重试").into());
     }
     if src.is_file() {

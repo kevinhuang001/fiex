@@ -2,8 +2,8 @@
 //! finds conflicts before any writes; execution moves bytes in bounded chunks.
 use super::{CHUNK, FsOperation, binding};
 use crate::core::{
-    operations::{OperationResult, check_cancelled},
-    transfers::Resolution,
+    operation_types::Resolution,
+    operation_types::{OperationResult, check_cancelled},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;
 use fiex_provider_contracts::TransferKind;

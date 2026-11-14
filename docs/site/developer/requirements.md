@@ -144,6 +144,7 @@
 | FM-01    | Scope policy 对跨对象、过期身份和授权边界按 fail-closed 决策。                                                                                                                            | FM：ci.yml 的 Kani proof、coverage 和 mutation jobs；边界明细见 PLUG-SCOPE-01。                                                                                                                                                                                |
 | ARCH-01  | Feature 代码只能依赖共享模块和领域模型；不得直接依赖组件或 React Hook 层。源码不得引入运行时循环依赖，也不得新增类型循环依赖组；核心 IPC 与 Explorer 纯模型启用更严格的 TypeScript 检查。 | UT：`scripts/architecture-graph.test.mjs`；CI：`check-architecture-boundaries.mjs` 扫描导入图；`check:boundary-types` 对 IPC JSON/Info、Explorer 文件名、文件夹视图、菜单、列宽与传输策略模型启用 `exactOptionalPropertyTypes` 和 `noUncheckedIndexedAccess`。 |
 | ARCH-02  | Rust workspace crate 依赖必须遵守 contracts、foundation、platform、builtins、SDK 与 app 的依赖层次，且依赖图无环。                                                                        | UT：`scripts/architecture-graph.test.mjs` 覆盖层次方向与环检测；CI：Desktop matrix 执行 `scripts/check-rust-crate-architecture.mjs` 并从 `cargo metadata --no-deps` 校验全部 workspace crate。                                                                 |
+| ARCH-03  | Rust `core/fs` 和 `core/transfers` 不得依赖编排门面 `core/operations`；跨模块共享的操作结果、冲突、撤销与取消合同集中定义。                                                               | UT：`scripts/architecture-graph.test.mjs` 的反向依赖拒绝用例；CI：`check-rust-crate-architecture.mjs` 扫描 Core 非测试模块；Rust：`core/fs/path_utils.rs`、`core/transfers/copy/staging.rs` 的相邻测试。                                                       |
 | BUILD-01 | 每个发布安装包先通过对应平台构建、测试、lint/clippy 和依赖自包含审计，再发布。                                                                                                            | CI：ci.yml 的 frontend、Browser UI、Desktop matrix、audit:native 与 publish job；workflow 通过不代表未覆盖系统环境也通过。                                                                                                                                     |
 | DOC-01   | 用户指南、插件开发、协议、需求矩阵和限制说明共用 VitePress 站点，页面路径与当前代码基线一致。                                                                                             | Docs CI：docs.yml 安装锁定 Node 依赖并执行 VitePress build；页面构建不验证产品行为。                                                                                                                                                                           |
 
@@ -151,41 +152,43 @@
 
 以下是常用的端到端追溯入口。单条测试的完整描述在上表中；套件文件是测试实现位置，不意味着整张表中相关需求都已覆盖。
 
-| 测试实现                                                         | 主要需求 ID                                                                    |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 测试实现                                                         | 主要需求 ID                                                                             |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | e2e/explorer/browsing.spec.ts                                    | UI-NAV、UI-VIEW、UI-WORK、UI-TAB、SEARCH、PREVIEW、INFO、INFO-CORE-01、LOC-APP、PERF-01 |
-| e2e/explorer/context-menu-smoke.spec.ts                          | LOC-MENU-01、OPS-TRASH-03 的多选永久删除流程；均为待合入 PR #84 用例           |
-| e2e/explorer/trash.spec.ts                                       | OPS-TRASH-02（fixture 中放回原处后从废纸篓消失并回到原目录）                   |
-| e2e/explorer/operations.spec.ts                                  | OPS-SEL、OPS-RENAME、OPS-CLIP、OPS-XFER、DIAG                                  |
-| e2e/explorer/file-creation.spec.ts                               | OPS-CREATE-02、OPS-OFFICE-01                                                   |
-| e2e/explorer/terminal.spec.ts                                    | OPS-CREATE、OPS-RENAME、OPS-TRASH、OPS-OPEN                                    |
-| e2e/explorer/settings.spec.ts                                    | PREF、PLUG-LIFE、DIAG、UI-ABOUT-01                                             |
-| src/lib/ipcValidation.info.test.ts                               | INFO-IPC-01（严格解析、重复身份与枚举类型校验、Session/revision 过滤）         |
-| src/components/FileInfoSections.test.tsx                         | INFO-01、INFO-CORE-01（每 Provider 一个标题，字段平铺，Subsection 不可见）     |
-| e2e/explorer/plugins-lifecycle.spec.ts                           | PLUG-LIFE、PLUG-PERM                                                           |
-| e2e/explorer/plugins-providers.spec.ts                           | SEARCH、OPS-OPEN、PLUG-INST、PLUG-UI、CONN                                     |
-| e2e/connections.spec.ts                                          | CONN-01                                                                        |
-| e2e/i18n.spec.ts                                                 | I18N-01                                                                        |
-| src-tauri/src/core/fs/tests.rs and tests/                        | OPS-XFER、OPS-TRASH、PLUG-SCOPE                                                |
-| src-tauri/src/core/search/tests.rs                               | SEARCH-02 through SEARCH-04                                                    |
-| src/features/explorer/operations/rename.test.ts                  | OPS-RENAME-01（能力检查、执行与失败结果）                                      |
-| src-tauri/crates/builtins/fiex-trash/src/operations/tests.rs     | OPS-TRASH-02（外部 Finder DS_Store 元数据恢复并落盘）                          |
-| src-tauri/crates/platform/fiex-platform/src/open_with/windows.rs | OPS-OPEN-01（AppsFolder Notepad 实际打开文件）                                 |
-| src-tauri/src/core/terminals.rs                                  | OPS-OPEN-02（cmd.exe 在指定目录启动）                                          |
-| src-tauri/crates/builtins/fiex-usb-fs/src/lib.rs                 | LOC-USB-01（block device 权限与挂载拒绝）                                      |
-| src-tauri/src/plugins/providers/context_menu/tests/              | OPS-SEL、OPS-TRASH、OPS-OPEN、PLUG-EVENT                                       |
-| src-tauri/src/plugins/provider_registry/tests.rs                 | PLUG-VFS-04（重新握手清除旧能力与实例快照）                                    |
-| src/lib/architectureBoundaries.test.ts                           | ARCH-01（feature 的允许与禁止依赖方向）                                        |
-| scripts/architecture-graph.test.mjs                              | ARCH-01、ARCH-02（模块强连通分量与 Rust crate 依赖方向）                       |
-| src/features/explorer/model/listColumns.test.ts                  | UI-VIEW-02、ARCH-01（列宽约束和严格边界类型检查）                              |
-| src/features/explorer/model/folderView.test.ts                   | UI-VIEW-01、ARCH-01（文件夹展示状态和严格边界类型检查）                        |
-| src/features/explorer/model/searchBatch.test.ts                  | SEARCH-01、SEARCH-06（流式批次合并与稳定结果）                                 |
-| src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                       |
-| src/features/explorer/model/transferPolicy.test.ts               | OPS-CLIP-01（按目标能力判断副本可用性并过滤已满足的移动）                      |
-| src/features/explorer/model/moreMenu.test.ts                     | UI-WORK-01（工作区与更多菜单项排序策略）                                       |
-| src/features/explorer/model/menuVisibility.test.ts               | UI-MENU-01（没有顶层动作时隐藏空菜单）                                         |
-| src-tauri/src/plugins/security/ and resource/ tests              | PLUG-PERM、PLUG-SCOPE、PLUG-FS、PLUG-NET、PLUG-CMD                             |
-| src-tauri/src/remote/ tests                                      | CONN、REMOTE                                                                   |
+| e2e/explorer/context-menu-smoke.spec.ts                          | LOC-MENU-01、OPS-TRASH-03 的多选永久删除流程；均为待合入 PR #84 用例                    |
+| e2e/explorer/trash.spec.ts                                       | OPS-TRASH-02（fixture 中放回原处后从废纸篓消失并回到原目录）                            |
+| e2e/explorer/operations.spec.ts                                  | OPS-SEL、OPS-RENAME、OPS-CLIP、OPS-XFER、DIAG                                           |
+| e2e/explorer/file-creation.spec.ts                               | OPS-CREATE-02、OPS-OFFICE-01                                                            |
+| e2e/explorer/terminal.spec.ts                                    | OPS-CREATE、OPS-RENAME、OPS-TRASH、OPS-OPEN                                             |
+| e2e/explorer/settings.spec.ts                                    | PREF、PLUG-LIFE、DIAG、UI-ABOUT-01                                                      |
+| src/lib/ipcValidation.info.test.ts                               | INFO-IPC-01（严格解析、重复身份与枚举类型校验、Session/revision 过滤）                  |
+| src/components/FileInfoSections.test.tsx                         | INFO-01、INFO-CORE-01（每 Provider 一个标题，字段平铺，Subsection 不可见）              |
+| e2e/explorer/plugins-lifecycle.spec.ts                           | PLUG-LIFE、PLUG-PERM                                                                    |
+| e2e/explorer/plugins-providers.spec.ts                           | SEARCH、OPS-OPEN、PLUG-INST、PLUG-UI、CONN                                              |
+| e2e/connections.spec.ts                                          | CONN-01                                                                                 |
+| e2e/i18n.spec.ts                                                 | I18N-01                                                                                 |
+| src-tauri/src/core/fs/tests.rs and tests/                        | OPS-XFER、OPS-TRASH、PLUG-SCOPE                                                         |
+| src-tauri/src/core/search/tests.rs                               | SEARCH-02 through SEARCH-04                                                             |
+| src/features/explorer/operations/rename.test.ts                  | OPS-RENAME-01（能力检查、执行与失败结果）                                               |
+| src-tauri/crates/builtins/fiex-trash/src/operations/tests.rs     | OPS-TRASH-02（外部 Finder DS_Store 元数据恢复并落盘）                                   |
+| src-tauri/crates/platform/fiex-platform/src/open_with/windows.rs | OPS-OPEN-01（AppsFolder Notepad 实际打开文件）                                          |
+| src-tauri/src/core/terminals.rs                                  | OPS-OPEN-02（cmd.exe 在指定目录启动）                                                   |
+| src-tauri/crates/builtins/fiex-usb-fs/src/lib.rs                 | LOC-USB-01（block device 权限与挂载拒绝）                                               |
+| src-tauri/src/plugins/providers/context_menu/tests/              | OPS-SEL、OPS-TRASH、OPS-OPEN、PLUG-EVENT                                                |
+| src-tauri/src/plugins/provider_registry/tests.rs                 | PLUG-VFS-04（重新握手清除旧能力与实例快照）                                             |
+| src/lib/architectureBoundaries.test.ts                           | ARCH-01（feature 的允许与禁止依赖方向）                                                 |
+| scripts/architecture-graph.test.mjs                              | ARCH-01、ARCH-02、ARCH-03（模块依赖图、Rust crate 分层与 Core 模块边界）                |
+| src-tauri/src/core/fs/path_utils.rs                              | ARCH-03（同名目标后缀保留和目录编号）                                                   |
+| src-tauri/src/core/transfers/copy/staging.rs                     | OPS-XFER-01、OPS-XFER-05、ARCH-03（冲突、取消和暂存复制）                               |
+| src/features/explorer/model/listColumns.test.ts                  | UI-VIEW-02、ARCH-01（列宽约束和严格边界类型检查）                                       |
+| src/features/explorer/model/folderView.test.ts                   | UI-VIEW-01、ARCH-01（文件夹展示状态和严格边界类型检查）                                 |
+| src/features/explorer/model/searchBatch.test.ts                  | SEARCH-01、SEARCH-06（流式批次合并与稳定结果）                                          |
+| src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                                |
+| src/features/explorer/model/transferPolicy.test.ts               | OPS-CLIP-01（按目标能力判断副本可用性并过滤已满足的移动）                               |
+| src/features/explorer/model/moreMenu.test.ts                     | UI-WORK-01（工作区与更多菜单项排序策略）                                                |
+| src/features/explorer/model/menuVisibility.test.ts               | UI-MENU-01（没有顶层动作时隐藏空菜单）                                                  |
+| src-tauri/src/plugins/security/ and resource/ tests              | PLUG-PERM、PLUG-SCOPE、PLUG-FS、PLUG-NET、PLUG-CMD                                      |
+| src-tauri/src/remote/ tests                                      | CONN、REMOTE                                                                            |
 
 ## 本轮界面改动的按钮级冒烟追溯
 

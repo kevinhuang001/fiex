@@ -184,7 +184,7 @@ fn failed_multi_file_copy_rolls_back_previously_committed_destinations() {
 #[cfg(unix)]
 #[test]
 fn provider_write_failure_rolls_back_previously_committed_destinations() {
-    use crate::core::transfers::{Action, Resolution};
+    use crate::core::operation_types::{Action, Resolution};
     use std::os::unix::fs::PermissionsExt;
     use std::sync::atomic::AtomicBool;
 

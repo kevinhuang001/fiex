@@ -12,7 +12,7 @@ mod progress;
 
 use std::sync::atomic::AtomicBool;
 
-pub use conflicts::{Action, Conflict, FileVersion, Resolution};
+pub use crate::core::operation_types::{Action, Conflict, FileVersion, Resolution};
 pub(crate) use copy::{execute, move_tree};
 
 /// Undo moves cannot be interrupted; this flag is never set.

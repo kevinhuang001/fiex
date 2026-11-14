@@ -9,6 +9,7 @@ mod export;
 mod list_service;
 pub(crate) mod mapped_access;
 mod mutation_overlay;
+pub(crate) mod path_utils;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;

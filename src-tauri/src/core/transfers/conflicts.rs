@@ -1,38 +1,9 @@
 //! Conflict detection: describe both sides of a collision and apply the
 //! decision the user made earlier (if any).
 
-use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileVersion {
-    pub path: String,
-    pub size: u64,
-    pub modified: u64,
-    pub is_dir: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Conflict {
-    pub key: String,
-    pub source: FileVersion,
-    pub destination: FileVersion,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Action {
-    Replace,
-    Skip,
-    KeepBoth,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Resolution {
-    pub key: String,
-    pub action: Action,
-}
+use crate::core::operation_types::{Action, Conflict, FileVersion, Resolution};
 
 /// What the plan should do with one destination that already exists.
 pub(super) enum Decision {

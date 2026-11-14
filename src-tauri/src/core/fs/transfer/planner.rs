@@ -1,8 +1,8 @@
 use super::{FsOperation, binding, model::Step};
 use crate::core::{
     fs::ResourceBroker,
-    operations::{OperationResult, check_cancelled},
-    transfers::{Action, Conflict, FileVersion, Resolution},
+    operation_types::{Action, Conflict, FileVersion, Resolution},
+    operation_types::{OperationResult, check_cancelled},
 };
 use crate::plugin_sdk::filesystem::PreflightPhase;
 use fiex_provider_contracts::TransferKind;

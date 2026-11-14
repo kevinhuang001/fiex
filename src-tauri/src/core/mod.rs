@@ -3,6 +3,7 @@ pub mod drag_session;
 pub mod files;
 pub mod fs;
 pub mod ignores;
+pub(crate) mod operation_types;
 pub mod operations;
 pub mod search;
 #[cfg(any(feature = "desktop", test))]

@@ -4,7 +4,7 @@ use super::{
     FsOperation, binding,
     planner::{optional_stat, unique},
 };
-use crate::core::operations::{OperationResult, check_cancelled};
+use crate::core::operation_types::{OperationResult, check_cancelled};
 use crate::core::volumes::applications;
 use crate::plugin_sdk::filesystem::PreflightPhase;
 use fiex_provider_contracts::TransferKind;

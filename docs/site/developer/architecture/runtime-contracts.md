@@ -16,6 +16,10 @@ UI 和 Core 对更新使用目录身份、资源身份及 revision 比较。旧�
 
 Provider 的 preflight 是附加策略检查，不是授权来源。它可以因服务器、目标类型或应用导入规则拒绝操作，但不能授予缺失的能力或 scope。Malformed reply、过期资源和预检错误都应失败关闭。
 
+## Rust Core 模块依赖方向
+
+`core::operations` 负责桌面文件操作的应用编排和撤销队列。共享的 `OperationResult`、冲突/解决方案 DTO、撤销记录与取消检查定义在 `core::operation_types`；本机暂存复制实现属于 `core::transfers`；同名目标与路径存在判断属于 `core::fs::path_utils`。因此 `core/fs` 和 `core/transfers` 的生产模块不导入 `core::operations`。`scripts/check-rust-crate-architecture.mjs` 在 crate DAG 检查之外也验证这条模块边界，测试模块可以调用 façade 验证完整操作行为。
+
 ## 诊断与隐私
 
 Rust 日志、插件日志、错误详情和导出前先清理凭据头、OAuth 查询值及已识别的 secret 模式。日志记录用于定位操作和错误，不应存放完整请求体、文件内容、密码、token 或私钥。前端错误文本也需在入队和导出路径处理。
