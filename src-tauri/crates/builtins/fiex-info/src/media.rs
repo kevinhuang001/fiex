@@ -1,18 +1,22 @@
 use crate::Localization;
 use fiex_provider_contracts::{InfoFieldKey, InfoFieldResult};
-use std::{fs, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
-struct MediaRow {
+mod audio;
+mod matroska;
+mod mp4;
+
+pub(super) struct MediaRow {
     label: String,
     value: String,
 }
 
-struct MediaSection {
+pub(super) struct MediaSection {
     id: String,
     rows: Vec<MediaRow>,
 }
 
-fn row(label: impl Into<String>, value: impl Into<String>) -> MediaRow {
+pub(super) fn row(label: impl Into<String>, value: impl Into<String>) -> MediaRow {
     MediaRow {
         label: label.into(),
         value: value.into(),
@@ -38,209 +42,6 @@ fn extension(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
-fn audio_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
-    use lofty::file::{AudioFile, TaggedFileExt};
-    use lofty::tag::Accessor;
-    const AUDIO: &[&str] = &[
-        "mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wave", "aiff", "aif", "ape",
-        "wv", "wma",
-    ];
-    if !AUDIO.contains(&extension(path).as_str()) {
-        return None;
-    }
-    let tagged = lofty::read_from_path(path).ok()?;
-    let properties = tagged.properties();
-    let mut rows = Vec::new();
-    if let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) {
-        for (label, value) in [
-            (
-                localization.text("标题"),
-                tag.title().map(|value| value.to_string()),
-            ),
-            (
-                localization.text("艺术家"),
-                tag.artist().map(|value| value.to_string()),
-            ),
-            (
-                localization.text("专辑"),
-                tag.album().map(|value| value.to_string()),
-            ),
-            (
-                localization.text("流派"),
-                tag.genre().map(|value| value.to_string()),
-            ),
-            (
-                localization.text("年份"),
-                tag.date().map(|date| date.year.to_string()),
-            ),
-            (
-                localization.text("音轨"),
-                tag.track().map(|track| track.to_string()),
-            ),
-            (
-                localization.text("碟片"),
-                tag.disk().map(|disk| disk.to_string()),
-            ),
-        ] {
-            if let Some(value) = value.filter(|value| !value.is_empty()) {
-                rows.push(row(label, value));
-            }
-        }
-    }
-    rows.push(row(
-        localization.text("时长"),
-        duration_text(properties.duration()),
-    ));
-    if let Some(bitrate) = properties.audio_bitrate().filter(|bitrate| *bitrate > 0) {
-        rows.push(row(localization.text("码率"), format!("{bitrate} kbps")));
-    }
-    if let Some(sample_rate) = properties.sample_rate().filter(|rate| *rate > 0) {
-        rows.push(row(
-            localization.text("采样率"),
-            format!("{sample_rate} Hz"),
-        ));
-    }
-    if let Some(channels) = properties.channels().filter(|channels| *channels > 0) {
-        rows.push(row(localization.text("声道"), channels.to_string()));
-    }
-    if !rows.is_empty() {
-        rows.insert(
-            0,
-            row(
-                localization.text("格式"),
-                format!("{:?}", tagged.file_type()),
-            ),
-        );
-    }
-    (!rows.is_empty()).then(|| MediaSection {
-        id: "audio".into(),
-        rows,
-    })
-}
-
-fn mp4_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
-    use mp4::{Mp4Reader, TrackType};
-    let file = fs::File::open(path).ok()?;
-    let size = file.metadata().ok()?.len();
-    let mp4 = Mp4Reader::read_header(std::io::BufReader::new(file), size).ok()?;
-    let mut rows = vec![row(
-        localization.text("时长"),
-        duration_text(mp4.duration()),
-    )];
-    let mut video = None;
-    let mut audio = None;
-    for track in mp4.tracks().values() {
-        match track.track_type() {
-            Ok(TrackType::Video) => {
-                if video.is_none() {
-                    video = Some(format!(
-                        "{}×{} · {:.2} fps · {}",
-                        track.width(),
-                        track.height(),
-                        track.frame_rate(),
-                        track
-                            .box_type()
-                            .map(|value| value.to_string())
-                            .unwrap_or_default()
-                    ));
-                }
-            }
-            Ok(TrackType::Audio) if audio.is_none() => {
-                audio = Some(
-                    localization.format(
-                        "{0} · {1} 声道",
-                        &[
-                            (
-                                "0",
-                                track
-                                    .box_type()
-                                    .map(|value| value.to_string())
-                                    .unwrap_or_default()
-                                    .to_string(),
-                            ),
-                            (
-                                "1",
-                                track
-                                    .channel_config()
-                                    .map(|value| value.to_string())
-                                    .unwrap_or_default()
-                                    .to_string(),
-                            ),
-                        ],
-                    ),
-                );
-            }
-            _ => {}
-        }
-    }
-    if let Some(value) = video {
-        rows.push(row(localization.text("视频"), value));
-    }
-    if let Some(value) = audio {
-        rows.push(row(localization.text("音频"), value));
-    }
-    rows.push(row(
-        localization.text("容器"),
-        mp4.major_brand().to_string(),
-    ));
-    Some(MediaSection {
-        id: "video".into(),
-        rows,
-    })
-}
-
-fn matroska_section(path: &Path, localization: &Localization) -> Option<MediaSection> {
-    use matroska::Settings;
-    let mkv = matroska::open(path).ok()?;
-    let mut rows = Vec::new();
-    if let Some(title) = mkv.info.title.filter(|value| !value.is_empty()) {
-        rows.push(row(localization.text("标题"), title));
-    }
-    if let Some(duration) = mkv.info.duration {
-        rows.push(row(localization.text("时长"), duration_text(duration)));
-    }
-    for track in &mkv.tracks {
-        match &track.settings {
-            Settings::Video(video) => rows.push(row(
-                localization.text("视频"),
-                format!(
-                    "{}×{} · {}",
-                    video.pixel_width,
-                    video.pixel_height,
-                    track
-                        .codec_name
-                        .clone()
-                        .unwrap_or_else(|| track.codec_id.clone())
-                ),
-            )),
-            Settings::Audio(audio) => rows.push(row(
-                localization.text("音频"),
-                localization.format(
-                    "{0} · {1} Hz · {2} 声道",
-                    &[
-                        (
-                            "0",
-                            track
-                                .codec_name
-                                .clone()
-                                .unwrap_or_else(|| track.codec_id.clone())
-                                .to_string(),
-                        ),
-                        ("1", format!("{}", audio.sample_rate)),
-                        ("2", format!("{}", audio.channels)),
-                    ],
-                ),
-            )),
-            Settings::None => {}
-        }
-    }
-    rows.push(row(localization.text("容器"), "Matroska"));
-    (!rows.is_empty()).then(|| MediaSection {
-        id: "video".into(),
-        rows,
-    })
-}
-
 /// Probe Core-native audio/video metadata without invoking any plugin.
 fn media_sections(path: &Path, localization: &Localization) -> Vec<MediaSection> {
     if !path.is_file() {
@@ -251,13 +52,13 @@ fn media_sections(path: &Path, localization: &Localization) -> Vec<MediaSection>
     let mut sections = Vec::new();
     if is_video {
         if ["mkv", "webm"].contains(&ext.as_str()) {
-            if let Some(section) = matroska_section(path, localization) {
+            if let Some(section) = matroska::matroska_section(path, localization) {
                 sections.push(section);
             }
-        } else if let Some(section) = mp4_section(path, localization) {
+        } else if let Some(section) = mp4::mp4_section(path, localization) {
             sections.push(section);
         }
-    } else if let Some(section) = audio_section(path, localization) {
+    } else if let Some(section) = audio::audio_section(path, localization) {
         sections.push(section);
     }
     sections
@@ -308,4 +109,18 @@ pub fn compute_media_fields(
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::duration_text;
+    use std::time::Duration;
+
+    #[test]
+    fn formats_media_durations_with_optional_hours() {
+        assert_eq!(duration_text(Duration::from_secs(0)), "0:00");
+        assert_eq!(duration_text(Duration::from_secs(59)), "0:59");
+        assert_eq!(duration_text(Duration::from_secs(60)), "1:00");
+        assert_eq!(duration_text(Duration::from_secs(3_661)), "1:01:01");
+    }
 }
