@@ -1,11 +1,12 @@
 import { useEntryDecorations } from './useEntryDecorations'
-import { t, getLocale } from '@/i18n'
+import { t } from '@/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native } from '@/lib/api'
 import { requestDirectoryRefresh } from '@/lib/listing'
 import { isVirtualResource } from '@/lib/files'
 import { useListingSearch } from './useListingSearch'
+import { attachDirectoryWatch } from '@/features/explorer/model/directoryWatch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
 import { canRenameEntry, renameSingleEntry } from '@/features/explorer/operations/rename'
 import { useDirectorySnapshot } from './useDirectorySnapshot'
@@ -163,25 +164,14 @@ export function useListing(
       path.startsWith('fiex-plugin-view://')
     )
       return
-    let cleanup: (() => void) | undefined
-    let active = true
-    let timer: ReturnType<typeof setTimeout>
-    void call('watch_directory', { path, pane }).catch((e) =>
-      setWarnings([t('无法监视文件变更：{0}', e)]),
-    )
-    void listen('directory-changed', () => {
-      clearTimeout(timer)
-      timer = setTimeout(reload, 250)
-    }).then((fn) => {
-      if (active) cleanup = fn
-      else fn()
+    return attachDirectoryWatch({
+      watch: () => call('watch_directory', { path, pane }),
+      listen: (onChange) => listen('directory-changed', onChange),
+      unwatch: () => call('unwatch_directory', { path, pane }),
+      onChange: reload,
+      onError: (error) => setWarnings([t('无法监视文件变更：{0}', error)]),
+      debounceMs: 250,
     })
-    return () => {
-      active = false
-      clearTimeout(timer)
-      cleanup?.()
-      void call('unwatch_directory', { path, pane }).catch(() => {})
-    }
   }, [enabled, path, pane, reload, virtualVolume])
   useEffect(() => {
     if (!enabled || !native || !path.startsWith('applications://')) return
@@ -198,7 +188,7 @@ export function useListing(
       active = false
       cleanup?.()
     }
-  }, [enabled, native, path, query])
+  }, [enabled, path, query])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])
@@ -211,9 +201,9 @@ export function useListing(
       setSelected([target])
       setRenaming(target)
     },
-    [entries, getLocale()],
+    [entries, setRenaming, setSelected],
   )
-  const cancelRename = useCallback(() => setRenaming(null), [getLocale()])
+  const cancelRename = useCallback(() => setRenaming(null), [setRenaming])
   const renameTo = useCallback(
     async (target: string, name: string) => {
       const result = await renameSingleEntry(target, name, entries, (resourcePath, nextName) =>
@@ -233,7 +223,7 @@ export function useListing(
       requestDirectoryRefresh([path])
       return true
     },
-    [entries, getLocale(), path],
+    [entries, path, setError, setRenaming, setSelected],
   )
   const pathEntries =
     renderedPath === path ? entries : (paintedByPath.current.get(viewKey)?.listing.entries ?? [])
@@ -253,7 +243,7 @@ export function useListing(
     } finally {
       setConnectionsLoaded(true)
     }
-  }, [getLocale()])
+  }, [])
   useEffect(() => {
     if (!enabled) return
     void refreshConnections()
