@@ -147,6 +147,38 @@ jobs:
             artifacts/
             playwright-report/
             test-results/
+  e2e-performance:
+    name: 10k directory p95 (${{ matrix.os }})
+    needs: checks
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      FIEX_10K_SAMPLES: '20'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and Linux dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium
+        if: runner.os != 'Linux'
+        run: npx playwright install chromium
+      - name: Collect repeated 10k directory samples
+        run: npx playwright test e2e/explorer/browsing.spec.ts --grep "ten thousand icons stay virtualized"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: large-directory-p95-${{ runner.os }}
+          if-no-files-found: warn
+          path: test-results/
   desktop:
     needs: checks
     name: Desktop (${{ matrix.target }})
