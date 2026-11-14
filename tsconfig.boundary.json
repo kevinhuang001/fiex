@@ -31,6 +31,7 @@
     "src/features/explorer/model/directoryStreamUpdate.ts",
     "src/features/explorer/hooks/useNavigation.ts",
     "src/features/explorer/hooks/useListingSearch.ts",
+    "src/features/explorer/hooks/useListingLocations.ts",
     "src/features/explorer/hooks/useDirectorySnapshot.ts",
     "src/features/explorer/operations/rename.ts",
     "src/features/explorer/operations/batchRename.ts",
