@@ -3,6 +3,7 @@ import type { ExplorerTabsProps } from './ExplorerTabs'
 import type { ExplorerPathBarProps } from './ExplorerPathBar'
 import type { ExplorerStatusBarProps } from './ExplorerStatusBar'
 import type { ExplorerToolbarProps } from './ExplorerToolbar'
+import type { ExplorerDialogsProps } from './ExplorerDialogs'
 import type { Preferences } from '@/lib/types'
 
 export function explorerTabsProps(
@@ -76,5 +77,45 @@ export function explorerToolbarProps(
     refreshAll: app.refreshAll,
     split: app.split,
     onToggleSplit,
+  }
+}
+
+export function explorerDialogProps(app: AppController): ExplorerDialogsProps {
+  return {
+    left: app.left,
+    x: app.x,
+    preview: app.preview,
+    setPreview: app.setPreview,
+    navigatePreview: app.navigatePreview,
+    open: app.open,
+    dialog: app.dialog,
+    dialogBusy: app.dialogBusy,
+    conflict: app.conflict,
+    cancelConflict: app.cancelConflict,
+    resolveConflict: app.resolveConflict,
+    busy: app.busy,
+    setDialog: app.setDialog,
+    setDialogBusy: app.setDialogBusy,
+    setDialogError: app.setDialogError,
+    dialogValue: app.dialogValue,
+    setDialogValue: app.setDialogValue,
+    info: app.info,
+    setInfo: app.setInfo,
+    tagOpen: app.tagOpen,
+    tagInitial: app.tagInitial,
+    setTagOpen: app.setTagOpen,
+    applyTags: app.applyTags,
+    connectionOpen: app.connectionOpen,
+    connectionToEdit: app.connectionToEdit,
+    setConnectionOpen: app.setConnectionOpen,
+    notify: app.notify,
+    settings: app.settings,
+    setSettings: app.setSettings,
+    pluginManager: app.pluginManager,
+    setPluginManager: app.setPluginManager,
+    prefs: app.prefs,
+    update: app.update,
+    terminals: app.terminals,
+    ides: app.ides,
   }
 }
