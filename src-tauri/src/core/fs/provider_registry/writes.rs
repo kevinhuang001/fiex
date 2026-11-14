@@ -9,6 +9,43 @@ use fiex_provider_contracts::{
 };
 use serde_json::{Value, to_value};
 
+#[cfg(test)]
+thread_local! {
+    static NEXT_PROVIDER_WRITE_FAILURE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn fail_next_provider_write_for_test(path: &str) {
+    NEXT_PROVIDER_WRITE_FAILURE.with(|failure| *failure.borrow_mut() = Some(path.to_owned()));
+}
+
+#[cfg(test)]
+fn injected_write_failure(resource: &ResourceBroker) -> Option<FsWrite> {
+    let should_fail = NEXT_PROVIDER_WRITE_FAILURE.with(|failure| {
+        let mut failure = failure.borrow_mut();
+        if failure.as_deref() == Some(resource.path.as_str()) {
+            failure.take();
+            true
+        } else {
+            false
+        }
+    });
+    should_fail.then(|| {
+        struct FailingProviderWriter;
+        impl std::io::Write for FailingProviderWriter {
+            fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("injected provider write failure"))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        FsWrite::new(FailingProviderWriter)
+    })
+}
+
 pub(in crate::core::fs) fn write_stream(
     resource: &ResourceBroker,
     create: bool,
@@ -17,6 +54,10 @@ pub(in crate::core::fs) fn write_stream(
     require(resource, FsOperation::Write, create)?;
     if create {
         resource.review_create_child(false, PreflightPhase::Execute)?;
+    }
+    #[cfg(test)]
+    if let Some(failure) = injected_write_failure(resource) {
+        return Ok(failure);
     }
     match resolve(&resource.path)? {
         Route::NativeProvider => {
