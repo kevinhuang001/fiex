@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
-import type { AppController } from '@/hooks/useAppController'
+import type { Preferences } from '@/lib/types'
 import type { Group, Sort, View } from '@/lib/types'
 import { ArrowsDownUpIcon as ArrowsDownUp } from '@phosphor-icons/react/dist/csr/ArrowsDownUp'
 import { CardsThreeIcon as CardsThree } from '@phosphor-icons/react/dist/csr/CardsThree'
@@ -58,8 +58,8 @@ const sortOptions: [Sort, string][] = [
 ]
 
 type ViewControlsProps = {
-  prefs: Pick<AppController['prefs'], 'view' | 'group' | 'sort' | 'descending'>
-  update: AppController['update']
+  prefs: Pick<Preferences, 'view' | 'group' | 'sort' | 'descending'>
+  update: (patch: Partial<Preferences>) => void
 }
 
 export function ViewSwitch({ prefs, update }: ViewControlsProps) {
