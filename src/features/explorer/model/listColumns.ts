@@ -14,21 +14,18 @@ function clamp(value: number, min: number): number {
 /** CSS grid template shared by the header and every row. Stored widths remain
  * the preferred layout; narrow panes proportionally compress every column. */
 export function listGridTemplate(columns: ListColumns, availableWidth = 0): string {
-  const preferred = [
-    columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN,
-    columns.modified,
-    columns.size,
-    columns.kind,
-  ]
-  const fixedSpace = 24 + 14 * (preferred.length - 1)
+  const preferredName = columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN
+  const preferredFixed = [columns.modified, columns.size, columns.kind]
+  const preferred = [preferredName, ...preferredFixed]
+  const fixedSpace = 24 + 14 * preferredFixed.length
   const total = preferred.reduce((sum, width) => sum + width, 0)
   if (availableWidth <= fixedSpace || total <= availableWidth - fixedSpace)
-    return `minmax(${preferred[0]}px, 1fr) ${preferred
-      .slice(1)
+    return `minmax(${preferredName}px, 1fr) ${preferredFixed
       .map((width) => `${width}px`)
       .join(' ')}`
   const scale = (availableWidth - fixedSpace) / total
-  const [name, ...fixed] = preferred.map((width) => Math.max(1, Math.floor(width * scale)))
+  const name = Math.max(1, Math.floor(preferredName * scale))
+  const fixed = preferredFixed.map((width) => Math.max(1, Math.floor(width * scale)))
   return `minmax(${name}px, 1fr) ${fixed.map((width) => `${width}px`).join(' ')}`
 }
 

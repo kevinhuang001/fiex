@@ -115,3 +115,5 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 ### 架构依赖门禁补强
 
 本轮将 P1-01 扩展到完整 `src/` 导入图：运行时循环依赖一律失败；类型级循环采用显式基线，新增循环组件或把新模块卷入既有循环都会失败。当前基线仍含一组历史类型循环，源于 IPC DTO、共享模型与组件类型耦合，后续应通过迁移共享类型继续缩小，不能把它描述为零循环。Rust workspace 增加 crate 层次与 DAG 检查，在每个 Desktop matrix target 执行；检查基于 `cargo metadata --no-deps`，覆盖整个 workspace。
+
+P4-02 的严格类型边界现扩展到 `menuVisibility`、Explorer 列宽布局和共享列宽偏好模型；其余源码仍存在 `noUncheckedIndexedAccess` 与 `exactOptionalPropertyTypes` 诊断，需分批修复后再纳入。稳定的跨平台 p95 性能基线尚未采集，当前 10,000 项 E2E 只验证可交互与虚拟化，不作为性能阈值。
