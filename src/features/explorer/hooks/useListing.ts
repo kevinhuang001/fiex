@@ -2,34 +2,22 @@ import { useEntryDecorations } from './useEntryDecorations'
 import { t } from '@/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { call, native, search } from '@/lib/api'
-import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
-import { publishPresentationIcons } from '@/lib/decorationIcons'
-import { openDirectoryStream, requestDirectoryRefresh } from '@/lib/listing'
+import { call, native } from '@/lib/api'
+import { requestDirectoryRefresh } from '@/lib/listing'
 import { isVirtualResource } from '@/lib/files'
-import { useListingSearch, type ListingSearchServices } from './useListingSearch'
+import { useListingSearch } from './useListingSearch'
 import { attachDirectoryWatch } from '@/features/explorer/model/directoryWatch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
 import { canRenameEntry, renameSingleEntry } from '@/features/explorer/operations/rename'
-import { useDirectorySnapshot, type DirectorySnapshotServices } from './useDirectorySnapshot'
+import { useDirectorySnapshot } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
+import {
+  directorySnapshotServices,
+  listingLocationServices,
+  listingSearchServices,
+} from '@/features/explorer/services/listingAdapters'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
-
-const directorySnapshotServices: DirectorySnapshotServices = {
-  openStream: openDirectoryStream,
-  cachePresentationPatch,
-  cachePresentations,
-  publishPresentationIcons,
-  targetNotFoundError: () => t('无法定位已打开的文件'),
-}
-
-const listingSearchServices: ListingSearchServices = {
-  cancel: (pane) => call('cancel_search', { pane }),
-  search,
-  truncatedMessage: () => t(' · 已达到 500 项上限，请缩小范围'),
-  skippedMessage: (count) => t(' · {0} 个位置无法访问', count),
-}
 
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and current-directory capabilities. Path, history and tab
@@ -85,6 +73,7 @@ export function useListing(
     listedPath,
     prefs,
     nav,
+    services: listingLocationServices,
     startOverride,
   })
   const { searching, searchStats } = useListingSearch({
