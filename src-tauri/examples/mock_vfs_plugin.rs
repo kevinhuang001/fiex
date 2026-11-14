@@ -14,6 +14,11 @@ impl VfsProvider for MockVfs {
         if !request.node_id_or_root().is_empty() {
             return Err(RpcError::invalid_params("unknown fixture directory"));
         }
+        if request.hidden() {
+            // Exercise Core's real fatal IPC path: the next VFS request must
+            // start a new plugin process and complete normally.
+            std::process::exit(86);
+        }
         Ok(FsListing::new([fixture_entry()]))
     }
 
