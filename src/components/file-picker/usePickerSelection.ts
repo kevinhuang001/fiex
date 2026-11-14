@@ -6,7 +6,7 @@ import type { Entry } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import type { PickerDialogState } from './PickerDialogs'
 import type { PickerMenuState } from './PickerMenu'
-import { join } from './types'
+import { join } from '@/features/file-picker/types'
 
 type PickerSelectionOptions = {
   request: FilePickerRequest
