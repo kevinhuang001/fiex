@@ -2,7 +2,12 @@ import { useCallback, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { createNavigationRequestLifecycle } from '@/features/explorer/model/navigationRequest'
-import { moveNavigationTab } from '@/features/explorer/model/navigationTabs'
+import {
+  closeNavigationTab,
+  moveNavigationTab,
+  openNavigationTab,
+  selectNavigationTab,
+} from '@/features/explorer/model/navigationTabs'
 import {
   appendNavigationPath,
   moveNavigationCursor,
@@ -125,52 +130,66 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   const newTab = (next = path) => {
     setPendingSelection(null)
-    tabHistory.current[tab] = { paths: history, cursor }
-    tabHistory.current.push({ paths: [next], cursor: 0 })
-    setTabs((t) => [...t, next])
-    setTab(tabs.length)
-    setCurrentPath(next)
-    setHistory([next])
-    setCursor(0)
+    const opened = openNavigationTab({
+      tabs,
+      histories: tabHistory.current,
+      active: tab,
+      currentHistory: { paths: history, cursor },
+      path: next,
+    })
+    tabHistory.current = opened.histories
+    setTabs(opened.tabs)
+    setTab(opened.active)
+    setCurrentPath(opened.path)
+    setHistory(opened.history.paths)
+    setCursor(opened.history.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
   }
   const switchTab = (i: number) => {
-    if (!tabs[i] || i === tab) return
+    const selectedTab = selectNavigationTab({
+      tabs,
+      histories: tabHistory.current,
+      active: tab,
+      currentHistory: { paths: history, cursor },
+      index: i,
+    })
+    if (!selectedTab) return
     setPendingSelection(null)
-    tabHistory.current[tab] = { paths: history, cursor }
-    const saved = tabHistory.current[i] || { paths: [tabs[i]], cursor: 0 }
-    setTab(i)
-    setCurrentPath(tabs[i])
-    setHistory(saved.paths)
-    setCursor(saved.cursor)
+    tabHistory.current = selectedTab.histories
+    setTab(selectedTab.active)
+    setCurrentPath(selectedTab.path)
+    setHistory(selectedTab.history.paths)
+    setCursor(selectedTab.history.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
   }
   const closeTab = (i: number, startPath = 'recent://') => {
-    if (!tabs[i]) return
+    const closingLastTab = tabs.length === 1
+    const closed = closeNavigationTab({
+      tabs,
+      histories: tabHistory.current,
+      active: tab,
+      currentHistory: { paths: history, cursor },
+      index: i,
+      startPath,
+    })
+    if (!closed) return
     setPendingSelection(null)
     // The last folder tab closes onto the configured start page in the same
     // render, so the workspace never flashes an empty tab strip.
-    if (tabs.length === 1) {
-      startAt(startPath)
-      return
-    }
-    tabHistory.current[tab] = { paths: history, cursor }
-    tabHistory.current.splice(i, 1)
-    const next = tabs.filter((_, n) => n !== i)
-    const n = i < tab ? tab - 1 : Math.min(tab, next.length - 1)
-    const saved = tabHistory.current[n] || { paths: [next[n]], cursor: 0 }
-    setTabs(next)
-    setTab(n)
-    setCurrentPath(next[n])
-    setHistory(saved.paths)
-    setCursor(saved.cursor)
+    tabHistory.current = closed.histories
+    setTabs(closed.tabs)
+    setTab(closed.active)
+    setCurrentPath(closed.path)
+    setHistory(closed.history.paths)
+    setCursor(closed.history.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
+    if (closingLastTab) setError('')
   }
   const moveTab = (from: number, to: number) => {
     const moved = moveNavigationTab({
