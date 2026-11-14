@@ -18,7 +18,7 @@ Provider 的 preflight 是附加策略检查，不是授权来源。它可以因
 
 ## Rust Core 模块依赖方向
 
-`core::operations` 负责桌面文件操作的应用编排和撤销队列。共享的 `OperationResult`、冲突/解决方案 DTO、撤销记录与取消检查定义在 `core::operation_types`；本机暂存复制实现属于 `core::transfers`；同名目标与路径存在判断属于 `core::fs::path_utils`。因此 `core/fs` 和 `core/transfers` 的生产模块不导入 `core::operations`。`scripts/check-rust-crate-architecture.mjs` 在 crate DAG 检查之外也验证这条模块边界，测试模块可以调用 façade 验证完整操作行为。
+`core::operations` 负责桌面文件操作的应用编排和撤销队列。共享的 `OperationResult`、冲突/解决方案 DTO、撤销记录与取消检查定义在 `core::operation_types`；本机暂存复制实现属于 `core::transfers`；同名目标与路径存在判断属于 `core::fs::path_utils`。`core::fs::broker` 组合资源身份、授权与 provider 访问，读取/搜索和写入/变更方法分别位于 `broker/reads.rs` 与 `broker/writes.rs`。因此 `core/fs` 和 `core/transfers` 的生产模块不导入 `core::operations`。`scripts/check-rust-crate-architecture.mjs` 在 crate DAG 检查之外也验证这条模块边界，测试模块可以调用 façade 验证完整操作行为。
 
 ## 诊断与隐私
 

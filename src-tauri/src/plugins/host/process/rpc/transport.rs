@@ -15,6 +15,9 @@ use std::{
 
 mod reader;
 
+#[cfg(test)]
+mod tests;
+
 /// Identity and budgets captured when a resident plugin process starts.
 pub(in crate::plugins::host::process) struct RunningInit {
     pub(in crate::plugins::host::process) plugin_id: String,
@@ -184,15 +187,7 @@ impl Running {
         }
         // Streaming chunk calls are short; long uploads are many bounded
         // requests instead of one unbounded call.
-        let result = match receiver.recv_timeout(self.request_timeout) {
-            Ok(result) => result,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                Err(RpcFailure::fatal("plugin request deadline exceeded"))
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                Err(RpcFailure::fatal("plugin process disconnected"))
-            }
-        };
+        let result = wait_for_response(receiver, self.request_timeout);
         if let Ok(mut pending) = self.pending.lock() {
             pending.remove(&id);
         }
@@ -239,6 +234,21 @@ impl Running {
             .and_then(|mut operations| operations.remove(&id));
         if let Some(operation) = operation {
             crate::plugins::resource::lifecycle::release(&operation.owner);
+        }
+    }
+}
+
+fn wait_for_response(
+    receiver: mpsc::Receiver<Result<Value, RpcFailure>>,
+    timeout: Duration,
+) -> Result<Value, RpcFailure> {
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            Err(RpcFailure::fatal("plugin request deadline exceeded"))
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(RpcFailure::fatal("plugin process disconnected"))
         }
     }
 }
