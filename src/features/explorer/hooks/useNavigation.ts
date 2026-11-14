@@ -3,15 +3,16 @@ import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { createNavigationRequestLifecycle } from '@/features/explorer/model/navigationRequest'
 import { moveNavigationTab } from '@/features/explorer/model/navigationTabs'
+import {
+  appendNavigationPath,
+  moveNavigationCursor,
+  previousNavigationPath,
+} from '@/features/explorer/model/navigationHistory'
 
 export interface PendingSelection {
   directory: string
   target: string
   generation: number
-}
-
-export function previousNavigationPath(history: string[], cursor: number): string | null {
-  return cursor > 0 && cursor <= history.length - 1 ? history[cursor - 1] : null
 }
 
 /** Path, history, tab state and the transient per-pane view state every
@@ -66,11 +67,12 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
       setSelected([])
       setRenaming(null)
       setError('')
-      setHistory((h) => [...h.slice(0, cursor + 1), next])
-      setCursor((c) => c + 1)
+      const nextHistory = appendNavigationPath(history, cursor, next)
+      setHistory(nextHistory.history)
+      setCursor(nextHistory.cursor)
       setTabs((t) => t.map((p, i) => (i === tab ? next : p)))
     },
-    [cursor, setCurrentPath, tab],
+    [cursor, history, setCurrentPath, tab],
   )
   const navigate = useCallback((next: string) => setLocation(next), [setLocation])
   const navigateTo = useCallback(
@@ -98,22 +100,24 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     [setCurrentPath],
   )
   const back = () => {
-    if (cursor > 0) {
+    const previous = moveNavigationCursor(history, cursor, -1)
+    if (previous) {
       setPendingSelection(null)
-      setCursor(cursor - 1)
-      setCurrentPath(history[cursor - 1])
-      setTabs((t) => t.map((p, i) => (i === tab ? history[cursor - 1] : p)))
+      setCursor(previous.cursor)
+      setCurrentPath(previous.path)
+      setTabs((t) => t.map((p, i) => (i === tab ? previous.path : p)))
       setQuery('')
       setSelected([])
       setRenaming(null)
     }
   }
   const forward = () => {
-    if (cursor < history.length - 1) {
+    const next = moveNavigationCursor(history, cursor, 1)
+    if (next) {
       setPendingSelection(null)
-      setCursor(cursor + 1)
-      setCurrentPath(history[cursor + 1])
-      setTabs((t) => t.map((p, i) => (i === tab ? history[cursor + 1] : p)))
+      setCursor(next.cursor)
+      setCurrentPath(next.path)
+      setTabs((t) => t.map((p, i) => (i === tab ? next.path : p)))
       setQuery('')
       setSelected([])
       setRenaming(null)
