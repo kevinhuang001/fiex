@@ -1,6 +1,17 @@
 import type { Preferences } from '@/lib/types'
+import { call } from '@/lib/api'
+import { parent } from '@/lib/files'
 import { useListing } from './useListing'
-import { useNavigation } from './useNavigation'
+import { useNavigation, type NavigationServices } from './useNavigation'
+
+const navigationServices: NavigationServices = {
+  readSearchMode: () => localStorage.getItem('fiex:search-mode'),
+  writeSearchMode: (mode) => localStorage.setItem('fiex:search-mode', mode),
+  parentPath: parent,
+  resolveParentPath: (path, fallback) =>
+    path.startsWith('applications://') ? call('file_parent', { path }) : Promise.resolve(fallback),
+}
+
 export function useExplorer(
   prefs: Preferences,
   startOverride?: string,
@@ -8,7 +19,7 @@ export function useExplorer(
   pane = 'left',
   initialTabs?: { paths: string[]; active: number },
 ) {
-  const nav = useNavigation(initialTabs)
+  const nav = useNavigation(navigationServices, initialTabs)
   const listing = useListing(prefs, nav, enabled, pane, startOverride)
   return {
     path: nav.path,
