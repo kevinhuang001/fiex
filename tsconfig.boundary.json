@@ -19,6 +19,7 @@
     "src/features/explorer/model/paintedListingCache.ts",
     "src/features/explorer/model/searchBatch.ts",
     "src/features/explorer/model/renamePolicy.ts",
+    "src/features/explorer/model/initialPath.ts",
     "src/features/explorer/operations/rename.ts",
     "src/features/explorer/operations/batchRename.ts",
     "src/features/explorer/operations/create.ts",
