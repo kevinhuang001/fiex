@@ -34,6 +34,7 @@
     "src/features/explorer/hooks/useListingLocations.ts",
     "src/features/explorer/hooks/useEntryDecorations.ts",
     "src/features/explorer/hooks/useDirectorySnapshot.ts",
+    "src/features/explorer/hooks/useListing.ts",
     "src/features/explorer/operations/rename.ts",
     "src/features/explorer/operations/batchRename.ts",
     "src/features/explorer/operations/create.ts",
