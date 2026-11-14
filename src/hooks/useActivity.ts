@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { scheduleActivityReveal } from '@/lib/activity'
+export { quietProgressChannel } from '@/lib/operationProgress'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import type { OperationProgress } from '@/lib/types'
@@ -153,11 +154,6 @@ export function updateActivity(
   // Progress arrives once per file; keep it in memory and persist only the
   // lifecycle changes to avoid a localStorage write on every tick.
   if (changed) emit()
-}
-
-/** A progress channel for actions that have no activity row to update. */
-export function quietProgressChannel(): Channel<OperationProgress> {
-  return new Channel<OperationProgress>()
 }
 
 export function progressChannel(id: string): Channel<OperationProgress> {
