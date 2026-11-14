@@ -33,9 +33,7 @@ pub(super) fn provider(plugin_id: &str) -> Result<Arc<dyn VfsProvider>, String> 
             priority: 50,
             r#match: ProviderMatchRule::default(),
         },
-        Arc::new(IpcVfsProvider {
-            plugin_id: plugin_id.into(),
-        }),
+        Arc::new(IpcVfsProvider::new(plugin_id.into())),
     )?;
     registry
         .get_arc(&id)

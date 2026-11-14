@@ -18,11 +18,30 @@ use std::sync::Arc;
 pub(super) use stream_routes::{begin_write, open_read};
 use streams::{RemoteReader, RemoteWriter};
 
+type RemoteInvoke = dyn Fn(&Mount, &str, Value) -> Result<Value, String> + Send + Sync;
+
 struct IpcVfsProvider {
     plugin_id: String,
+    remote_invoke: Arc<RemoteInvoke>,
 }
 
 impl IpcVfsProvider {
+    fn new(plugin_id: String) -> Self {
+        Self::with_remote_invoke(plugin_id, |mount, method, params| {
+            mount.invoke_remote(method, params)
+        })
+    }
+
+    fn with_remote_invoke(
+        plugin_id: String,
+        remote_invoke: impl Fn(&Mount, &str, Value) -> Result<Value, String> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            plugin_id,
+            remote_invoke: Arc::new(remote_invoke),
+        }
+    }
+
     fn mount<'a>(&self, ctx: &'a dyn ProviderInvocation) -> Result<&'a Mount, ProviderError> {
         let mount = MountInvocation::mount(ctx)?;
         if mount.plugin_id != self.plugin_id {
@@ -40,9 +59,7 @@ impl IpcVfsProvider {
         if ctx.method() != method {
             return Err(ProviderError::invalid_params("VfsProvider method mismatch"));
         }
-        self.mount(ctx)?
-            .invoke_remote(method, params)
-            .map_err(ProviderError::internal)
+        (self.remote_invoke)(self.mount(ctx)?, method, params).map_err(ProviderError::internal)
     }
 }
 
@@ -265,5 +282,45 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
         "vfs.openRead" | "vfs.beginWrite" | "vfs.readStream" | "vfs.closeRead"
         | "vfs.writeStream" | "vfs.commit" | "vfs.abort" => mount.invoke_remote(method, params),
         _ => Err("unsupported VfsProvider method".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plugins::providers::fs::{Mount, Source};
+    use fiex_provider_contracts::FsOperation;
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn provider_ipc_failure_is_returned_and_a_later_call_can_recover() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let provider = IpcVfsProvider::with_remote_invoke(
+            "org.example.vfs-fixture".into(),
+            move |mount, method, _params| {
+                assert_eq!(mount.plugin_id, "org.example.vfs-fixture");
+                assert_eq!(method, "vfs.stat");
+                match observed.fetch_add(1, Ordering::SeqCst) {
+                    0 => Err("fixture IPC disconnected".into()),
+                    1 => Ok(json!({"nodeId":"node-1","name":"entry.txt"})),
+                    _ => Ok(json!({"nodeId":"node-2"})),
+                }
+            },
+        );
+        let mount = Mount {
+            mount_id: "mount-fixture".into(),
+            plugin_id: "org.example.vfs-fixture".into(),
+            source: Source::Connection(Value::Null),
+            scope: None,
+        };
+        let invocation = MountInvocation::new(mount, "vfs.stat", json!({"nodeId":"node-1"}));
+        let request = FsRequest::new(&invocation, FsOperation::Stat).unwrap();
+
+        assert!(provider.stat(&request).is_err());
+        assert_eq!(provider.stat(&request).unwrap().node_id, "node-1");
+        assert!(provider.stat(&request).is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
 }
