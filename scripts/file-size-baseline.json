@@ -17,7 +17,6 @@
   "src-tauri/src/core/fs/provider_registry/plugin.rs": 352,
   "src-tauri/src/plugins/host/manifest/validation.rs": 414,
   "src-tauri/src/plugins/host/process/rpc/transport.rs": 312,
-  "src-tauri/src/plugins/providers/context_menu/mod.rs": 409,
   "src/components/explorer/ExplorerToolbar.tsx": 312,
   "src/components/file-picker/usePicker.ts": 536,
   "src/components/plugins/panel/usePanelBridge.ts": 432,
