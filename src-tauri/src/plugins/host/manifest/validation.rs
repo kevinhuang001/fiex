@@ -1,5 +1,4 @@
 use super::*;
-use std::path::{Component, Path};
 
 pub fn valid_id(id: &str) -> bool {
     id.len() > 2
@@ -10,39 +9,6 @@ pub fn valid_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-}
-
-/// A declared package entry must be a relative slash-separated path inside the
-/// plugin package. URLs, absolute paths, drive letters, parent segments and
-/// backslashes are never resolved by Core; reads also re-check canonical
-/// containment so a symlink cannot escape the package.
-pub(crate) fn valid_package_entry(entry: &str) -> bool {
-    if entry.is_empty()
-        || entry.len() > 1024
-        || entry.contains("://")
-        || entry.contains(':')
-        || entry.contains('\\')
-        || entry.contains('\0')
-    {
-        return false;
-    }
-    let path = Path::new(entry);
-    path.is_relative()
-        && path
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
-}
-
-/// Optional `extensions.preview.loading.entry`, already validated by
-/// [`validate_extensions`] when the manifest is discovered.
-pub(crate) fn preview_loading_entry(extensions: &Value) -> Option<&str> {
-    extensions
-        .get("preview")
-        .and_then(Value::as_object)
-        .and_then(|preview| preview.get("loading"))
-        .and_then(Value::as_object)
-        .and_then(|loading| loading.get("entry"))
-        .and_then(Value::as_str)
 }
 
 /// Extensions declare provider eligibility, never resource permissions.
