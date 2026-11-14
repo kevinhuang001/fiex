@@ -3,6 +3,8 @@ mod actions;
 mod builtin;
 mod commands;
 mod connection_cache;
+mod context_cache;
+mod execution;
 mod file_ops;
 mod native_views;
 pub(crate) mod open_with;
@@ -15,6 +17,7 @@ pub use commands::{children, execute};
 #[cfg(test)]
 mod tests;
 mod validation;
+use execution::execute_provider;
 
 pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
@@ -34,6 +37,7 @@ use crate::plugins::{
     native_invocation::NativeProviderInvocation, provider_registry::native::NativeProviderRegistry,
     resource::resource_context::ResourceSnapshot,
 };
+use context_cache::menu_context;
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
@@ -43,8 +47,7 @@ use session::session_ids;
 use session::{MenuScope, allowed, register, sessions};
 use std::{
     collections::HashMap,
-    sync::{Arc, Condvar, Mutex, OnceLock},
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
 };
 use validation::validated_submenu;
 
@@ -119,42 +122,6 @@ impl ContextMenuProvider for FailedMenuProvider {
     }
 }
 
-fn validate_plugin_action(
-    plugin: &crate::plugins::host::PluginInfo,
-    result: &mut MenuExecuteResult,
-) -> Result<(), String> {
-    match result {
-        MenuExecuteResult::CoreAction(_)
-        | MenuExecuteResult::ConnectionCoreAction(_)
-        | MenuExecuteResult::RemoteAction(_)
-        | MenuExecuteResult::NativeAction(_) => {
-            Err("plugin returned a reserved action kind".into())
-        }
-        MenuExecuteResult::Panel(panel) => {
-            let entry = panel.entry.as_deref().ok_or("panel result missing entry")?;
-            let asset = crate::plugins::host::plugin_view_asset(&plugin.id, entry)?;
-            panel.entry = None;
-            panel.asset_path = Some(asset);
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-fn execute_provider(
-    resolver: &Resolver,
-    implementation: &dyn ContextMenuProvider,
-    invocation: &dyn fiex_provider_contracts::ProviderInvocation,
-) -> Result<MenuExecuteResult, String> {
-    let mut result = implementation
-        .execute(invocation)
-        .map_err(|error| error.to_string())?;
-    if let Some(plugin) = resolver.plugin.as_deref() {
-        validate_plugin_action(plugin, &mut result)?;
-    }
-    Ok(result)
-}
-
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
     query_scope(directory, paths, MenuScope::All, None)
 }
@@ -176,109 +143,6 @@ pub fn query_plugins(
     session_id: Option<&str>,
 ) -> Result<Vec<Value>, String> {
     query_scope(directory, paths, MenuScope::Plugins, session_id)
-}
-
-const MENU_CONTEXT_TTL: Duration = Duration::from_secs(10);
-const MENU_CONTEXT_LIMIT: usize = 512;
-
-struct MenuContextFlight {
-    result: Mutex<Option<Result<builtin::Context, String>>>,
-    ready: Condvar,
-}
-
-enum MenuContextEntry {
-    Loading(Arc<MenuContextFlight>),
-    Ready {
-        created: Instant,
-        context: Box<builtin::Context>,
-    },
-}
-
-fn menu_contexts() -> &'static Mutex<HashMap<String, MenuContextEntry>> {
-    static CONTEXTS: OnceLock<Mutex<HashMap<String, MenuContextEntry>>> = OnceLock::new();
-    CONTEXTS.get_or_init(Default::default)
-}
-
-/// Core and plugin requests from one right-click share the same resource
-/// snapshot, so local Stat and VFS metadata discovery run only once.
-fn menu_context(
-    directory: &str,
-    paths: &[String],
-    session_id: Option<&str>,
-) -> Result<builtin::Context, String> {
-    let Some(session_id) = session_id.filter(|value| {
-        !value.is_empty()
-            && value.len() <= 128
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) else {
-        return builtin::Context::load_for_menu(directory, paths, false);
-    };
-    let selection = serde_json::to_string(paths).map_err(|error| error.to_string())?;
-    let key = format!("{session_id}\0{directory}\0{selection}");
-    let (flight, load) = {
-        let mut contexts = menu_contexts()
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        contexts.retain(|_, entry| match entry {
-            MenuContextEntry::Loading(_) => true,
-            MenuContextEntry::Ready { created, .. } => created.elapsed() < MENU_CONTEXT_TTL,
-        });
-        if let Some(entry) = contexts.get(&key) {
-            match entry {
-                MenuContextEntry::Ready { context, .. } => return Ok(context.as_ref().clone()),
-                MenuContextEntry::Loading(flight) => (Arc::clone(flight), false),
-            }
-        } else {
-            if contexts.len() >= MENU_CONTEXT_LIMIT {
-                return Err("too many active context-menu snapshots".into());
-            }
-            let flight = Arc::new(MenuContextFlight {
-                result: Mutex::new(None),
-                ready: Condvar::new(),
-            });
-            contexts.insert(key.clone(), MenuContextEntry::Loading(Arc::clone(&flight)));
-            (flight, true)
-        }
-    };
-    if load {
-        let result = builtin::Context::load_for_menu(directory, paths, false);
-        {
-            let mut contexts = menu_contexts()
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            if let Ok(context) = &result {
-                contexts.insert(
-                    key,
-                    MenuContextEntry::Ready {
-                        created: Instant::now(),
-                        context: Box::new(context.clone()),
-                    },
-                );
-            } else {
-                contexts.remove(&key);
-            }
-        }
-        *flight
-            .result
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(result.clone());
-        flight.ready.notify_all();
-        result
-    } else {
-        let mut result = flight
-            .result
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        while result.is_none() {
-            result = flight
-                .ready
-                .wait(result)
-                .unwrap_or_else(|error| error.into_inner());
-        }
-        result.as_ref().expect("context flight completed").clone()
-    }
 }
 
 fn query_scope(
