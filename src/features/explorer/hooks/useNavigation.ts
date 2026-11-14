@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { createNavigationRequestLifecycle } from '@/features/explorer/model/navigationRequest'
+import { moveNavigationTab } from '@/features/explorer/model/navigationTabs'
 
 export interface PendingSelection {
   directory: string
@@ -168,22 +169,18 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setRenaming(null)
   }
   const moveTab = (from: number, to: number) => {
-    if (from === to || !tabs[from] || !tabs[to]) return
-    tabHistory.current[tab] = { paths: history, cursor }
-    const next = [...tabs]
-    next.splice(to, 0, next.splice(from, 1)[0])
-    const histories = tabHistory.current
-    histories.splice(to, 0, histories.splice(from, 1)[0])
-    setTabs(next)
-    setTab(
-      tab === from
-        ? to
-        : from < tab && to >= tab
-          ? tab - 1
-          : from > tab && to <= tab
-            ? tab + 1
-            : tab,
-    )
+    const moved = moveNavigationTab({
+      tabs,
+      histories: tabHistory.current,
+      active: tab,
+      currentHistory: { paths: history, cursor },
+      from,
+      to,
+    })
+    if (!moved) return
+    tabHistory.current = moved.histories
+    setTabs(moved.tabs)
+    setTab(moved.active)
   }
   const referencedPaths = [
     ...history,
