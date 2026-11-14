@@ -276,51 +276,93 @@ test('PDF preview renders a real document', async ({ page }) => {
 test('ten thousand icons stay virtualized and support end selection and rename', async ({
   page,
 }, testInfo) => {
-  const timingsMs: Record<string, number> = {}
-  const measure = async (name: string, action: () => Promise<void>) => {
+  test.setTimeout(180_000)
+  const requestedSamples = Number(process.env.FIEX_10K_SAMPLES ?? 20)
+  const sampleCount =
+    Number.isInteger(requestedSamples) && requestedSamples >= 5 && requestedSamples <= 50
+      ? requestedSamples
+      : 20
+  const samplesMs: Record<string, number[]> = {}
+  const measure = async (name: string, action: () => Promise<void>, collect: boolean) => {
     const started = performance.now()
     await action()
-    timingsMs[name] = Number((performance.now() - started).toFixed(2))
+    if (collect) {
+      samplesMs[name] ??= []
+      samplesMs[name].push(Number((performance.now() - started).toFixed(2)))
+    }
   }
 
-  await measure('fixture_start_and_10000_entry_listing', async () => {
-    await page.goto('/?fixture&count=10000')
-    await openDocuments(page)
-    await expect(page.locator('.statusbar')).toContainText('10,015')
-  })
-  await measure('switch_to_icon_view', async () => {
-    await page.getByRole('button', { name: '图标视图', exact: true }).click()
-    await expect(page.locator('.virtual-file-grid')).toBeVisible()
-  })
-  expect(await page.getByRole('gridcell').count()).toBeLessThan(180)
-  const sort = page.getByRole('button', { name: '排序方式' })
-  await sort.click()
-  await page.getByRole('menuitem', { name: '名称' }).click()
-  await sort.click()
-  await page.getByRole('menuitem', { name: '降序' }).click()
-  await measure('virtualized_end_navigation', async () => {
-    await page.getByRole('grid', { name: '文件', exact: true }).focus()
-    await page.keyboard.press('End')
-    await expect(
-      page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]'),
-    ).toBeVisible()
-  })
-  await page.keyboard.press('F2')
-  await expect(page.getByRole('textbox', { name: '重命名 zz-file-09999.txt' })).toBeVisible()
-  await page.keyboard.press('Escape')
-  await measure('switch_to_list_view', async () => {
-    await page.getByRole('button', { name: '列表视图', exact: true }).click()
-    await expect.poll(() => page.locator('.file-row').count()).toBeLessThan(80)
-  })
-  expect(await page.locator('.file-row').count()).toBeLessThan(80)
+  const run = async (collect: boolean) => {
+    await measure(
+      'fixture_start_and_10000_entry_listing',
+      async () => {
+        await page.goto('/?fixture&count=10000')
+        await openDocuments(page)
+        await expect(page.locator('.statusbar')).toContainText('10,015')
+      },
+      collect,
+    )
+    await measure(
+      'switch_to_icon_view',
+      async () => {
+        await page.getByRole('button', { name: '图标视图', exact: true }).click()
+        await expect(page.locator('.virtual-file-grid')).toBeVisible()
+      },
+      collect,
+    )
+    expect(await page.getByRole('gridcell').count()).toBeLessThan(180)
+    const sort = page.getByRole('button', { name: '排序方式' })
+    await sort.click()
+    await page.getByRole('menuitem', { name: '名称' }).click()
+    await sort.click()
+    await page.getByRole('menuitem', { name: '降序' }).click()
+    await measure(
+      'virtualized_end_navigation',
+      async () => {
+        await page.getByRole('grid', { name: '文件', exact: true }).focus()
+        await page.keyboard.press('End')
+        await expect(
+          page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]'),
+        ).toBeVisible()
+      },
+      collect,
+    )
+    await page.keyboard.press('F2')
+    await expect(page.getByRole('textbox', { name: '重命名 zz-file-09999.txt' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await measure(
+      'switch_to_list_view',
+      async () => {
+        await page.getByRole('button', { name: '列表视图', exact: true }).click()
+        await expect.poll(() => page.locator('.file-row').count()).toBeLessThan(80)
+      },
+      collect,
+    )
+    expect(await page.locator('.file-row').count()).toBeLessThan(80)
+  }
+
+  await run(false)
+  for (let sample = 0; sample < sampleCount; sample++) await run(true)
+
+  const percentile95 = (values: number[]) => {
+    const sorted = [...values].sort((left, right) => left - right)
+    return sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0
+  }
+  const p95Ms = Object.fromEntries(
+    Object.entries(samplesMs).map(([name, values]) => [name, percentile95(values)]),
+  )
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     fixtureEntries: 10_000,
     platform: process.platform,
+    runnerOs: process.env.RUNNER_OS ?? null,
     project: testInfo.project.name,
-    timingsMs,
-    note: 'Per-run sample only; this is not a cross-platform p95 threshold.',
+    warmupRuns: 1,
+    sampleCount,
+    samplesMs,
+    p95Ms,
+    note: 'Nearest-rank p95 after one warm-up; CI timing budgets remain uncalibrated.',
   }
   await testInfo.attach('fiex-10k-listing-performance.json', {
     body: Buffer.from(JSON.stringify(report, null, 2)),
