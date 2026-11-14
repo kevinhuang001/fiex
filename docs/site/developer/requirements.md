@@ -198,6 +198,7 @@
 | src/features/explorer/model/directoryWatch.test.ts                 | UI-VIEW-05、ARCH-01（目录监听异步注册、事件防抖和卸载清理）                         |
 | src/features/explorer/model/directorySnapshot.test.ts       | UI-VIEW-06、ARCH-01（目录快照可见列表复用与 metadata 更新）                         |
 | src/features/explorer/model/directoryStreamUpdate.test.ts  | UI-NAV-08、ARCH-01（目录流 revision、路径纠正、目标选择与 Recent 回退）              |
+| src/features/explorer/hooks/useDirectorySnapshot.ts           | UI-NAV-08、UI-VIEW-06、ARCH-01（目录流协调 adapter 与严格边界类型检查）                 |
 | src/lib/files.test.ts                                            | ARCH-01（路径解析、VFS 身份和严格边界类型检查）                                         |
 | src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                                |
 | src/features/explorer/model/transferPolicy.test.ts               | OPS-CLIP-01（按目标能力判断副本可用性并过滤已满足的移动）                               |
