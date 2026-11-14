@@ -18,7 +18,7 @@
     "check:boundary-types": "tsc --noEmit -p tsconfig.boundary.json",
     "check:architecture-boundaries": "node --test scripts/architecture-graph.test.mjs && node scripts/check-architecture-boundaries.mjs",
     "check:size": "node scripts/check-file-size.mjs",
-    "check:tauri-contracts": "node scripts/check-tauri-command-contracts.mjs",
+    "check:tauri-contracts": "node --test scripts/check-tauri-command-contracts.test.mjs && node scripts/check-tauri-command-contracts.mjs",
     "audit:native": "node scripts/audit-native-deps.mjs",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
