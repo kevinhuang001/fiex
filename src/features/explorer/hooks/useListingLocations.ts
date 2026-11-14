@@ -1,34 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { call, native } from '@/lib/api'
 import { getLocale } from '@/i18n'
+import { resolveInitialPath } from '@/features/explorer/model/initialPath'
 import type { Location, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
-
-export function resolveInitialPath({
-  startOverride,
-  launched,
-  startPage,
-  lastPath,
-  initialPath,
-  locations,
-}: {
-  startOverride?: string
-  launched?: string | null
-  startPage: Preferences['startPage']
-  lastPath?: string | null
-  initialPath?: string | null
-  locations: Location[]
-}): string | null {
-  let start = startOverride || launched || null
-  if (!start && startPage === 'recent') start = 'recent://'
-  else if (!start && startPage === 'last') start = lastPath || null
-  if (start) return start
-
-  const pick = (name: string) => locations.find((item) => item.name === name)?.path
-  return startPage === 'home'
-    ? (pick('个人文件夹') ?? initialPath ?? null)
-    : (pick('文稿') ?? initialPath ?? locations[0]?.path ?? null)
-}
 
 /** Sidebar locations and the asynchronous start-folder resolution for a pane. */
 export function useListingLocations({

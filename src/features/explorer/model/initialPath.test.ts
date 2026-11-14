@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Location } from '@/lib/types'
-import { resolveInitialPath } from './useListingLocations'
+import { resolveInitialPath } from './initialPath'
 
 const locations: Location[] = [
   {
@@ -49,6 +49,7 @@ describe('resolveInitialPath', () => {
     expect(resolveInitialPath({ startPage: 'last', lastPath: '/work/current', locations })).toBe(
       '/work/current',
     )
+    expect(resolveInitialPath({ startPage: 'last', locations })).toBe('/home/kevin/Documents')
   })
 
   it('resolves Home and Documents from available locations with an OS fallback', () => {
