@@ -155,3 +155,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 
 **P2-01 后续 PR #231：** `ExplorerDialogs` 用 UI 所需的显式状态/动作合同替代 `Pick<AppController, ...>`，由 app-shell adapter 传递 dialog、preview、Info、tag、connection 和 settings 状态；`App` 不再将完整控制器扩散给弹窗聚合器。具体文件操作行为仍由独立 hook 与已有 operation tests 管理。
+
+
+**P2-01 后续 PR #232：** 文件右键菜单及其执行/项目构建合同改为显式依赖 Explorer、操作与菜单 DTO 类型，不再从应用控制器反推 props；`App` 仅经 app-shell adapter 传递所需字段。Core/插件菜单现有浏览器回归仍负责验证点击后文件状态与菜单行为。
