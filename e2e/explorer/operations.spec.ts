@@ -97,6 +97,30 @@ test('multi-select and select all', async ({ page }) => {
   await page.keyboard.press('Escape')
 })
 
+test('rubber-band selection includes intersected entries', async ({ page }) => {
+  await page.getByRole('button', { name: '图标视图', exact: true }).click()
+  const grid = page.getByRole('grid', { name: '文件', exact: true })
+  const first = grid.locator('[data-path]').nth(0)
+  const second = grid.locator('[data-path]').nth(1)
+  const firstBox = await first.boundingBox()
+  const secondBox = await second.boundingBox()
+  const gridBox = await grid.boundingBox()
+  if (!firstBox || !secondBox || !gridBox) throw new Error('missing selection geometry')
+
+  await page.mouse.move(gridBox.x + 1, Math.min(firstBox.y, secondBox.y) - 5)
+  await page.mouse.down()
+  await page.mouse.move(
+    Math.max(firstBox.x + firstBox.width, secondBox.x + secondBox.width) + 5,
+    Math.max(firstBox.y + firstBox.height, secondBox.y + secondBox.height) + 5,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+
+  await expect(first).toHaveAttribute('aria-selected', 'true')
+  await expect(second).toHaveAttribute('aria-selected', 'true')
+})
+
+
 test('folders offer copy, cut and duplicate in their correct context menu sections', async ({
   page,
 }) => {
