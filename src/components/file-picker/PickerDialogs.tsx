@@ -3,11 +3,7 @@ import type { RefObject } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import type { Entry } from '@/lib/types'
-
-export type PickerDialogState =
-  | { kind: 'folder'; value: string }
-  | { kind: 'rename'; entry: Entry; value: string }
-  | { kind: 'trash'; entry: Entry }
+import type { PickerDialogState } from '@/features/file-picker/types'
 
 export function PickerDialogs({
   dialog,
