@@ -18,6 +18,7 @@ import { PinnedTools } from './toolbar/PinnedTools'
 import { ToolbarPickerMenu, useToolbarPicker } from './toolbar/ToolbarMenus'
 import { GroupControl, SortControl, ViewSwitch } from './toolbar/ViewControls'
 import { useToolbarOrder } from './toolbar/useToolbarOrder'
+import { orderedToolbarKeys, toolbarItemStyle } from './toolbar/layout'
 
 export function ExplorerToolbar({
   sidebar,
@@ -69,12 +70,8 @@ export function ExplorerToolbar({
   const { picker, pickerRef, pickerPosition, openPicker, closePicker } = useToolbarPicker()
   const leftDefaults = ['group', 'sort', 'newFolder', 'ide', 'terminal']
   const rightDefaults = ['refresh', 'split', 'activity']
-  const ordered = (saved: string[], fallback: string[]) => [
-    ...saved.filter((id) => fallback.includes(id)),
-    ...fallback.filter((id) => !saved.includes(id)),
-  ]
-  const leftKeys = ordered(prefs.toolbarLeftOrder, leftDefaults)
-  const rightKeys = ordered(prefs.toolbarRightOrder, rightDefaults)
+  const leftKeys = orderedToolbarKeys(prefs.toolbarLeftOrder, leftDefaults)
+  const rightKeys = orderedToolbarKeys(prefs.toolbarRightOrder, rightDefaults)
   const leftOrder = useToolbarOrder({
     keys: leftKeys,
     onChange: (toolbarLeftOrder) => update({ toolbarLeftOrder }),
@@ -87,16 +84,6 @@ export function ExplorerToolbar({
     if (!order.suppressClick()) return
     event.preventDefault()
     event.stopPropagation()
-  }
-  const itemStyle = (order: ReturnType<typeof useToolbarOrder>, index: number) => {
-    if (order.drag?.from === index)
-      return {
-        transform: `translateX(${order.drag.x}px)`,
-        zIndex: 2,
-        position: 'relative' as const,
-      }
-    const transform = order.shift(index)
-    return transform ? { transform } : undefined
   }
   const renderLeft = (id: string) => {
     if (id === 'group') return <GroupControl prefs={prefs} update={update} />
@@ -253,7 +240,7 @@ export function ExplorerToolbar({
               className="toolbar-order-item"
               data-toolbar-item
               key={id}
-              style={itemStyle(leftOrder, index)}
+              style={toolbarItemStyle(leftOrder, index)}
               onPointerDown={(event) => leftOrder.begin(event, index)}
             >
               {renderLeft(id)}
@@ -276,7 +263,7 @@ export function ExplorerToolbar({
               className="toolbar-order-item"
               data-toolbar-item
               key={id}
-              style={itemStyle(rightOrder, index)}
+              style={toolbarItemStyle(rightOrder, index)}
               onPointerDown={(event) => rightOrder.begin(event, index)}
             >
               {renderRight(id)}
