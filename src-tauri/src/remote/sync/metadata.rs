@@ -76,3 +76,7 @@ pub(crate) fn save_meta_to(path: &Path, meta: &RemoteMeta) -> Result<(), String>
     temp.persist(path).map_err(|e| e.error.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "metadata/tests.rs"]
+mod tests;

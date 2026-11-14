@@ -132,6 +132,7 @@
 | REMOTE-02 | 普通缓存与“始终保留在本地”是不同意图；目录 pin 继承、显式排除、取消缓存和 unpin 不得删除远端文件或丢失本地修改。 | Rust：remote/files/tests.rs 的 **folder_pin_inheritance_respects_explicit_eviction**、remote/cache.rs 的下载非 pin 和状态聚合用例；Core 浏览器 UI 对真实远端服务尚无 E2E。                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | REMOTE-03 | 同步上传必须基于版本/内容基线；两端冲突不能静默覆盖；失败保留本地数据并上报原因。                                | Rust：`remote/reconcile/upload.rs` 的 **snapshot_uploads_chunks_in_order_and_commits_after_all_bytes**、**failed_or_short_chunk_never_commits**；`remote/reconcile/tests.rs` 的 **uncommitted_write_lease_aborts_but_finished_lease_does_not**、**disconnected_stat_keeps_the_cached_bytes_and_baseline_for_retry**、**failed_remote_refresh_preserves_the_cached_copy_and_baseline**、**local_and_remote_edits_mark_a_conflict_without_replacing_local_bytes**。失败状态还经 temp-file metadata 写入/读回验证 baseline 保持；`src/hooks/autostartSessions.test.ts` 覆盖目录首屏和持久化连接注册表就绪顺序；PR #203 的 Core 两进程 smoke 覆盖 mock VFS view 恢复和 Provider open，不代表第三方远端协议或生产连接恢复已覆盖。 |
 | REMOTE-04 | 文件流与缓存释放受连接/mount 所有权约束；关闭连接不应把缓存误认作远端在线数据。                                  | Rust：remote/store、remote/files 与 resource/fs_access tests；PR #203 增加 Core 重启后 mock VFS 持久 view 的恢复与重新打开；远端文件缓存、第三方连接状态和断电恢复仍未由 Core CI 完整验证。 |
+| REMOTE-05 | 缓存元数据原子替换中断后，重启必须读取最后一次完整提交的缓存基线；遗留的未提交暂存内容不能覆盖它。 | Rust：`remote/sync/metadata/tests.rs` 的 **interrupted_metadata_replace_recovers_last_committed_cache_state** 模拟提交前进程中断、忽略残留暂存文件，并验证重试后完整新基线可读。该测试不替代真实第三方服务或物理断电验证。 |
 
 ## 可靠性、隐私与平台
 
@@ -197,6 +198,7 @@
 | src-tauri/src/plugins/security/ and resource/ tests              | PLUG-PERM、PLUG-SCOPE、PLUG-FS、PLUG-NET、PLUG-CMD                                      |
 | src-tauri/src/remote/reconcile/upload.rs                         | REMOTE-03（分块顺序、短写/断网不 commit）                                               |
 | src-tauri/src/remote/reconcile/tests.rs                          | REMOTE-03（中断、刷新失败保留缓存基线；双端修改转 conflict；lease abort）               |
+| src-tauri/src/remote/sync/metadata/tests.rs                      | REMOTE-05（原子元数据替换中断后读取已提交状态并完成重试）                             |
 | src-tauri/src/remote/ tests                                      | CONN、REMOTE                                                                            |
 
 ## 本轮界面改动的按钮级冒烟追溯
