@@ -7,17 +7,10 @@ import { loadSavedTabs, saveTabs } from '@/lib/tabs'
 import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
-import { useConnectionActions } from './controller/useConnectionActions'
 import { useDialogs } from './controller/useDialogs'
-import { useDropTargets } from './controller/useDropTargets'
-import { useOpenActions } from './controller/useOpenActions'
-import { useShortcuts } from './controller/useShortcuts'
-import { useWorkspaceActions } from './controller/useWorkspaceActions'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
-import { useFileOperations } from './useFileOperations'
-import { finishActivity } from '@/hooks/useActivity'
+import { useAppControllerActions } from './controller/useAppControllerActions'
 import { usePaneLayout } from './usePaneLayout'
-import { usePathEditor } from './usePathEditor'
 import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
@@ -88,6 +81,7 @@ export function useAppController() {
     document.querySelector<HTMLInputElement>(selector)?.focus()
   }
 
+  const dialogs = useDialogs(x)
   const {
     sidebar,
     setSidebar,
@@ -113,10 +107,7 @@ export function useAppController() {
     setConnectionOpen,
     connectionToEdit,
     setConnectionToEdit,
-    tagPaths,
-    setTagPaths,
     tagInitial,
-    setTagInitial,
     menu,
     setMenu,
     searchInput,
@@ -124,7 +115,7 @@ export function useAppController() {
     first,
     notify,
     navigatePreview,
-  } = useDialogs(x)
+  } = dialogs
   const chosenAll = split
     ? [
         ...new Map(
@@ -148,120 +139,23 @@ export function useAppController() {
     notify(t('已重命名 {0} 个项目', renamed.length))
   }
 
-  const {
-    busy,
-    conflict,
-    setConflict,
-    resolveConflict,
-    clipboard,
-    setClipboard,
-    run,
-    create,
-    createFile,
-    recycle,
-    deletePermanently,
-    restoreFromTrash,
-    emptyTrash,
-    inTrash,
-    transfer,
-    copy,
-    duplicate,
-    undo,
-  } = useFileOperations({ x, notify, setDialog, trashPath })
-
-  // Closing the conflict dialog without a choice must not leave the held
-  // status-centre row running forever.
-  const cancelConflict = () => {
-    if (conflict?.activityId) finishActivity(conflict.activityId, t('已取消'))
-    setConflict(null)
-  }
-
-  const { ejectDevice, ejectUsb, mountDevice, removeConnection, isRemotePath, displayName } =
-    useConnectionActions({ x, left, right, run, notify, setDialog, trashPath })
-
-  const {
-    open,
-    previewEntry,
-    openTrash,
-    openApplications,
-    terminal,
-    openIde,
-    openTags,
-    applyTags,
-  } = useOpenActions({
+  const actions = useAppControllerActions({
     x,
-    prefs,
-    run,
-    notify,
-    first,
-    ides,
-    isRemotePath,
-    tagPaths,
-    setTagPaths,
-    setTagInitial,
-    setTagOpen,
-    setPreview,
-    trashPath,
-  })
-
-  const {
-    editingPath,
-    pathDraft,
-    setPathDraft,
-    pathInput,
-    setEditingPath,
-    startPathEdit,
-    submitPath,
-    crumbs,
-  } = usePathEditor({ x: left, displayName })
-
-  const { addWorkspace, refreshAll, bookmarkPaths, favorite } = useWorkspaceActions({
-    x,
+    left,
+    right,
     prefs,
     update,
     workspace,
     notify,
     first,
-    left,
-    right,
-    split,
-  })
-
-  const { hint } = useShortcuts({
-    prefs,
-    x,
-    left,
-    first,
-    dialog,
-    conflict,
-    settings,
-    pluginManager,
-    preview,
-    info,
-    tagOpen,
-    connectionOpen,
+    ides,
+    trashPath,
+    dialogs,
     focusSearch,
-    startPathEdit,
-    copy,
-    clipboard,
-    transfer,
-    undo,
-    create,
-    createFile,
     newWorkspaceTab,
     closeWorkspaceTab,
-    duplicate,
-    previewEntry,
-    open,
-    recycle,
-    refreshAll,
-    setSidebar,
-    setInfo,
-    setSettings,
-    setMenu,
+    split,
   })
-
-  const { dragging } = useDropTargets({ x, conflict, transfer, bookmarkPaths, addWorkspace })
 
   useEffect(() => {
     if (!menu) return
@@ -281,57 +175,26 @@ export function useAppController() {
   }
   return {
     sidebar,
-    dragging,
     prefs,
     x,
     update,
-    favorite,
+    ...actions,
     control,
-    openTrash,
-    openApplications,
     setConnectionOpen,
     openConnectionDialog: (connection: import('@/lib/types').RemoteConnection | null = null) => {
       setConnectionToEdit(connection)
       setConnectionOpen(true)
     },
-    removeConnection,
-    refreshAll,
-    ejectDevice,
-    ejectUsb,
-    mountDevice,
     trashPath,
     setSidebar,
-    displayName,
-    hint,
-    create,
-    createFile,
     ides,
-    openIde,
-    terminal,
     setSettings,
     newWindow: () =>
       void call('new_window', { path: x.path }).catch((error) => x.setError(String(error))),
-    startPathEdit,
-    editingPath,
-    submitPath,
-    pathInput,
-    pathDraft,
-    setPathDraft,
-    setEditingPath,
     searchInput,
-    crumbs,
-    open,
-    openLeft: (entry: Entry) => open(entry, left),
-    openRight: (entry: Entry) => open(entry, right),
-    previewEntry,
+    openLeft: (entry: Entry) => actions.open(entry, left),
+    openRight: (entry: Entry) => actions.open(entry, right),
     setMenu,
-    transfer,
-    bookmarkPaths,
-    busy,
-    conflict,
-    setConflict,
-    cancelConflict,
-    resolveConflict,
     chosen,
     chosenAll,
     selectedAll,
@@ -339,22 +202,10 @@ export function useAppController() {
     setBatchRename,
     openBatchRename,
     applyBatchRename,
-    clipboard,
-    setClipboard,
     menu,
     setInfo,
     platform,
-    openTags,
-    isRemotePath,
-    run,
-    copy,
-    duplicate,
     notify,
-    recycle,
-    deletePermanently,
-    restoreFromTrash,
-    emptyTrash,
-    inTrash,
     preview,
     setPreview,
     navigatePreview,
@@ -370,7 +221,6 @@ export function useAppController() {
     tagOpen,
     tagInitial,
     setTagOpen,
-    applyTags,
     connectionOpen,
     connectionToEdit,
     settings,
@@ -378,7 +228,6 @@ export function useAppController() {
     setPluginManager,
     terminals,
     workspace,
-    addWorkspace,
     left,
     right,
     split,
