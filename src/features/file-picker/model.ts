@@ -1,9 +1,9 @@
-import { t } from '@/i18n'
+import { getLocale, t, type Locale } from '@/i18n'
 import { kind } from '@/lib/files'
+import type { FilePickerMode } from '@/lib/filePicker'
 import type { Entry } from '@/lib/types'
-import type { GroupKey, SortKey } from './types'
+import type { GroupKey, PickerSort } from './types'
 
-type Sort = { key: SortKey; direction: 'asc' | 'desc' }
 type PickerGroupLabel = { label: string; rank: number }
 export type PickerGroup = { label: string | null; entries: Entry[] }
 
@@ -31,11 +31,12 @@ function pickerGroup(entry: Entry, group: GroupKey, now: number): PickerGroupLab
 export function visiblePickerEntries(
   entries: Entry[],
   filter: string,
-  mode: string,
+  mode: FilePickerMode,
   extensions: string[] | undefined,
-  sort: Sort,
+  sort: PickerSort,
   group: GroupKey,
   now = Date.now(),
+  locale: Locale = getLocale(),
 ): Entry[] {
   const query = filter.trim().toLowerCase()
   const allowedExtensions = mode === 'saveFile' ? [] : extensions || []
@@ -54,17 +55,17 @@ export function visiblePickerEntries(
       const rightGroup = pickerGroup(right, group, now)
       if (leftGroup.rank !== rightGroup.rank) return leftGroup.rank - rightGroup.rank
       if (leftGroup.label !== rightGroup.label)
-        return leftGroup.label.localeCompare(rightGroup.label)
+        return leftGroup.label.localeCompare(rightGroup.label, locale)
     }
     if (left.isDir !== right.isDir) return left.isDir ? -1 : 1
     const result =
       sort.key === 'name'
-        ? left.name.localeCompare(right.name)
+        ? left.name.localeCompare(right.name, locale)
         : sort.key === 'modified'
           ? left.modified - right.modified
           : sort.key === 'size'
             ? left.size - right.size
-            : kind(left).localeCompare(kind(right))
+            : kind(left).localeCompare(kind(right), locale)
     return result * direction
   })
 }

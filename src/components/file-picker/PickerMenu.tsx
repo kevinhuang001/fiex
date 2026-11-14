@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { FolderPlus, LayoutGrid, List, Pencil, RotateCw, Trash2 } from 'lucide-react'
 import type { Entry } from '@/lib/types'
-import type { GroupKey, SortKey } from './types'
+import type { GroupKey, SortKey } from '@/features/file-picker/types'
 
 export interface PickerMenuState {
   x: number

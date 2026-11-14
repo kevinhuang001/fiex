@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { groupPickerEntries, visiblePickerEntries } from './model'
+import { dirname, join } from './types'
 import type { Entry } from '@/lib/types'
 
 function entry(
@@ -56,6 +57,36 @@ describe('visiblePickerEntries', () => {
     ).toEqual(['folder', 'a.txt', 'z.png'])
   })
 
+  it('trims name queries and does not mutate the provider listing', () => {
+    const entries = [entry('z.txt'), entry('Readme.txt'), entry('a.txt')]
+
+    const visible = visiblePickerEntries(entries, '  READ  ', 'openFile', undefined, sort, 'none')
+
+    expect(visible.map((item) => item.name)).toEqual(['Readme.txt'])
+    expect(entries.map((item) => item.name)).toEqual(['z.txt', 'Readme.txt', 'a.txt'])
+  })
+
+  it('applies descending order within each group without reversing group priority', () => {
+    const entries = [
+      entry('beta.txt', { modified: 1 }),
+      entry('zeta.txt', { modified: 10 * 24 * 60 * 60 }),
+      entry('alpha.txt', { modified: 10 * 24 * 60 * 60 }),
+    ]
+    const descending = { key: 'name' as const, direction: 'desc' as const }
+
+    expect(
+      visiblePickerEntries(
+        entries,
+        '',
+        'openFiles',
+        undefined,
+        descending,
+        'modified',
+        10 * 24 * 60 * 60 * 1000,
+      ).map((item) => item.name),
+    ).toEqual(['zeta.txt', 'alpha.txt', 'beta.txt'])
+  })
+
   it('groups entries into date buckets using the supplied clock', () => {
     const now = 10 * 24 * 60 * 60 * 1000
     const entries = [
@@ -91,5 +122,21 @@ describe('visiblePickerEntries', () => {
     expect(groupPickerEntries(result, 'size', 0).map((section) => section.entries.length)).toEqual([
       1, 1, 2, 1,
     ])
+  })
+})
+
+describe('file-picker path helpers', () => {
+  it('keeps parent navigation at filesystem roots', () => {
+    expect(dirname('/')).toBe('/')
+    expect(dirname('C:\\')).toBe('C:\\')
+    expect(dirname('/Users')).toBe('/')
+    expect(dirname('C:\\Users')).toBe('C:\\')
+    expect(dirname('/Users/example/file.txt')).toBe('/Users/example')
+    expect(dirname('C:\\Users\\example\\file.txt')).toBe('C:\\Users\\example')
+    expect(dirname('\\\\server\\share')).toBe('\\\\server\\share')
+  })
+
+  it('joins a selected name without duplicating the separator', () => {
+    expect(join('/Users/example/', 'notes.txt')).toBe('/Users/example/notes.txt')
   })
 })
