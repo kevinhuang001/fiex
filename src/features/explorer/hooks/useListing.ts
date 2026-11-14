@@ -13,6 +13,7 @@ import { useDirectorySnapshot } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import {
   directorySnapshotServices,
+  entryDecorationServices,
   listingLocationServices,
   listingSearchServices,
 } from '@/features/explorer/services/listingAdapters'
@@ -55,6 +56,7 @@ export function useListing(
     enabled: enabled && (Boolean(query) || !native),
     query,
     refresh: searchRefresh,
+    services: entryDecorationServices,
   })
   const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
@@ -74,7 +76,7 @@ export function useListing(
     prefs,
     nav,
     services: listingLocationServices,
-    startOverride,
+    ...(startOverride === undefined ? {} : { startOverride }),
   })
   const { searching, searchStats } = useListingSearch({
     enabled,

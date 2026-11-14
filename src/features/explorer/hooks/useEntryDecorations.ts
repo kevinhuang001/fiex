@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { getLocale } from '@/i18n'
-import { call } from '@/lib/api'
-import { publishPresentationIcons } from '@/lib/decorationIcons'
-import { cachedPresentations, cachePresentations } from '@/lib/entryPresentation'
 import type { Entry, EntryDecoration } from '@/lib/types'
+
+export interface EntryDecorationServices {
+  getLocale: () => string
+  load: (directory: string, entries: Entry[], includePlugins: boolean) => Promise<EntryDecoration[]>
+  cache: (entries: Entry[], decorations: EntryDecoration[]) => void
+  publishIcons: (entries: Entry[]) => void
+  cached: (entries: Entry[]) => Record<string, EntryDecoration>
+}
 
 /** Receive the unified Core decoration DTO. Search requests builtin providers
  * only; stale responses never paint onto a different listing. */
@@ -13,12 +17,14 @@ export function useEntryDecorations({
   enabled,
   query,
   refresh,
+  services,
 }: {
   entries: Entry[]
   path: string
   enabled: boolean
   query: string
   refresh: number
+  services: EntryDecorationServices
 }) {
   const [snapshot, setSnapshot] = useState<{
     entries: Entry[]
@@ -26,55 +32,40 @@ export function useEntryDecorations({
     values: Record<string, EntryDecoration>
   }>()
   const request = useRef(0)
-  const locale = getLocale()
+  const locale = services.getLocale()
   const key = JSON.stringify([path, Boolean(query), locale])
   const decorations =
     snapshot?.entries === entries && snapshot.key === key
       ? snapshot.values
-      : cachedPresentations(entries)
+      : services.cached(entries)
 
   useEffect(() => {
     if (!enabled || !path || !entries.length) return
-    const generation = ++request.current
+    const requestRef = request
+    const generation = ++requestRef.current
     const timer = window.setTimeout(() => {
-      void call('plugin_decorations', {
-        directory: path,
-        entries: entries.map((entry) => ({
-          path: entry.path,
-          name: entry.name,
-          isDir: entry.isDir,
-          extension: entry.extension,
-          mime: entry.mime,
-          allowedOps: entry.allowedOps || [],
-          tags: entry.tags,
-          sync: entry.sync,
-          hasCache: entry.hasCache || false,
-          pinned: entry.pinned || false,
-          uploaded: entry.uploaded || false,
-          linkTarget: entry.linkTarget,
-        })),
-        includePlugins: !query,
-      })
+      void services
+        .load(path, entries, !query)
         .then((values) => {
-          if (generation !== request.current) return
-          cachePresentations(entries, values)
-          publishPresentationIcons(entries)
+          if (generation !== requestRef.current) return
+          services.cache(entries, values)
+          services.publishIcons(entries)
           setSnapshot({
             entries,
             key,
-            values: cachedPresentations(entries),
+            values: services.cached(entries),
           })
         })
         .catch(() => {
           // Keep the last complete presentation if revalidation fails.
-          if (generation === request.current)
-            setSnapshot({ entries, key, values: cachedPresentations(entries) })
+          if (generation === requestRef.current)
+            setSnapshot({ entries, key, values: services.cached(entries) })
         })
     }, 0)
     return () => {
       window.clearTimeout(timer)
-      ++request.current
+      ++requestRef.current
     }
-  }, [enabled, path, entries, query, refresh, locale])
+  }, [enabled, path, entries, query, refresh, locale, key, services])
   return decorations
 }

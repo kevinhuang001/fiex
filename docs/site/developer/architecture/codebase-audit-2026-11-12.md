@@ -135,3 +135,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P4-02 PR #222：** 将流式搜索 hook 的搜索启动、取消和本地化提示改为由 `useListing` 组合层注入；去掉 hook 对通用 IPC、i18n 及完整 Navigation hook 类型的依赖，并将其加入严格类型边界。搜索代次与取消顺序继续由已测试的 `searchLifecycle` 模型管理，SEARCH-01 与 ARCH-01 追溯同步更新。
 
 **P4-02 PR #223：** 将位置刷新、启动路径解析和“上次目录”存储改为由组合层注入，位置 hook 仅负责生命周期和异步取消；用窄化的导航接口替代完整 Navigation hook 类型，并纳入严格类型边界。适配器移入 `features/explorer/services/listingAdapters.ts`，使 300 行门禁继续保持零例外；UI-NAV-03 与 ARCH-01 追溯同步更新。
+
+**P4-02 PR #224：** 将装饰查询、Locale、呈现缓存和图标通知作为服务注入 `useEntryDecorations`，并把该 hook 纳入严格类型边界；Core 的装饰请求字段映射留在组合适配层。补齐 effect 的请求代次清理与 key 依赖，消除该 hook 的 React Hooks lint 警告。完整 `useListing` 组合 hook 仍未纳入 strict boundary，因为它的 API 依赖会卷入 E2E fixture、Terminal 和设置界面中大量未迁移的严格类型错误。

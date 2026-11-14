@@ -1,8 +1,13 @@
-import { t } from '@/i18n'
+import { getLocale, t } from '@/i18n'
 import { call, native, search } from '@/lib/api'
-import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
+import {
+  cachePresentationPatch,
+  cachePresentations,
+  cachedPresentations,
+} from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { openDirectoryStream } from '@/lib/listing'
+import type { Entry, EntryDecoration } from '@/lib/types'
 
 /** Provider adapters stay at the feature composition boundary. */
 export const directorySnapshotServices = {
@@ -18,6 +23,32 @@ export const listingSearchServices = {
   search,
   truncatedMessage: () => t(' · 已达到 500 项上限，请缩小范围'),
   skippedMessage: (count: number) => t(' · {0} 个位置无法访问', count),
+}
+
+export const entryDecorationServices = {
+  getLocale,
+  load: (directory: string, entries: Entry[], includePlugins: boolean) =>
+    call('plugin_decorations', {
+      directory,
+      entries: entries.map((entry) => ({
+        path: entry.path,
+        name: entry.name,
+        isDir: entry.isDir,
+        extension: entry.extension,
+        mime: entry.mime,
+        allowedOps: entry.allowedOps || [],
+        tags: entry.tags,
+        sync: entry.sync,
+        hasCache: entry.hasCache || false,
+        pinned: entry.pinned || false,
+        uploaded: entry.uploaded || false,
+        linkTarget: entry.linkTarget,
+      })),
+      includePlugins,
+    }),
+  cache: cachePresentations,
+  publishIcons: (entries: Entry[]) => publishPresentationIcons(entries),
+  cached: (entries: Entry[]): Record<string, EntryDecoration> => cachedPresentations(entries),
 }
 
 export const listingLocationServices = {
