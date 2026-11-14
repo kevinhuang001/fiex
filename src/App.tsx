@@ -10,6 +10,7 @@ import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import {
   explorerPathBarProps,
   explorerDialogProps,
+  explorerContextMenuProps,
   explorerStatusBarProps,
   explorerTabsProps,
 } from '@/components/explorer/appShellBindings'
@@ -258,7 +259,7 @@ export default function App() {
           </strong>
         </div>
       )}
-      <FileContextMenu {...app} />
+      <FileContextMenu {...explorerContextMenuProps(app)} />
       <BatchRenameDialog
         entries={app.batchRename}
         onClose={() => app.setBatchRename(null)}
