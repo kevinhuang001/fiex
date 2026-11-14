@@ -1,7 +1,8 @@
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { isVirtualResource } from '@/lib/files'
-import type { AppController } from '@/hooks/useAppController'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type { Ide, Preferences, Terminal } from '@/lib/types'
 import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
 import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react/dist/csr/CaretLeft'
 import { CaretRightIcon as ChevronRight } from '@phosphor-icons/react/dist/csr/CaretRight'
@@ -13,12 +14,33 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useRefreshIndicator } from './toolbar/useRefreshIndicator'
 import { useActivity } from '@/hooks/useActivity'
 import { PinnedTools } from './toolbar/PinnedTools'
 import { ToolbarPickerMenu, useToolbarPicker } from './toolbar/ToolbarMenus'
 import { GroupControl, SortControl, ViewSwitch } from './toolbar/ViewControls'
 import { useToolbarOrder } from './toolbar/useToolbarOrder'
 import { orderedToolbarKeys, toolbarItemStyle } from './toolbar/layout'
+
+export interface ExplorerToolbarProps {
+  sidebar: boolean
+  setSidebar: (sidebar: boolean) => void
+  x: Explorer
+  displayName: (path: string) => string
+  prefs: Preferences
+  update: (patch: Partial<Preferences>) => void
+  hint: (action: 'newFolder') => string
+  create: () => void
+  ides: Ide[]
+  terminals: Terminal[]
+  openIde: () => void
+  terminal: () => void
+  setSettings: (open: boolean) => void
+  setPluginManager: (open: boolean) => void
+  refreshAll: () => void
+  split: boolean
+  onToggleSplit: () => void
+}
 
 export function ExplorerToolbar({
   sidebar,
@@ -38,35 +60,10 @@ export function ExplorerToolbar({
   refreshAll,
   split,
   onToggleSplit,
-}: Pick<
-  AppController,
-  | 'sidebar'
-  | 'setSidebar'
-  | 'x'
-  | 'displayName'
-  | 'prefs'
-  | 'update'
-  | 'hint'
-  | 'create'
-  | 'ides'
-  | 'terminals'
-  | 'openIde'
-  | 'terminal'
-  | 'setSettings'
-  | 'refreshAll'
-  | 'setSettings'
-  | 'setPluginManager'
-> & { split: boolean; onToggleSplit: () => void }) {
+}: ExplorerToolbarProps) {
   const activity = useActivity()
   const hostToolsDisabled = isVirtualResource(x.path)
-  const [refreshing, setRefreshing] = useState(false)
-  const refreshTimer = useRef<number | null>(null)
-  useEffect(
-    () => () => {
-      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
-    },
-    [],
-  )
+  const { refreshing, refresh } = useRefreshIndicator(refreshAll)
   const { picker, pickerRef, pickerPosition, openPicker, closePicker } = useToolbarPicker()
   const leftDefaults = ['group', 'sort', 'newFolder', 'ide', 'terminal']
   const rightDefaults = ['refresh', 'split', 'activity']
@@ -152,12 +149,7 @@ export function ExplorerToolbar({
           title={t('刷新')}
           aria-label={t('刷新')}
           aria-busy={refreshing}
-          onClick={() => {
-            refreshAll()
-            setRefreshing(true)
-            if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
-            refreshTimer.current = window.setTimeout(() => setRefreshing(false), 950)
-          }}
+          onClick={refresh}
         >
           <RefreshCw
             weight="regular"

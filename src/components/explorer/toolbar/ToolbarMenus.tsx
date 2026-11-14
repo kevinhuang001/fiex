@@ -3,9 +3,8 @@ import { Action, Label, Menu } from '@/components/Menus'
 import * as D from '@/components/ui/dropdown-menu'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { MenuLayer } from '@/components/ui/MenuLayer'
-import type { AppController } from '@/hooks/useAppController'
 import type { PluginContribution, PluginInfo } from '@/lib/plugins'
-import type { Ide, Terminal } from '@/lib/types'
+import type { Ide, Preferences, Terminal } from '@/lib/types'
 import { PuzzlePieceIcon as Puzzle } from '@phosphor-icons/react/dist/csr/PuzzlePiece'
 import { Pin, Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
@@ -48,8 +47,8 @@ type ToolbarPickerMenuProps = {
   pickerRef: RefObject<HTMLDivElement | null>
   pickerPosition: { left: number; top: number }
   closePicker: () => void
-  prefs: Pick<AppController['prefs'], 'ide' | 'terminal'>
-  update: AppController['update']
+  prefs: Pick<Preferences, 'ide' | 'terminal'>
+  update: (patch: Partial<Preferences>) => void
   ides: Ide[]
   terminals: Terminal[]
 }

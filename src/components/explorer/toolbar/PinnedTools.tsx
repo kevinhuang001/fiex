@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
-import type { AppController } from '@/hooks/useAppController'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type { Preferences } from '@/lib/types'
 import { usePluginCatalog, type PluginContribution, type PluginInfo } from '@/lib/plugins'
 import { call } from '@/lib/api'
 import { OPEN_PLUGIN_PANEL } from '@/components/plugins/PluginPanelHost'
@@ -10,10 +11,12 @@ import { PluginMenu, type PluginToolEntry } from './ToolbarMenus'
 import { pluginIcon, pluginKey } from './pluginTools'
 import { usePinnedDrag } from './usePinnedDrag'
 
+const EMPTY_PINNED_KEYS: string[] = []
+
 type PinnedToolsProps = {
-  prefs: Pick<AppController['prefs'], 'pinnedPluginTools'>
-  update: AppController['update']
-  x: Pick<AppController['x'], 'selected' | 'path' | 'setError'>
+  prefs: Pick<Preferences, 'pinnedPluginTools'>
+  update: (patch: Partial<Preferences>) => void
+  x: Pick<Explorer, 'selected' | 'path' | 'setError'>
   onManagePlugins: () => void
 }
 
@@ -22,7 +25,7 @@ type PinnedToolsProps = {
 export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsProps) {
   const plugins = usePluginCatalog()
   const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
-  const pinnedKeys = prefs.pinnedPluginTools || []
+  const pinnedKeys = prefs.pinnedPluginTools || EMPTY_PINNED_KEYS
   const availableTools: PluginToolEntry[] = plugins.flatMap((plugin) =>
     plugin.enabled && plugin.extensions?.toolbar
       ? [{ plugin, tool: plugin.extensions.toolbar }]

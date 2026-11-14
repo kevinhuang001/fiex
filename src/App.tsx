@@ -144,11 +144,9 @@ export default function App() {
         <ExplorerTabs {...explorerTabsProps(app, tabName)} />
         {!fullView && (
           <ExplorerToolbar
-            {...app}
-            prefs={activePrefs}
-            update={updateToolbarView}
-            split={app.split}
-            onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
+            {...explorerToolbarProps(app, activePrefs, updateToolbarView, () =>
+              app.split ? app.closePane() : app.openPane(),
+            )}
           />
         )}
         {!fullView && <ExplorerPathBar {...explorerPathBarProps(app)} />}
