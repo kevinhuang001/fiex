@@ -1,4 +1,4 @@
-import type { AppController } from '@/hooks/useAppController'
+import type { Preferences } from '@/lib/types'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 
 type PinBox = { left: number; top: number; width: number; height: number; center: number }
@@ -23,7 +23,7 @@ function reorder<T>(items: T[], from: number, to: number) {
 
 type UsePinnedDragOptions = {
   pinnedKeys: string[] | undefined
-  update: AppController['update']
+  update: (patch: Partial<Preferences>) => void
 }
 
 /** Pointer-following reorder state for the pinned plugin tools. The strip's
