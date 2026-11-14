@@ -33,6 +33,7 @@ import { parseSystemProxyInfo } from './ipcValidation/systemProxy'
 import { parseRecentNavigationTarget } from './ipcValidation/recentNavigation'
 import { parseDropPlan } from './ipcValidation/dropPlan'
 import { parseSearchProviders } from './ipcValidation/searchProviders'
+import { parseOpenWithPickerResponse } from './ipcValidation/openWithPicker'
 
 export * from './ipcValidation/json'
 export * from './ipcValidation/entries'
@@ -44,6 +45,7 @@ export * from './ipcValidation/contextMenus'
 export * from './ipcValidation/decorations'
 export * from './ipcValidation/providers'
 export * from './ipcValidation/previews'
+export * from './ipcValidation/openWithPicker'
 
 export function decodeDynamicIpcResult(
   command: string,
@@ -113,6 +115,7 @@ export function decodeDynamicIpcResult(
   if (command === 'recent_navigation_target') return parseRecentNavigationTarget(value)
   if (command === 'internal_drop') return parseDropPlan(value)
   if (command === 'search_providers') return parseSearchProviders(value)
+  if (command === 'open_with_picker_candidates') return parseOpenWithPickerResponse(value)
   const simpleResult = decodeSimpleIpcResult(command, value)
   if (simpleResult) return simpleResult.value
   const simpleCollectionResult = decodeSimpleCollectionIpcResult(command, value)
@@ -121,5 +124,5 @@ export function decodeDynamicIpcResult(
   if (runtimeCatalogResult) return runtimeCatalogResult.value
   const remoteConnectionResult = decodeRemoteConnectionIpcResult(command, value)
   if (remoteConnectionResult) return remoteConnectionResult.value
-  return value === undefined ? undefined : parseJsonValue(value)
+  throw new TypeError(`No IPC result decoder registered for ${command}`)
 }

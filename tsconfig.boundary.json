@@ -6,6 +6,8 @@
   },
   "include": [
     "src/lib/ipcValidation/json.ts",
+    "src/lib/ipcValidation/openWithPicker.ts",
+    "src/lib/openWithPicker.ts",
     "src/lib/ipcValidation/info.ts",
     "src/features/explorer/model/fileNameDisplay.ts",
     "src/features/explorer/model/folderView.ts",

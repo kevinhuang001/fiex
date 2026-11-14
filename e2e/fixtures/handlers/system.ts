@@ -165,8 +165,8 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       return {
         sessionId: 'open-with-picker-fixture-session',
         items: [
-          { id: 'openWith-fixture-markdown', name: 'Markdown Viewer' },
-          { id: 'openWith-fixture-text', name: 'Plain Text Editor' },
+          { id: 'openWith-fixture-markdown', name: 'Markdown Viewer', iconSource: null },
+          { id: 'openWith-fixture-text', name: 'Plain Text Editor', iconSource: null },
         ],
       }
     case 'open_with_picker_execute':

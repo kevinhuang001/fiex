@@ -1,6 +1,6 @@
 import type { JsonValue } from '../../sdk/ui/src/index'
 import type { CoreMenu, MenuChildItem } from './coreMenu'
-import type { PickerResponse } from '@/components/explorer/context-menu/OpenWithPicker'
+import type { OpenWithPickerResponse } from './openWithPicker'
 import type { InfoFieldDelta, InfoOpenResult } from '@/lib/ipcValidation/infoTypes'
 import type { PluginMenu } from './pluginMenu'
 import type { Catalog } from '@/components/settings/ProviderSettings'
@@ -99,7 +99,7 @@ export interface TauriCommandResults {
   open_in_ide: void
   open_path: void
   open_terminal: void
-  open_with_picker_candidates: PickerResponse
+  open_with_picker_candidates: OpenWithPickerResponse
   open_with_picker_execute: void
   platform: Platform
   plugin_activate: void
