@@ -10,10 +10,29 @@ pub(super) fn stream_snapshot(
     path: &std::path::Path,
     size: u64,
 ) -> Result<Value, String> {
+    stream_snapshot_with(
+        plugin,
+        mount_id,
+        stream,
+        path,
+        size,
+        |plugin, method, params| crate::plugins::host::global().invoke(plugin, method, params),
+    )
+}
+
+fn stream_snapshot_with(
+    plugin: &str,
+    mount_id: &str,
+    stream: &str,
+    path: &std::path::Path,
+    size: u64,
+    invoke: impl FnMut(&str, &str, Value) -> Result<Value, String>,
+) -> Result<Value, String> {
     use base64::Engine;
     use std::io::Read;
 
     const CHUNK: usize = 256 * 1024;
+    let mut invoke = invoke;
     let mut snapshot = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut buffer = vec![0u8; CHUNK];
     let mut offset = 0u64;
@@ -23,7 +42,7 @@ pub(super) fn stream_snapshot(
             break;
         }
         let base64 = base64::engine::general_purpose::STANDARD.encode(&buffer[..read]);
-        let response = crate::plugins::host::global().invoke(
+        let response = invoke(
             plugin,
             "vfs.writeStream",
             json!({
@@ -45,7 +64,7 @@ pub(super) fn stream_snapshot(
     if offset != size {
         return Err("upload snapshot changed during transfer".into());
     }
-    crate::plugins::host::global().invoke(
+    invoke(
         plugin,
         "vfs.commit",
         json!({"mountId": mount_id, "streamId": stream}),
@@ -100,11 +119,19 @@ pub(super) fn upload(
         .and_then(Value::as_str)
         .ok_or("provider returned no write stream")?
         .to_string();
+    let abort = |plugin: &str, mount_id: &str, stream: &str| {
+        let _ = crate::plugins::host::global().invoke(
+            plugin,
+            "vfs.abort",
+            json!({"mountId": mount_id, "streamId": stream}),
+        );
+    };
     let mut lease = WriteLease {
         plugin: &plugin,
         mount_id: &conn.mount_id,
         stream: &stream_id,
         finished: false,
+        abort: &abort,
     };
     let committed = stream_snapshot(&plugin, &conn.mount_id, &stream_id, snapshot.path(), size)?;
     let revision = committed["revision"]
@@ -127,4 +154,76 @@ pub(super) fn upload(
     entry.uploaded = true;
     save_meta(conn, &meta)?;
     Ok(revision)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_uploads_chunks_in_order_and_commits_after_all_bytes() {
+        use base64::Engine;
+
+        const CHUNK: usize = 256 * 1024;
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let bytes = vec![b'x'; CHUNK + 3];
+        fs::write(file.path(), &bytes).unwrap();
+        let mut calls = Vec::new();
+        let result = stream_snapshot_with(
+            "plugin",
+            "mount",
+            "stream",
+            file.path(),
+            bytes.len() as u64,
+            |_, method, params| {
+                calls.push((method.to_string(), params.clone()));
+                if method == "vfs.writeStream" {
+                    let chunk = base64::engine::general_purpose::STANDARD
+                        .decode(params["base64"].as_str().unwrap())
+                        .unwrap();
+                    Ok(json!({"written": chunk.len()}))
+                } else {
+                    Ok(json!({"revision":"new-revision"}))
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result["revision"], "new-revision");
+        assert_eq!(calls.len(), 3);
+        assert_eq!(calls[0].0, "vfs.writeStream");
+        assert_eq!(calls[0].1["offset"], 0);
+        assert_eq!(calls[1].0, "vfs.writeStream");
+        assert_eq!(calls[1].1["offset"], CHUNK as u64);
+        assert_eq!(calls[2].0, "vfs.commit");
+    }
+
+    #[test]
+    fn failed_or_short_chunk_never_commits() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(file.path(), b"snapshot").unwrap();
+
+        for (response, expected) in [
+            (Err("offline".to_string()), "offline"),
+            (
+                Ok(json!({"written": 1})),
+                "provider acknowledged a short write",
+            ),
+        ] {
+            let mut methods = Vec::new();
+            let result = stream_snapshot_with(
+                "plugin",
+                "mount",
+                "stream",
+                file.path(),
+                8,
+                |_, method, _| {
+                    methods.push(method.to_string());
+                    response.clone()
+                },
+            );
+            assert_eq!(result.unwrap_err(), expected);
+            assert_eq!(methods, ["vfs.writeStream"]);
+        }
+    }
 }
