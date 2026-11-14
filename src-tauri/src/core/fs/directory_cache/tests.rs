@@ -153,6 +153,33 @@ fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
 }
 
 #[test]
+fn rollback_invalidation_rejects_stale_directory_cache_writes() {
+    let path = "applications://folder/cache-test-rollback-revision";
+    assert!(enabled(path));
+    let child = "applications://app/cache-test-rollback-revision-entry";
+    let revision_before_change = super::super::changes::revision(path);
+    super::super::mutation_overlay::upsert(path, item(child, "entry", false));
+    let revision_after_change = super::super::changes::revision(path);
+    assert!(revision_after_change > revision_before_change);
+
+    store_at_revision(path, &listing(path, vec![]), revision_after_change);
+    assert_eq!(read(path, true, &[]).unwrap().unwrap().entries.len(), 1);
+
+    invalidate_directory(path);
+    let revision_after_rollback = super::super::changes::revision(path);
+    assert!(revision_after_rollback > revision_after_change);
+    assert!(read(path, true, &[]).unwrap().is_none());
+
+    // A list started before rollback cannot repopulate the invalidated cache.
+    store_at_revision(path, &listing(path, vec![]), revision_after_change);
+    assert!(read(path, true, &[]).unwrap().is_none());
+
+    store_at_revision(path, &listing(path, vec![]), revision_after_rollback);
+    assert!(read(path, true, &[]).unwrap().unwrap().entries.is_empty());
+    drop_subtree(path);
+}
+
+#[test]
 fn presentation_snapshot_requires_matching_entry_metadata() {
     let path = "applications://folder/cache-test-presentation";
     let value = listing(

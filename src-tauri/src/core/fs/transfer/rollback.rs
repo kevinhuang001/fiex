@@ -9,6 +9,22 @@ use super::{
 use crate::core::fs::ResourceBroker;
 use std::io::{Read, Seek, SeekFrom, Write};
 
+#[cfg(test)]
+thread_local! {
+    static RECOVERY_BASE_FOR_TEST: std::cell::RefCell<Option<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_recovery_base_for_test(path: std::path::PathBuf) {
+    RECOVERY_BASE_FOR_TEST.with(|base| *base.borrow_mut() = Some(path));
+}
+
+#[cfg(test)]
+pub(crate) fn clear_recovery_base_for_test() {
+    RECOVERY_BASE_FOR_TEST.with(|base| *base.borrow_mut() = None);
+}
+
 pub(super) struct UndoLog {
     backups: Vec<Option<tempfile::NamedTempFile>>,
     affected: Vec<(usize, Option<serde_json::Value>)>,
@@ -113,10 +129,7 @@ impl UndoLog {
     /// Retain original bytes when an offline target prevents rollback. No
     /// saved scope is replayed automatically; recovery needs fresh selection.
     pub fn preserve(&mut self, steps: &[Step]) -> Result<std::path::PathBuf, String> {
-        let base = dirs::data_local_dir()
-            .ok_or("recovery directory unavailable")?
-            .join("fiex")
-            .join("transfer-recovery");
+        let base = recovery_base()?;
         std::fs::create_dir_all(&base).map_err(|e| e.to_string())?;
         let directory = tempfile::Builder::new()
             .prefix("transfer-")
@@ -180,4 +193,15 @@ impl UndoLog {
         writer.commit()?;
         Ok(())
     }
+}
+
+fn recovery_base() -> Result<std::path::PathBuf, String> {
+    #[cfg(test)]
+    if let Some(path) = RECOVERY_BASE_FOR_TEST.with(|base| base.borrow().clone()) {
+        return Ok(path);
+    }
+    Ok(dirs::data_local_dir()
+        .ok_or("recovery directory unavailable")?
+        .join("fiex")
+        .join("transfer-recovery"))
 }

@@ -19,6 +19,9 @@ mod model;
 mod planner;
 mod rollback;
 
+#[cfg(test)]
+pub(crate) use rollback::{clear_recovery_base_for_test, set_recovery_base_for_test};
+
 use planner::plan;
 
 #[allow(clippy::too_many_arguments)]

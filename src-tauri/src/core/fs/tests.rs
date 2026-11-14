@@ -2,6 +2,7 @@ use super::*;
 use serde_json::json;
 
 mod references;
+mod transfer_recovery;
 mod transfers;
 fn binding(dir: &std::path::Path, path: &std::path::Path) -> (Scope, Value) {
     let mut scope = Scope::selected(dir, &[path.to_path_buf()]).unwrap();

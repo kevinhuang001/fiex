@@ -11,21 +11,33 @@ use serde_json::{Value, to_value};
 
 #[cfg(test)]
 thread_local! {
-    static NEXT_PROVIDER_WRITE_FAILURE: std::cell::RefCell<Option<String>> =
-        const { std::cell::RefCell::new(None) };
+    static NEXT_PROVIDER_WRITE_FAILURES: std::cell::RefCell<std::collections::VecDeque<String>> =
+        const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
 }
 
 #[cfg(test)]
 pub(crate) fn fail_next_provider_write_for_test(path: &str) {
-    NEXT_PROVIDER_WRITE_FAILURE.with(|failure| *failure.borrow_mut() = Some(path.to_owned()));
+    fail_provider_writes_for_test(&[path.to_owned()]);
+}
+
+#[cfg(test)]
+pub(crate) fn fail_provider_writes_for_test(paths: &[String]) {
+    NEXT_PROVIDER_WRITE_FAILURES.with(|failures| {
+        *failures.borrow_mut() = paths.iter().cloned().collect();
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn clear_provider_write_failures_for_test() {
+    NEXT_PROVIDER_WRITE_FAILURES.with(|failures| failures.borrow_mut().clear());
 }
 
 #[cfg(test)]
 fn injected_write_failure(resource: &ResourceBroker) -> Option<FsWrite> {
-    let should_fail = NEXT_PROVIDER_WRITE_FAILURE.with(|failure| {
-        let mut failure = failure.borrow_mut();
-        if failure.as_deref() == Some(resource.path.as_str()) {
-            failure.take();
+    let should_fail = NEXT_PROVIDER_WRITE_FAILURES.with(|failures| {
+        let mut failures = failures.borrow_mut();
+        if failures.front().is_some_and(|path| path == &resource.path) {
+            failures.pop_front();
             true
         } else {
             false
