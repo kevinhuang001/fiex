@@ -1,5 +1,5 @@
 //! Bounded single-flight cache for preflight availability queries.
-use crate::core::fs::{ResourceBroker, changes};
+use crate::core::fs::{FsError, FsErrorKind, ResourceBroker, changes};
 use crate::infrastructure::cache::lru::LruMap;
 use crate::plugin_sdk::filesystem::{
     CreateFilePreflight, CreateFolderPreflight, PreflightOperation, PreflightPhase,
@@ -22,6 +22,8 @@ struct AvailabilityCacheKey {
 
 enum AvailabilityStatus {
     Pending,
+    // The last provider call failed transiently; the next caller retries.
+    Retry,
     Ready { created: Instant, allowed: bool },
 }
 
@@ -53,98 +55,9 @@ pub(crate) fn clear_availability_cache() {
 
 impl ResourceBroker {
     pub(crate) fn review_availability_cached(&self, request: &PreflightRequest) -> bool {
-        if request.phase != PreflightPhase::Availability || request.validate().is_err() {
-            return false;
-        }
-        let key = AvailabilityCacheKey {
-            path: self.path.clone(),
-            resource_revision: changes::revision(&self.path),
-            request: request.clone(),
-        };
-        let (cell, owns_check, cache_full) = match availability_cache().lock() {
-            Ok(mut cache) => {
-                if let Some(cell) = cache.get_mut(&key) {
-                    (Some(Arc::clone(cell)), false, false)
-                } else {
-                    while cache.len() >= AVAILABILITY_CACHE_LIMIT {
-                        let evicted = cache
-                            .pop_lru_where(|_, cell| {
-                                let status = cell
-                                    .status
-                                    .lock()
-                                    .unwrap_or_else(|error| error.into_inner());
-                                matches!(&*status, AvailabilityStatus::Ready { .. })
-                            })
-                            .is_some();
-                        if !evicted {
-                            break;
-                        }
-                    }
-                    if cache.len() >= AVAILABILITY_CACHE_LIMIT {
-                        (None, false, true)
-                    } else {
-                        let cell = Arc::new(AvailabilityCell::pending());
-                        let _ = cache.insert(key, Arc::clone(&cell));
-                        (Some(cell), true, false)
-                    }
-                }
-            }
-            Err(_) => (None, false, true),
-        };
-
-        if cache_full {
-            let started = Instant::now();
-            let allowed = self.check_preflight(None, request).is_ok();
-            record_availability(request, false, started.elapsed(), allowed, &self.path);
-            return allowed;
-        }
-        let Some(cell) = cell else {
-            return self.check_preflight(None, request).is_ok();
-        };
-
-        if !owns_check {
-            let mut status = cell
-                .status
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            let cached = loop {
-                match &*status {
-                    AvailabilityStatus::Pending => {
-                        status = cell
-                            .ready
-                            .wait(status)
-                            .unwrap_or_else(|error| error.into_inner());
-                    }
-                    AvailabilityStatus::Ready { created, allowed }
-                        if created.elapsed() < AVAILABILITY_CACHE_TTL =>
-                    {
-                        break Some(*allowed);
-                    }
-                    AvailabilityStatus::Ready { .. } => {
-                        *status = AvailabilityStatus::Pending;
-                        break None;
-                    }
-                }
-            };
-            if let Some(allowed) = cached {
-                drop(status);
-                record_availability(request, true, Duration::ZERO, allowed, &self.path);
-                return allowed;
-            }
-        }
-
-        let started = Instant::now();
-        let allowed = self.check_preflight(None, request).is_ok();
-        *cell
-            .status
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = AvailabilityStatus::Ready {
-            created: Instant::now(),
-            allowed,
-        };
-        cell.ready.notify_all();
-        record_availability(request, false, started.elapsed(), allowed, &self.path);
-        allowed
+        review_cached(&self.path, changes::revision(&self.path), request, || {
+            self.check_preflight(None, request)
+        })
     }
 
     pub(crate) fn review_create_available(&self, folder: bool) -> bool {
@@ -194,6 +107,131 @@ impl ResourceBroker {
     }
 }
 
+fn review_cached(
+    path: &str,
+    resource_revision: u64,
+    request: &PreflightRequest,
+    check: impl Fn() -> Result<(), FsError>,
+) -> bool {
+    if request.phase != PreflightPhase::Availability || request.validate().is_err() {
+        return false;
+    }
+    let key = AvailabilityCacheKey {
+        path: path.to_owned(),
+        resource_revision,
+        request: request.clone(),
+    };
+    let (cell, owns_check, cache_full) = match availability_cache().lock() {
+        Ok(mut cache) => {
+            if let Some(cell) = cache.get_mut(&key) {
+                (Some(Arc::clone(cell)), false, false)
+            } else {
+                while cache.len() >= AVAILABILITY_CACHE_LIMIT {
+                    let evicted = cache
+                        .pop_lru_where(|_, cell| {
+                            let status = cell
+                                .status
+                                .lock()
+                                .unwrap_or_else(|error| error.into_inner());
+                            matches!(
+                                &*status,
+                                AvailabilityStatus::Retry | AvailabilityStatus::Ready { .. }
+                            )
+                        })
+                        .is_some();
+                    if !evicted {
+                        break;
+                    }
+                }
+                if cache.len() >= AVAILABILITY_CACHE_LIMIT {
+                    (None, false, true)
+                } else {
+                    let cell = Arc::new(AvailabilityCell::pending());
+                    let _ = cache.insert(key, Arc::clone(&cell));
+                    (Some(cell), true, false)
+                }
+            }
+        }
+        Err(_) => (None, false, true),
+    };
+
+    if cache_full {
+        let started = Instant::now();
+        let allowed = check().is_ok();
+        record_availability(request, false, started.elapsed(), allowed, path);
+        return allowed;
+    }
+    let Some(cell) = cell else {
+        return check().is_ok();
+    };
+
+    if !owns_check {
+        let mut status = cell
+            .status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let cached = loop {
+            match &*status {
+                AvailabilityStatus::Pending => {
+                    status = cell
+                        .ready
+                        .wait(status)
+                        .unwrap_or_else(|error| error.into_inner());
+                }
+                AvailabilityStatus::Retry => {
+                    *status = AvailabilityStatus::Pending;
+                    break None;
+                }
+                AvailabilityStatus::Ready { created, allowed }
+                    if created.elapsed() < AVAILABILITY_CACHE_TTL =>
+                {
+                    break Some(*allowed);
+                }
+                AvailabilityStatus::Ready { .. } => {
+                    *status = AvailabilityStatus::Pending;
+                    break None;
+                }
+            }
+        };
+        if let Some(allowed) = cached {
+            drop(status);
+            record_availability(request, true, Duration::ZERO, allowed, path);
+            return allowed;
+        }
+    }
+
+    let started = Instant::now();
+    let result = check();
+    let allowed = result.is_ok();
+    let next_status = match result {
+        Ok(()) => AvailabilityStatus::Ready {
+            created: Instant::now(),
+            allowed: true,
+        },
+        Err(error) if is_retryable(&error) => AvailabilityStatus::Retry,
+        Err(_) => AvailabilityStatus::Ready {
+            created: Instant::now(),
+            allowed: false,
+        },
+    };
+    *cell
+        .status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = next_status;
+    cell.ready.notify_all();
+    record_availability(request, false, started.elapsed(), allowed, path);
+    allowed
+}
+
+fn is_retryable(error: &FsError) -> bool {
+    // Cache policy denials, but never let a disconnected or unhealthy provider
+    // leave the UI disabled for the full availability TTL after it recovers.
+    matches!(
+        error.kind,
+        FsErrorKind::Offline | FsErrorKind::MountNotFound | FsErrorKind::Internal
+    )
+}
+
 fn record_availability(
     request: &PreflightRequest,
     cache_hit: bool,
@@ -226,3 +264,6 @@ fn record_availability(
         &event.to_string(),
     );
 }
+
+#[cfg(test)]
+mod tests;
