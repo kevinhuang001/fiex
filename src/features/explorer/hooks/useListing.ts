@@ -11,10 +11,7 @@ import { useListingSearch } from './useListingSearch'
 import { attachDirectoryWatch } from '@/features/explorer/model/directoryWatch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
 import { canRenameEntry, renameSingleEntry } from '@/features/explorer/operations/rename'
-import {
-  useDirectorySnapshot,
-  type DirectorySnapshotServices,
-} from './useDirectorySnapshot'
+import { useDirectorySnapshot, type DirectorySnapshotServices } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
@@ -37,13 +34,7 @@ export function useListing(
   pane = 'left',
   startOverride?: string,
 ) {
-  const {
-    path,
-    query,
-    setSelected,
-    setRenaming,
-    setError,
-  } = nav
+  const { path, query, setSelected, setRenaming, setError } = nav
   const viewKey = JSON.stringify([path, prefs.hidden, prefs.displayIgnore])
   const currentViewKeyRef = useRef(viewKey)
   currentViewKeyRef.current = viewKey
