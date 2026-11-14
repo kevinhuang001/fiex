@@ -65,6 +65,8 @@ Core 的标准事件可带顶层 `locale`，SDK 将它写入该请求的 `Reques
 
 不要把 response 当成通知，也不要为同一 request ID 回复多次。SDK 处理请求并发和响应关联。
 
+Core 只接受 `jsonrpc: "2.0"` 的回复。回复 ID 必须是 Core 发出的数字 ID；非数字 ID 或不属于当前请求的 ID 会被忽略。一个回复必须且只能包含 `result` 或 `error`；缺少两者、同时包含两者、JSON-RPC 版本错误或格式错误的 error 对象（包括缺少整数 `code`）都会使对应调用失败。插件进程断开或请求超时也会使调用失败，Core 会终止失效进程，后续调用通过新的初始化握手重新建立能力索引。
+
 ## 初始化与生命周期
 
 Core 首次调用 provider 前发送：

@@ -31,6 +31,15 @@ impl Running {
                 // Notifications currently have no host-side work.
                 return;
             };
+            if !is_jsonrpc_2(&message) {
+                let reply = json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {"code": -32600, "message": "invalid JSON-RPC version"}
+                });
+                let _ = self.send_frame(&reply);
+                return;
+            }
             let method = method.to_string();
             let params = message.get("params").cloned().unwrap_or(Value::Null);
             let running = Arc::clone(self);
@@ -54,22 +63,8 @@ impl Running {
             }
             return;
         }
-        let Some(id) = message.get("id").and_then(Value::as_u64) else {
+        let Some((id, result)) = parse_response(&message) else {
             return;
-        };
-        let result = if let Some(error) = message.get("error") {
-            Err(RpcFailure::business(
-                error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .map(crate::i18n::text)
-                    .unwrap_or_else(|| format!("plugin error: {error}")),
-            ))
-        } else {
-            message
-                .get("result")
-                .cloned()
-                .ok_or_else(|| RpcFailure::fatal("plugin response missing result"))
         };
         if let Ok(mut pending) = self.pending.lock()
             && let Some(sender) = pending.remove(&id)
@@ -77,4 +72,30 @@ impl Running {
             let _ = sender.send(result);
         }
     }
+}
+
+fn is_jsonrpc_2(message: &Value) -> bool {
+    message.get("jsonrpc").and_then(Value::as_str) == Some("2.0")
+}
+
+pub(super) fn parse_response(message: &Value) -> Option<(u64, Result<Value, RpcFailure>)> {
+    let id = message.get("id")?.as_u64()?;
+    let result = if !is_jsonrpc_2(message) {
+        Err(RpcFailure::fatal("invalid plugin JSON-RPC version"))
+    } else {
+        match (message.get("result"), message.get("error")) {
+            (Some(value), None) => Ok(value.clone()),
+            (None, Some(error)) => {
+                let valid_code = error
+                    .get("code")
+                    .is_some_and(|code| code.as_i64().is_some() || code.as_u64().is_some());
+                match (valid_code, error.get("message").and_then(Value::as_str)) {
+                    (true, Some(message)) => Err(RpcFailure::business(crate::i18n::text(message))),
+                    _ => Err(RpcFailure::fatal("malformed plugin JSON-RPC error")),
+                }
+            }
+            _ => Err(RpcFailure::fatal("invalid plugin response envelope")),
+        }
+    };
+    Some((id, result))
 }
