@@ -1,4 +1,4 @@
-import { t, getLocale } from '@/i18n'
+import { t, useLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -8,8 +8,8 @@ import type { Entry } from '@/lib/types'
 
 import type { PickerDialogState } from './PickerDialogs'
 import type { PickerMenuState } from './PickerMenu'
-import { dirname, type GroupKey, type SortKey } from './types'
-import { groupPickerEntries, visiblePickerEntries } from './model'
+import { dirname, type GroupKey, type SortKey } from '@/features/file-picker/types'
+import { groupPickerEntries, visiblePickerEntries } from '@/features/file-picker/model'
 import { usePickerDirectory } from './usePickerDirectory'
 import { usePickerSelection } from './usePickerSelection'
 
@@ -98,11 +98,22 @@ export function usePicker(request: FilePickerRequest) {
     }
   }, [menu])
 
+  const locale = useLocale()
   const visible = useMemo(
-    () => visiblePickerEntries(entries, filter, request.mode, request.extensions, sort, group),
-    [entries, filter, sort, group, request.mode, request.extensions, getLocale()],
+    () =>
+      visiblePickerEntries(
+        entries,
+        filter,
+        request.mode,
+        request.extensions,
+        sort,
+        group,
+        Date.now(),
+        locale,
+      ),
+    [entries, filter, sort, group, request.mode, request.extensions, locale],
   )
-  const grouped = useMemo(() => groupPickerEntries(visible, group), [visible, group, getLocale()])
+  const grouped = useMemo(() => groupPickerEntries(visible, group), [visible, group])
   const selection = usePickerSelection({
     request,
     directory,
