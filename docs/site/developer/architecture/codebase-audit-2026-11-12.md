@@ -141,3 +141,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P4-02 PR #225：** 将整个 `useListing` 面板流程加入严格类型边界。IPC、Tauri 事件、路径判断、刷新和错误文案统一由 `useExplorer` 组合层注入；列表 hook 只协调子 hook、React 状态和模型。现有服务适配器仍集中在 `features/explorer/services/listingAdapters.ts`，新增 `useListing.ts` 边界检查后仍满足 300 行门禁。ARCH-01 追溯已更新。
 
 **P4-02 PR #226：** 将导航和列表适配器从 `useExplorer` 移到应用/面板组合层；`useExplorer` 只接收 `ExplorerServices` 并连接两个已严格检查的子 hook。新增 `useExplorer.ts` 到 strict boundary，至此 Explorer 导航、搜索、位置、装饰、列表与面板组合 hook 全部受 `exactOptionalPropertyTypes` 和 `noUncheckedIndexedAccess` 检查。应用控制器仍作为最外层系统组合入口，不纳入 Explorer feature 边界。
+
+**P4-02 PR #227：** 将工作区标签保存、有效上次目录记录和 native VFS view 延迟保留从 `useAppController` 移入独立的会话持久化 hook；Recent 路径决策、保留载荷以及 native 延迟任务的调度/取消成为可测纯边界模型并纳入 strict boundary，UI-NAV-09 与 ARCH-01 追溯已更新。AppController 的宽泛返回对象及批量动作组合仍待后续按消费者边界逐步收窄。

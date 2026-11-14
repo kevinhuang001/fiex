@@ -46,6 +46,7 @@
     "src/features/explorer/operations/types.ts",
     "src/components/sidebar/connectionModel.ts",
     "src/hooks/autostartSessions.ts",
+    "src/hooks/controller/appSessionPersistence.ts",
     "src/lib/listColumns.ts"
   ]
 }
