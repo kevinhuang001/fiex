@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
+import { createNavigationRequestLifecycle } from '@/features/explorer/model/navigationRequest'
 
 export interface PendingSelection {
   directory: string
@@ -21,6 +22,14 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     : -1
   const initialPath = initialIndex >= 0 ? initialTabs!.paths[initialIndex] : ''
   const [path, setPath] = useState(initialPath)
+  const [navigationRequests] = useState(createNavigationRequestLifecycle)
+  const setCurrentPath = useCallback(
+    (next: string) => {
+      navigationRequests.invalidate()
+      setPath(next)
+    },
+    [navigationRequests],
+  )
   const [selected, setSelected] = useState<string[]>([])
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null)
   const pendingSelectionGeneration = useRef(0)
@@ -52,7 +61,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
           : null,
       )
       setQuery('')
-      setPath(next)
+      setCurrentPath(next)
       setSelected([])
       setRenaming(null)
       setError('')
@@ -60,7 +69,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
       setCursor((c) => c + 1)
       setTabs((t) => t.map((p, i) => (i === tab ? next : p)))
     },
-    [cursor, tab],
+    [cursor, setCurrentPath, tab],
   )
   const navigate = useCallback((next: string) => setLocation(next), [setLocation])
   const navigateTo = useCallback(
@@ -71,24 +80,27 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setPendingSelection((current) => (current?.generation === generation ? null : current))
   }, [])
   // Start folder resolution is asynchronous; the first path arrives here.
-  const startAt = useCallback((start: string) => {
-    setPendingSelection(null)
-    setPath(start)
-    setHistory([start])
-    setCursor(0)
-    setTabs([start])
-    setTab(0)
-    tabHistory.current = [{ paths: [start], cursor: 0 }]
-    setQuery('')
-    setSelected([])
-    setRenaming(null)
-    setError('')
-  }, [])
+  const startAt = useCallback(
+    (start: string) => {
+      setPendingSelection(null)
+      setCurrentPath(start)
+      setHistory([start])
+      setCursor(0)
+      setTabs([start])
+      setTab(0)
+      tabHistory.current = [{ paths: [start], cursor: 0 }]
+      setQuery('')
+      setSelected([])
+      setRenaming(null)
+      setError('')
+    },
+    [setCurrentPath],
+  )
   const back = () => {
     if (cursor > 0) {
       setPendingSelection(null)
       setCursor(cursor - 1)
-      setPath(history[cursor - 1])
+      setCurrentPath(history[cursor - 1])
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor - 1] : p)))
       setQuery('')
       setSelected([])
@@ -99,7 +111,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     if (cursor < history.length - 1) {
       setPendingSelection(null)
       setCursor(cursor + 1)
-      setPath(history[cursor + 1])
+      setCurrentPath(history[cursor + 1])
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor + 1] : p)))
       setQuery('')
       setSelected([])
@@ -112,7 +124,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     tabHistory.current.push({ paths: [next], cursor: 0 })
     setTabs((t) => [...t, next])
     setTab(tabs.length)
-    setPath(next)
+    setCurrentPath(next)
     setHistory([next])
     setCursor(0)
     setQuery('')
@@ -125,7 +137,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     tabHistory.current[tab] = { paths: history, cursor }
     const saved = tabHistory.current[i] || { paths: [tabs[i]], cursor: 0 }
     setTab(i)
-    setPath(tabs[i])
+    setCurrentPath(tabs[i])
     setHistory(saved.paths)
     setCursor(saved.cursor)
     setQuery('')
@@ -148,7 +160,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     const saved = tabHistory.current[n] || { paths: [next[n]], cursor: 0 }
     setTabs(next)
     setTab(n)
-    setPath(next[n])
+    setCurrentPath(next[n])
     setHistory(saved.paths)
     setCursor(saved.cursor)
     setQuery('')
@@ -181,7 +193,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   const snapshotNavigation = () => ({ path, history, cursor })
   const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
     setPendingSelection(null)
-    setPath(state.path)
+    setCurrentPath(state.path)
     setTabs((paths) => paths.map((path, index) => (index === tab ? state.path : path)))
     tabHistory.current[tab] = { paths: state.history, cursor: state.cursor }
     setHistory(state.history)
@@ -219,14 +231,17 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     up: async () => {
       const uriParent = parent(path)
       if (uriParent === path) return
-      try {
-        const upPath = path.startsWith('applications://')
-          ? await call('file_parent', { path })
-          : uriParent
-        if (upPath !== path) navigate(upPath)
-      } catch (cause) {
-        setError(String(cause))
+      const result = await navigationRequests.run(() =>
+        path.startsWith('applications://')
+          ? call('file_parent', { path })
+          : Promise.resolve(uriParent),
+      )
+      if (result.status === 'stale') return
+      if (result.status === 'failed') {
+        setError(String(result.error))
+        return
       }
+      if (result.value !== path) navigate(result.value)
     },
     tabs,
     tab,
