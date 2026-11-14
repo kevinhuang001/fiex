@@ -26,12 +26,15 @@ export function sameListing(previous: Entry[], next: Entry[]): boolean {
       entry.sync === value.sync &&
       sameStringSet(entry.allowedOps, value.allowedOps) &&
       entry.tags.length === value.tags.length &&
-      entry.tags.every(
-        (tag, index) =>
-          tag.name === value.tags[index].name &&
-          tag.color === value.tags[index].color &&
-          tag.hex === value.tags[index].hex,
-      )
+      entry.tags.every((tag, index) => {
+        const otherTag = value.tags[index]
+        return (
+          otherTag !== undefined &&
+          tag.name === otherTag.name &&
+          tag.color === otherTag.color &&
+          tag.hex === otherTag.hex
+        )
+      })
     )
   })
 }

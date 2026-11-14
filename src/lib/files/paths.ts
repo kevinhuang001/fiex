@@ -18,7 +18,7 @@ const VIRTUAL_LABELS: Record<string, VirtualRoot> = {
  *  `fiex://mount/...` identities as virtual application paths. */
 export function virtualPath(path: string): VirtualAddress | null {
   const match = /^(recent|applications|trash|recyclebin):\/\/(.*)$/i.exec(path)
-  if (!match) return null
+  if (!match || match[1] === undefined || match[2] === undefined) return null
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
   return { root, payload: match[2] }
 }
@@ -58,7 +58,7 @@ export function normalizeAddress(input: string): string {
   if (['recent', 'applications', 'trash', 'recyclebin'].includes(bare)) return `${bare}://`
   // Both URL and Windows separators are accepted after a virtual scheme.
   const match = /^(recent|applications|trash|recyclebin):[\\/]*(.*)$/i.exec(text)
-  if (!match) return text
+  if (!match || match[1] === undefined || match[2] === undefined) return text
   const root = `${match[1].toLowerCase()}://` as VirtualRoot
   const payload = match[2].replace(/^[\\/]+/, '')
   if (root === 'applications://' || root === 'trash://')
@@ -94,7 +94,13 @@ export function displayAddress(path: string): string {
 export function corePath(path: string): CorePath | null {
   if (!/^fiex:/i.test(path)) return null
   const match = path.match(/^fiex:\/\/mount\/([A-Za-z0-9-]{1,128})\/(.*)$/)
-  if (!match || path.length > 32768 || match[2].split('/').length > 256)
+  if (
+    !match ||
+    match[1] === undefined ||
+    match[2] === undefined ||
+    path.length > 32768 ||
+    match[2].split('/').length > 256
+  )
     throw new Error('InvalidVfsUri')
   const parts = match[2]
     ? match[2].split('/').map((part) => {
@@ -188,7 +194,7 @@ export function pathCrumbs(
         return crumbs
       }
       if (root === 'recent://' || root === 'recyclebin://') {
-        const segment = virtual.payload.split('?')[0]
+        const segment = virtual.payload.split('?')[0] ?? ''
         const child = virtualHref(root, virtual.payload)
         crumbs.push({ name: displayName(child) || decodeVirtualSegment(segment), path: child })
         return crumbs
@@ -224,7 +230,9 @@ export function basename(path: string): string {
       return decodeVirtualSegment(segment) || virtualRootName(virtual.root)
     }
     if (virtual.root === 'recent://' || virtual.root === 'recyclebin://') {
-      return decodeVirtualSegment(virtual.payload.split('?')[0]) || virtualRootName(virtual.root)
+      return (
+        decodeVirtualSegment(virtual.payload.split('?')[0] ?? '') || virtualRootName(virtual.root)
+      )
     }
     return virtual.payload
   }
