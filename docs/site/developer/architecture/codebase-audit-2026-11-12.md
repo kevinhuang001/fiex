@@ -159,6 +159,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 **P2-01 后续 PR #232：** 文件右键菜单及其执行/项目构建合同改为显式依赖 Explorer、操作与菜单 DTO 类型，不再从应用控制器反推 props；`App` 仅经 app-shell adapter 传递所需字段。Core/插件菜单现有浏览器回归仍负责验证点击后文件状态与菜单行为。
 
-**P2-02 文件选择器模型：** 将过滤、扩展名约束、排序、分组与路径工具从 UI 目录移到 `features/file-picker`，以 `FilePickerMode` 和显式排序类型约束输入，并纳入严格可选字段/索引检查。模型测试覆盖模式差异、分组优先级、反向排序、根路径向上导航和不修改 Provider 列表；选择器 React 状态与 IPC 生命周期仍待后续拆分。
+**P2-02 文件选择器（PR #233–#235，分批）：** PR #233 将过滤、扩展名约束、排序、分组和跨平台路径工具迁入 `features/file-picker/model`；PR #234 将模式约束的选择、确认、保存替换策略提取为纯模型，并补充单元与 E2E 回归；PR #235 将目录/偏好生命周期、选择操作和会话状态迁入 feature hooks/services，由组件侧 session adapter 注入 IPC、错误上报、目录加载、文件操作和选择器完成回调。模型、选择和偏好服务及会话 hooks 已纳入 `tsconfig.boundary.json` 严格检查；需求追溯新增 UI-PICKER-02。三个 PR 仍为开放堆叠 PR，平台 CI 与合并结果待后续处理。
 
 **P2-02 文件选择/确认模型：** 将可确认条件、单/多选转换与 openFile/openFiles/openDirectory/saveFile 的结果决策移入严格类型的纯模型。修复文件模式下只选目录却启用“打开”后无动作的问题；新增模式矩阵单测和设置页按钮禁用 E2E。
