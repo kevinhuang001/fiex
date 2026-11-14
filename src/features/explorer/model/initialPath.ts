@@ -26,3 +26,49 @@ export function resolveInitialPath({
     ? (pick('个人文件夹') ?? initialPath ?? null)
     : (pick('文稿') ?? initialPath ?? locations[0]?.path ?? null)
 }
+
+/** Resolves startup sources in order and stops using results after cancellation. */
+export async function resolveInitialPathRequest({
+  startOverride,
+  startPage,
+  native,
+  isCancelled,
+  loadLaunchPath,
+  loadLastPath,
+  loadInitialPath,
+  loadLocations,
+}: {
+  startOverride?: string
+  startPage: Preferences['startPage']
+  native: boolean
+  isCancelled: () => boolean
+  loadLaunchPath: () => Promise<string | null>
+  loadLastPath: () => Promise<string | null>
+  loadInitialPath: () => Promise<string | null>
+  loadLocations: () => Promise<Location[]>
+}): Promise<string | null> {
+  const launched = native ? await loadLaunchPath().catch(() => null) : null
+  if (isCancelled()) return null
+
+  let lastPath: string | null = null
+  if (!startOverride && !launched && startPage === 'last') {
+    lastPath = await loadLastPath().catch(() => null)
+  }
+  if (isCancelled()) return null
+
+  const needsLocation = !startOverride && !launched && startPage !== 'recent' && !lastPath
+  const initialPath = needsLocation && native ? await loadInitialPath().catch(() => null) : null
+  if (isCancelled()) return null
+
+  const locations = needsLocation ? await loadLocations().catch(() => []) : []
+  if (isCancelled()) return null
+
+  return resolveInitialPath({
+    ...(startOverride === undefined ? {} : { startOverride }),
+    launched,
+    startPage,
+    lastPath,
+    initialPath,
+    locations,
+  })
+}
