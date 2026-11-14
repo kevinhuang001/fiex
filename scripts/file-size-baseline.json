@@ -11,7 +11,6 @@
   "sdk/rust/src/runtime/mod.rs": 353,
   "sdk/rust/src/tasks.rs": 343,
   "sdk/ui/src/index.ts": 450,
-  "src-tauri/crates/builtins/fiex-info/src/media.rs": 381,
   "src-tauri/src/core/fs/provider_registry/plugin.rs": 352,
   "src-tauri/src/plugins/host/process/rpc/transport.rs": 312,
   "src/components/explorer/ExplorerToolbar.tsx": 312,
