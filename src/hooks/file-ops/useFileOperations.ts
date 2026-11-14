@@ -47,6 +47,8 @@ export function useFileOperations({
     trashRestoreNeedsFolder: (paths) => call('trash_restore_needs_folder', { paths }),
     restoreFromTrash: (paths, fallback) => call('restore_from_trash', { paths, fallback }),
     undo: () => call('undo'),
+    fileParent: (path) => call('file_parent', { path }),
+    transfer: (request) => call('transfer', request),
     pickDirectory: async () => {
       const picked = await openFilePicker({ mode: 'openDirectory' })
       return typeof picked === 'string' ? picked : null
