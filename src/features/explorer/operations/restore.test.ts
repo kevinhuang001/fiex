@@ -22,6 +22,8 @@ describe('trash restore fallback selection', () => {
       restoreFromTrash: vi.fn(async () => 1),
       undo: vi.fn(),
       pickDirectory: vi.fn(async () => '/Users/kevin/Downloads'),
+      fileParent: vi.fn(),
+      transfer: vi.fn(),
       reportPermissionError: vi.fn(() => false),
     }
 
