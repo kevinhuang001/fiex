@@ -118,6 +118,10 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 本轮将 P1-01 扩展到完整 `src/` 导入图：运行时循环依赖一律失败；类型级循环采用显式基线，新增循环组件或把新模块卷入既有循环都会失败。当前基线仍含一组历史类型循环，源于 IPC DTO、共享模型与组件类型耦合，后续应通过迁移共享类型继续缩小，不能把它描述为零循环。Rust workspace 增加 crate 层次与 DAG 检查，在每个 Desktop matrix target 执行；检查基于 `cargo metadata --no-deps`，覆盖整个 workspace。 P3-01 将共享操作 DTO、取消检查和撤销合同从 operations 门面下沉至 core/operation_types，将复制暂存实现归入 core/transfers，并把共享路径规则放入 core/fs/path_utils；新增 Rust 源码门禁，禁止 core/fs 与 core/transfers 的非测试模块依赖 core/operations。
 
+### IPC-CORE-01 Tauri command 契约漂移门禁
+
+`check:tauri-contracts` 对照 `generate_handler!` 注册项、桌面模块中全部 `#[tauri::command]` 函数、`TauriCommandArgs` / `TauriCommandResults` 和运行时结果 decoder。它检查 Rust 参数经过 Tauri camelCase 映射后的字段名，排除注入的 AppHandle、Window、WebviewWindow 和 State；命令映射或 decoder 缺项会让 CI 失败。命令结果不再有通用 JSON 兜底，动态 JSON 命令必须显式列入 decoder。Open With picker DTO 已移到共享 lib，并按 Rust 的 camelCase 字段及 nullable `iconSource` 严格解析。Node 单测覆盖嵌套 Rust 参数解析和注释过滤；Vitest 覆盖有效响应、未知字段、非法字段及未知命令拒绝。
+
 ### P3-01 Rust FS/Operations 模块边界
 
 P3-01 PR #186–#188 已完成共享操作合同、传输暂存与路径工具分离，并将 ResourceBroker 拆入 broker、reads/search、writes/mutations 模块。既有测试覆盖取消、源变化、Provider 写入失败回滚与 preflight 拒绝；PR #195 覆盖缓存瞬时失败重试、单飞等待者恢复和变更通知失效；PR #198 验证 registered Applications VFS 与 availability cache 调用链。PR #202 为 IpcVfsProvider 增加可注入 transport，验证断连透传、后续调用恢复与畸形响应拒绝；PR #203 增加跨进程 Core/Host/SDK mock VFS 集成 smoke，恢复持久化 view 并经真实 JSON-RPC Provider list/stat，并在 list 请求中终止插件进程、验证下一请求重启后恢复。文件变更事务的故障注入仍待补，因此阶段继续进行。
