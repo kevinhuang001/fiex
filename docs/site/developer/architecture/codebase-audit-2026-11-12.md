@@ -152,3 +152,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 
 **P2-01 后续 PR #230：** Explorer 工具栏及其视图、固定插件工具和 IDE/终端选择控件不再依赖 `AppController` 类型；App shell adapter 只传递工具栏需要的动作和状态。刷新指示器的 950ms 状态与定时器清理已独立封装，工具栏保持在 300 行门禁内。
+
+
+**P2-01 后续 PR #231：** `ExplorerDialogs` 用 UI 所需的显式状态/动作合同替代 `Pick<AppController, ...>`，由 app-shell adapter 传递 dialog、preview、Info、tag、connection 和 settings 状态；`App` 不再将完整控制器扩散给弹窗聚合器。具体文件操作行为仍由独立 hook 与已有 operation tests 管理。
