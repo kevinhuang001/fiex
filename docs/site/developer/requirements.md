@@ -220,6 +220,11 @@
 - Google OAuth、WebDAV、SMB、Git 服务端登录与网络故障恢复不能由 Core fixture 证明；需运行官方插件仓库对应 CI，真实账号流程还需独立测试账号。
 - 屏幕阅读器、键盘全程可达、磁盘耗尽、系统休眠中断及进程崩溃后的远程上传恢复尚无完整验收矩阵。
 
+## 传输失败恢复验收
+
+- `FS-RECOVERY-01`：多项传输中后续 Provider 写入失败时，Core 按逆序撤销已提交目标；若撤销也失败，错误必须指出恢复目录，并将被覆盖目标的原始字节写入恢复备份。Rust：`core/fs/tests/transfer_recovery.rs` 验证两次 Provider 写入故障、原目标备份清单和源/目标状态。
+- `FS-CACHE-01`：失败回滚使相关 VFS 目录缓存失效并推进 revision；失效前启动的列表请求不得重新写入旧快照。Rust：`core/fs/directory_cache/tests.rs` 的 `rollback_invalidation_rejects_stale_directory_cache_writes`。
+
 ## 需求变更时的更新规则
 
 1. 为新行为分配稳定 ID，并写成用户可观察的验收条件。
