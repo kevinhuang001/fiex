@@ -1,9 +1,23 @@
 import { t, getLocale } from '@/i18n'
-import type { AppController } from '@/hooks/useAppController'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type { Clipboard } from '@/features/explorer/operations/types'
 import type { Entry } from '@/lib/types'
 import { size } from '@/lib/files'
 import { terminalWorkingDirectory } from '@/lib/terminalPath'
 import { ListChecks, TerminalSquare, X } from 'lucide-react'
+export interface ExplorerStatusBarProps {
+  x: Pick<Explorer, 'entries' | 'tagFilter' | 'searchStats' | 'path'>
+  chosenAll: Entry[]
+  selectedAll: string[]
+  clipboard: Clipboard
+  setClipboard: (clipboard: Clipboard) => void
+  workspace: {
+    items: Entry[]
+    open: boolean
+    setOpen: (open: boolean) => void
+  }
+}
+
 export function ExplorerStatusBar({
   x,
   chosenAll,
@@ -11,10 +25,7 @@ export function ExplorerStatusBar({
   clipboard,
   setClipboard,
   workspace,
-}: Pick<
-  AppController,
-  'x' | 'chosenAll' | 'selectedAll' | 'clipboard' | 'setClipboard' | 'workspace'
-> & { chosenAll: Entry[]; selectedAll: string[] }) {
+}: ExplorerStatusBarProps) {
   return (
     <>
       <footer className="statusbar" data-workspace-drop="true">
