@@ -60,6 +60,7 @@ export function useListing(
   })
   const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false)
   const [renderedPath, setRenderedPath] = useState('')
   const paintedByPath = useRef(new PaintedListingCache(32))
   const renderedPathRef = useRef('')
@@ -247,6 +248,8 @@ export function useListing(
       setConnections(Array.isArray(list) ? [...list] : [])
     } catch {
       setConnections([])
+    } finally {
+      setConnectionsLoaded(true)
     }
   }, [getLocale()])
   useEffect(() => {
@@ -257,6 +260,7 @@ export function useListing(
     entries: visibleEntries,
     decorations,
     connections,
+    connectionsLoaded,
     refreshConnections,
     tagFilter,
     setTagFilter,
