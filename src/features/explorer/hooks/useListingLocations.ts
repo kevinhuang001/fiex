@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { call, native } from '@/lib/api'
-import { getLocale } from '@/i18n'
-import { resolveInitialPath } from '@/features/explorer/model/initialPath'
+import { resolveInitialPathRequest } from '@/features/explorer/model/initialPath'
+import { createLocationRefreshCoordinator } from '@/features/explorer/model/locationRefresh'
 import type { Location, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
@@ -25,31 +25,14 @@ export function useListingLocations({
   nav: Navigation
   startOverride?: string
 }) {
+  const { startAt } = nav
   const [locations, setLocations] = useState<Location[]>([])
-  const locationsRequest = useRef(0)
-  const locationsKey = useRef('')
-  const locationsPending = useRef<Promise<Location[]> | null>(null)
+  const [locationRefresh] = useState(() =>
+    createLocationRefreshCoordinator(() => call('locations'), setLocations),
+  )
   const refreshLocations = useCallback(
-    (force = false): Promise<Location[]> => {
-      if (locationsPending.current && !force) return locationsPending.current
-      const request = ++locationsRequest.current
-      const pending = call('locations')
-        .then((next) => {
-          if (request !== locationsRequest.current) return next
-          const key = JSON.stringify(next)
-          if (key !== locationsKey.current) {
-            locationsKey.current = key
-            setLocations(next)
-          }
-          return next
-        })
-        .finally(() => {
-          if (request === locationsRequest.current) locationsPending.current = null
-        })
-      locationsPending.current = pending
-      return pending
-    },
-    [getLocale()],
+    (force = false) => locationRefresh.refresh(force),
+    [locationRefresh],
   )
 
   useEffect(() => {
@@ -72,37 +55,28 @@ export function useListingLocations({
     let cancelled = false
     // Resolve the first directory without waiting for the full location survey.
     void refreshLocations().catch(() => {})
-    void (async () => {
-      const launched = native ? await call('launch_path').catch(() => null) : null
-      if (cancelled) return
-      let lastPath: string | null = null
-      if (!startOverride && !launched && prefs.startPage === 'last') {
-        lastPath = await call('state_get', {
+    void resolveInitialPathRequest({
+      startOverride,
+      startPage: prefs.startPage,
+      native,
+      isCancelled: () => cancelled,
+      loadLaunchPath: () => call('launch_path'),
+      loadLastPath: async () => {
+        const lastPath = await call('state_get', {
           namespace: 'explorer',
           key: 'lastPath',
         }).catch(() => null)
-        if (!lastPath) lastPath = localStorage.getItem('fiex:lastPath')
-      }
-      if (cancelled) return
-      const needsLocation = !startOverride && !launched && prefs.startPage !== 'recent' && !lastPath
-      const initial = needsLocation && native ? await call('initial_path').catch(() => null) : null
-      if (cancelled) return
-      const available = needsLocation ? await call('locations').catch(() => [] as Location[]) : []
-      if (cancelled) return
-      const start = resolveInitialPath({
-        startOverride,
-        launched,
-        startPage: prefs.startPage,
-        lastPath,
-        initialPath: initial,
-        locations: available,
-      })
-      if (start) nav.startAt(start)
-    })()
+        return lastPath || localStorage.getItem('fiex:lastPath')
+      },
+      loadInitialPath: () => call('initial_path'),
+      loadLocations: () => call('locations'),
+    }).then((start) => {
+      if (start && !cancelled) startAt(start)
+    })
     return () => {
       cancelled = true
     }
-  }, [refreshLocations, enabled, prefs.startPage, startOverride])
+  }, [refreshLocations, enabled, path, prefs.startPage, startOverride, startAt])
 
   useEffect(() => {
     if (!enabled || !path || query || listedPath !== path) return
