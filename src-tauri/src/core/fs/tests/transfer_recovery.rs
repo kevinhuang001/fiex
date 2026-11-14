@@ -4,7 +4,94 @@ use crate::core::{
 };
 use serde_json::Value;
 use std::path::Path;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
+
+const RECOVERY_MANIFEST_ENV: &str = "FIEX_TEST_TRANSFER_RECOVERY_MANIFEST";
+const RECOVERY_TARGET_ENV: &str = "FIEX_TEST_TRANSFER_RECOVERY_TARGET";
+const RECOVERY_HELPER_ROOT_ENV: &str = "FIEX_TEST_TRANSFER_RECOVERY_HELPER_ROOT";
+
+#[test]
+fn preserved_recovery_manifest_is_readable_after_process_restart() {
+    let Some(manifest_path) = std::env::var_os(RECOVERY_MANIFEST_ENV) else {
+        return;
+    };
+    let target = std::env::var_os(RECOVERY_TARGET_ENV).expect("recovery target is required");
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(manifest_path).expect("recovery manifest exists"))
+            .expect("recovery manifest remains valid JSON");
+    let backup = manifest["backups"]
+        .as_array()
+        .expect("backup records are present")
+        .iter()
+        .find(|item| item["target"].as_str() == Some(target.to_string_lossy().as_ref()))
+        .and_then(|item| item["backup"].as_str())
+        .expect("manifest retains the original target backup");
+    assert_eq!(std::fs::read(backup).unwrap(), b"original first");
+}
+
+#[test]
+fn failed_provider_rollback_helper_child() {
+    let Some(root) = std::env::var_os(RECOVERY_HELPER_ROOT_ENV) else {
+        return;
+    };
+    let root = Path::new(&root);
+    let source = root.join("source");
+    let target = root.join("target");
+    let recovery_root = root.join("recovery");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::create_dir_all(&recovery_root).unwrap();
+
+    let first_source = source.join("first.txt");
+    let second_source = source.join("second.txt");
+    let first_target = target.join("first.txt");
+    let second_target = target.join("second.txt");
+    std::fs::write(&first_source, b"replacement first payload").unwrap();
+    std::fs::write(&second_source, b"replacement second payload").unwrap();
+    std::fs::write(&first_target, b"original first").unwrap();
+    std::fs::write(&second_target, b"original second").unwrap();
+
+    let resolutions = [
+        replacement(&first_source, &first_target),
+        replacement(&second_source, &second_target),
+    ];
+    let _reset = ResetFaultInjection;
+    provider_registry::fail_provider_writes_for_test(&[
+        second_target.to_string_lossy().into_owned(),
+        first_target.to_string_lossy().into_owned(),
+    ]);
+    super::super::transfer::set_recovery_base_for_test(recovery_root);
+
+    let files = [
+        first_source.to_string_lossy().into_owned(),
+        second_source.to_string_lossy().into_owned(),
+    ];
+    let result = crate::core::fs::transfer(
+        &files,
+        &target.to_string_lossy(),
+        false,
+        false,
+        &[],
+        &resolutions,
+        &AtomicBool::new(false),
+        &|_, _, _| {},
+    )
+    .unwrap();
+    assert!(result.paths.is_empty());
+    assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+    let error = &result.errors[0];
+    assert!(error.contains("injected provider write failure"), "{error}");
+    assert!(error.contains("rollback incomplete"), "{error}");
+    let recovery_path = error
+        .split_once("recovery retained at ")
+        .map(|(_, path)| Path::new(path))
+        .expect("recovery directory should be reported");
+    println!(
+        "RECOVERY_MANIFEST_PATH:{}",
+        recovery_path.join("recovery.json").display()
+    );
+}
 
 fn replacement(source: &Path, target: &Path) -> Resolution {
     let (source_scope, source_ref) = super::binding(source.parent().unwrap(), source);
@@ -38,51 +125,29 @@ impl Drop for ResetFaultInjection {
 
 #[test]
 fn failed_provider_rollback_retains_overwritten_target_for_recovery() {
-    let source = tempfile::tempdir().unwrap();
-    let target = tempfile::tempdir().unwrap();
-    let first_source = source.path().join("first.txt");
-    let second_source = source.path().join("second.txt");
-    let first_target = target.path().join("first.txt");
-    let second_target = target.path().join("second.txt");
-    std::fs::write(&first_source, b"replacement first payload").unwrap();
-    std::fs::write(&second_source, b"replacement second payload").unwrap();
-    std::fs::write(&first_target, b"original first").unwrap();
-    std::fs::write(&second_target, b"original second").unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let helper = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "core::fs::tests::transfer_recovery::failed_provider_rollback_helper_child",
+            "--nocapture",
+        ])
+        .env(RECOVERY_HELPER_ROOT_ENV, root.path())
+        .output()
+        .unwrap();
+    assert!(
+        helper.status.success(),
+        "transfer helper failed: {}{}",
+        String::from_utf8_lossy(&helper.stdout),
+        String::from_utf8_lossy(&helper.stderr)
+    );
 
-    let resolutions = [
-        replacement(&first_source, &first_target),
-        replacement(&second_source, &second_target),
-    ];
-    let _reset = ResetFaultInjection;
-    provider_registry::fail_provider_writes_for_test(&[
-        second_target.to_string_lossy().into_owned(),
-        first_target.to_string_lossy().into_owned(),
-    ]);
-    let recovery_root = tempfile::tempdir().unwrap();
-    super::super::transfer::set_recovery_base_for_test(recovery_root.path().to_path_buf());
-
-    let files = [
-        first_source.to_string_lossy().into_owned(),
-        second_source.to_string_lossy().into_owned(),
-    ];
-    let result = crate::core::fs::transfer(
-        &files,
-        &target.path().to_string_lossy(),
-        false,
-        false,
-        &[],
-        &resolutions,
-        &AtomicBool::new(false),
-        &|_, _, _| {},
-    )
-    .unwrap();
-
-    assert!(result.paths.is_empty());
-    assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
-    let error = &result.errors[0];
-    assert!(error.contains("injected provider write failure"), "{error}");
-    assert!(error.contains("rollback incomplete"), "{error}");
-    assert!(error.contains("recovery retained at"), "{error}");
+    let source = root.path().join("source");
+    let target = root.path().join("target");
+    let first_source = source.join("first.txt");
+    let second_source = source.join("second.txt");
+    let first_target = target.join("first.txt");
+    let second_target = target.join("second.txt");
     assert_eq!(
         std::fs::read(&first_target).unwrap(),
         b"replacement first payload"
@@ -97,13 +162,14 @@ fn failed_provider_rollback_retains_overwritten_target_for_recovery() {
         b"replacement second payload"
     );
 
-    let recovery_path = error
-        .split_once("recovery retained at ")
-        .map(|(_, path)| Path::new(path))
-        .expect("recovery directory should be reported");
-    let manifest: Value =
-        serde_json::from_slice(&std::fs::read(recovery_path.join("recovery.json")).unwrap())
-            .unwrap();
+    let helper_stdout = String::from_utf8_lossy(&helper.stdout);
+    let manifest_path = helper_stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("RECOVERY_MANIFEST_PATH:"))
+        .map(std::path::PathBuf::from)
+        .expect("helper should report the persisted recovery manifest");
+    let recovery_path = manifest_path.parent().unwrap();
+    let manifest: Value = serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
     let backup = manifest["backups"]
         .as_array()
         .unwrap()
@@ -112,4 +178,20 @@ fn failed_provider_rollback_retains_overwritten_target_for_recovery() {
         .and_then(|item| item["backup"].as_str())
         .expect("original overwritten target should have a recovery backup");
     assert_eq!(std::fs::read(backup).unwrap(), b"original first");
+
+    let child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "core::fs::tests::transfer_recovery::preserved_recovery_manifest_is_readable_after_process_restart",
+        ])
+        .env(RECOVERY_MANIFEST_ENV, recovery_path.join("recovery.json"))
+        .env(RECOVERY_TARGET_ENV, &first_target)
+        .output()
+        .unwrap();
+    assert!(
+        child.status.success(),
+        "restart reader failed: {}{}",
+        String::from_utf8_lossy(&child.stdout),
+        String::from_utf8_lossy(&child.stderr)
+    );
 }
