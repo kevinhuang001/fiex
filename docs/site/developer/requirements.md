@@ -37,7 +37,7 @@
 | UI-VIEW-06 | 目录刷新若排序后的可见条目不变，应保留已渲染 entries 身份，同时更新目录元数据、装饰和 revision；可见条目变化时必须发布新数组。 | UT：`features/explorer/model/directorySnapshot.test.ts` 覆盖相同可见列表、可见内容变化及 metadata-only 更新。 |
 | UI-WORK-01 | 工作区只保存待处理项目引用；加入或移除项目不能复制、移动或删除源文件。                                    | E2E：browsing.spec.ts 的 **workspace opens as a compact dock and can be collapsed**、**workspace items can be added and removed from both context menus**；UT：`features/explorer/model/moreMenu.test.ts`。                                                                                                                                    |
 | UI-MENU-01 | 空白区域没有适用动作时不显示空菜单；右键不会意外打开浏览器默认菜单。                                      | UT：`features/explorer/model/menuVisibility.test.ts` 验证菜单可见性策略；真实浏览器右键行为应在 E2E 回归中补充。                                                                                                                                                                                                                               |
-| UI-TAB-01  | 拖动标签页后，活动目录保持不变，标签顺序与指针操作一致。                                                  | E2E：browsing.spec.ts 的 **tab dragging preserves the active folder**。                                                                                                                                                                                                                                                                        |
+| UI-TAB-01  | 拖动标签页后，活动目录保持不变，标签顺序与指针操作一致。                                                  | UT：`src/features/explorer/model/navigationTabs.test.ts` 覆盖活动索引、标签历史同步和无效移动；E2E：browsing.spec.ts 的 **tab dragging preserves the active folder**。 |
 
 ## 搜索、预览与信息
 
@@ -198,6 +198,7 @@
 | src/features/explorer/model/directoryWatch.test.ts                 | UI-VIEW-05、ARCH-01（目录监听异步注册、事件防抖和卸载清理）                         |
 | src/features/explorer/model/directorySnapshot.test.ts       | UI-VIEW-06、ARCH-01（目录快照可见列表复用与 metadata 更新）                         |
 | src/features/explorer/model/directoryStreamUpdate.test.ts  | UI-NAV-08、ARCH-01（目录流 revision、路径纠正、目标选择与 Recent 回退）              |
+| src/features/explorer/model/navigationTabs.test.ts         | UI-TAB-01、ARCH-01（标签重排、活动索引和浏览历史同步）                                |
 | src/features/explorer/hooks/useDirectorySnapshot.ts           | UI-NAV-08、UI-VIEW-06、ARCH-01（目录流协调 adapter 与严格边界类型检查）                 |
 | src/lib/files.test.ts                                            | ARCH-01（路径解析、VFS 身份和严格边界类型检查）                                         |
 | src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                                |
