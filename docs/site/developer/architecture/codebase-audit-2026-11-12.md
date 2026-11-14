@@ -1,7 +1,7 @@
 # Fiex 代码库重构基线
 
 > 快照日期：2026-11-12
-> 审查基线：Core PR #91 head `c1054455ddecb55bb5805d16879c0116559abc60`，SDK `7df42e185f90d6a04bede82a9cfef0be866e15c2`。PR #91 在建立快照时仍 open，且其 CI 已通过。
+> 审查基线：Core PR #152 head `289238a4d44f4e203af04574e89433c73e2247af`，SDK `7df42e185f90d6a04bede82a9cfef0be866e15c2`。本页保留 2026-11-12 的原始规模统计，并在阶段记录中逐步补充后续工作。
 > 用途：记录本轮分阶段重构的起点，避免目录迁移后失去可比较的测试、尺寸与 CI 基线。
 
 ## 当前结构与依赖方向
@@ -60,7 +60,7 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 | P0-01 基线              | PR #92                       | 锁定 Core/SDK 基线、记录现有目录/测试/大文件/CI 现状，并将审计页加入唯一 VitePress 文档站点                                                                                                                                                                                                                                                             |
 | Explorer feature 起步   | PR #92                       | 迁移 `formatDisplayFileName` 与相邻测试到 `src/features/explorer/model`，更新唯一调用方                                                                                                                                                                                                                                                                 |
 | P0-02 保护网            | 进行中                       | PR #92 补双面板排序 UI 回归；PR #93 增加 Trash“放回原处”端到端回归；PR #94 增加过期目录响应竞态 E2E；PR #96 补插件重新握手后能力索引替换测试；PR #103 补源变化回滚、PR #106 补嵌套目录 Provider 写入故障后的回滚；仍需覆盖平台原生场景                                                                                                                  |
-| P4-01 大文件例外清理    | PR #96、#107、#113–#117      | PR #96 将 ProviderRegistry 单测拆分到同目录测试模块；PR #107 将 FileSystem Provider 集成测试按 views、transfers、resources 分组；PR #113 按 provider 拆分 Native VFS handlers；PR #114 独立目录快照内存 LRU 缓存；PR #115 将操作队列单测迁至同目录；PR #116 按 router、scope、validation 拆分事件测试；PR #117 将远程缓存单测移到同目录。当前剩余 37 项 |
+| P4-01 大文件例外清理    | PR #96、#107、#113–#117、本次 aria2 拆分 | PR #96 将 ProviderRegistry 单测拆分到同目录测试模块；PR #107 将 FileSystem Provider 集成测试按 views、transfers、resources 分组；PR #113 按 provider 拆分 Native VFS handlers；PR #114 独立目录快照内存 LRU 缓存；PR #115 将操作队列单测迁至同目录；PR #116 按 router、scope、validation 拆分事件测试；PR #117 将远程缓存单测移到同目录。本次将 aria2 下载配置、引擎执行和流生命周期拆到相邻模块，并补充配置边界测试；当前剩余 36 项 |
 | P2-01 Explorer feature  | PR #98–#102、#104–#105、#108 | 将导航、列表生命周期 hooks、目录专属列宽偏好、流式搜索、目录视图、列表比较/缓存及列表网格布局/拖拽模型迁移到 Explorer feature；共享偏好合同与 IPC 归一化留在 lib                                                                                                                                                                                        |
 | P2-02 文件操作策略      | PR #110、#118                | 将副本能力判断和移动路径过滤提取到 Explorer model；PR #118 将批量重命名的两阶段执行与失败回滚迁入 Explorer operation，并覆盖交换重命名和回滚。hook 保留对话框、选中项和刷新等 UI 副作用，其他操作边界仍需继续收敛                                                                                                                                       |
 | P2-03 文件操作归属      | PR #111                      | 将新建、删除/回收、恢复、传输和结果处理移到 `features/explorer/operations`；由 hook 组合层注入 Explorer 状态、运行器与进度服务，feature 不再反向依赖 hooks                                                                                                                                                                                              |
