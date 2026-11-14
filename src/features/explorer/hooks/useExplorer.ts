@@ -3,6 +3,7 @@ import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { useListing } from './useListing'
 import { useNavigation, type NavigationServices } from './useNavigation'
+import { explorerListingServices } from '@/features/explorer/services/listingAdapters'
 
 const navigationServices: NavigationServices = {
   readSearchMode: () => localStorage.getItem('fiex:search-mode'),
@@ -20,7 +21,7 @@ export function useExplorer(
   initialTabs?: { paths: string[]; active: number },
 ) {
   const nav = useNavigation(navigationServices, initialTabs)
-  const listing = useListing(prefs, nav, enabled, pane, startOverride)
+  const listing = useListing(prefs, nav, explorerListingServices, enabled, pane, startOverride)
   return {
     path: nav.path,
     previousPath: nav.previousPath,
