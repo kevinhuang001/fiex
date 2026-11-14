@@ -216,6 +216,16 @@ fn main() {
         .invoke(&id, "plugin.ping", json!({}))
         .expect("plugin restart failed");
     assert_eq!(pong["alive"], true);
+    if id == "org.fiex.mock" {
+        let failure = plugin_host::global()
+            .invoke(&id, "mock.crash", json!({}))
+            .expect_err("crashing fixture must close the RPC transport");
+        assert!(failure.contains("control channel"), "{failure}");
+        let recovered = plugin_host::global()
+            .invoke(&id, "plugin.ping", json!({}))
+            .expect("host must restart a crashed plugin before the next request");
+        assert_eq!(recovered["alive"], true);
+    }
     plugin_host::global().stop(&id);
-    println!("PASS: {id}: approval, process handshake, IPC, revoke, restart");
+    println!("PASS: {id}: approval, process handshake, IPC, revoke, restart, crash recovery");
 }
