@@ -28,6 +28,8 @@ describe('moveNavigationTab', () => {
       ],
       active: 2,
     })
+    expect(tabs).toEqual(['/a', '/b', '/c'])
+    expect(histories[0]).toEqual({ paths: ['/a', '/a/child'], cursor: 1 })
   })
 
   it('adjusts the active index when another tab crosses it', () => {
