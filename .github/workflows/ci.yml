@@ -367,6 +367,16 @@ jobs:
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_concurrency
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_search_e2e
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_locale
+          cargo build --locked --manifest-path src-tauri/Cargo.toml --target "${{ matrix.target }}" --no-default-features --features usbfs --example mock_vfs_plugin
+          fixture="$FIEX_PLUGIN_DIR/org.fiex.mock-vfs"
+          mkdir -p "$fixture"
+          cp src-tauri/examples/mock-vfs-manifest.json "$fixture/manifest.json"
+          executable=mock_vfs_plugin
+          if [ "$RUNNER_OS" = Windows ]; then executable=mock_vfs_plugin.exe; fi
+          cp "src-tauri/target/${{ matrix.target }}/debug/examples/$executable" "$fixture/$executable"
+          if [ "$RUNNER_OS" != Windows ]; then chmod +x "$fixture/$executable"; fi
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --target "${{ matrix.target }}" --no-default-features --features usbfs --example plugin_vfs_smoke -- fresh
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --target "${{ matrix.target }}" --no-default-features --features usbfs --example plugin_vfs_smoke -- restart
       - name: Windows plugin IPC without console standard handles
         if: runner.os == 'Windows'
         shell: bash
