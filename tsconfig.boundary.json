@@ -22,6 +22,7 @@
     "src/features/explorer/operations/create.ts",
     "src/features/explorer/operations/recycle.ts",
     "src/features/explorer/operations/restore.ts",
+    "src/features/explorer/operations/transfer.ts",
     "src/features/explorer/operations/result.ts",
     "src/features/explorer/operations/types.ts",
     "src/components/sidebar/connectionModel.ts",

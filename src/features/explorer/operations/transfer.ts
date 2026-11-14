@@ -1,6 +1,4 @@
 import { t } from '@/i18n'
-import { call } from '@/lib/api'
-import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import type { ConflictResolution } from '@/lib/types'
 import { canDuplicateEntries, planTransferPaths } from '@/features/explorer/model/transferPolicy'
 import type { FileOpsContext } from './types'
@@ -13,6 +11,7 @@ export function transferActions({
   setClipboard,
   run,
   activity,
+  services,
 }: FileOpsContext) {
   const { progressChannel, quietProgressChannel, updateActivity } = activity
   const executeTransfer = async (
@@ -24,7 +23,7 @@ export function transferActions({
     resume?: string,
   ) => {
     const sourceDirectories = moving
-      ? await Promise.all(paths.map((path) => call('file_parent', { path }).catch(() => undefined)))
+      ? await Promise.all(paths.map((path) => services.fileParent(path).catch(() => undefined)))
       : []
     const { actionablePaths, affectedSourceDirectories } = planTransferPaths(
       paths,
@@ -49,7 +48,7 @@ export function transferActions({
     const result = await run(
       moving ? t('正在移动…') : t('正在复制…'),
       async () => {
-        const next = await call('transfer', {
+        const next = await services.transfer({
           paths: actionablePaths,
           destination,
           moving,
@@ -87,7 +86,7 @@ export function transferActions({
         destination,
         moving,
         items: result.conflicts,
-        activityId,
+        ...(activityId === undefined ? {} : { activityId }),
       })
       return
     }
@@ -101,7 +100,7 @@ export function transferActions({
         source,
         destination,
       )
-      if (!reportFilesystemPermissionError(message, context)) x.setError(message)
+      if (!services.reportPermissionError(message, context)) x.setError(message)
     }
   }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
@@ -131,7 +130,7 @@ export function transferActions({
     void run(
       t('正在创建副本…'),
       async () => {
-        const result = await call('transfer', {
+        const result = await services.transfer({
           paths,
           destination: x.path,
           moving: false,
