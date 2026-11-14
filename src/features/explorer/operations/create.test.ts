@@ -20,6 +20,8 @@ function createContext(allowedOps = ['write', 'mkdir']) {
     restoreFromTrash: vi.fn(),
     undo: vi.fn(),
     pickDirectory: vi.fn(),
+    fileParent: vi.fn(),
+    transfer: vi.fn(),
     reportPermissionError: vi.fn(() => false),
   }
   const context = {
