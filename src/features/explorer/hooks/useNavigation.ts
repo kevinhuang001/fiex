@@ -1,6 +1,4 @@
 import { useCallback, useRef, useState } from 'react'
-import { call } from '@/lib/api'
-import { parent } from '@/lib/files'
 import { createNavigationRequestLifecycle } from '@/features/explorer/model/navigationRequest'
 import {
   closeNavigationTab,
@@ -20,14 +18,27 @@ export interface PendingSelection {
   generation: number
 }
 
+export type NavigationSearchMode = 'name' | 'content'
+
+/** Platform and persistence effects supplied by the Explorer composition root. */
+export interface NavigationServices {
+  readSearchMode: () => string | null
+  writeSearchMode: (mode: NavigationSearchMode) => void
+  parentPath: (path: string) => string
+  resolveParentPath: (path: string, fallback: string) => Promise<string>
+}
+
 /** Path, history, tab state and the transient per-pane view state every
  *  navigation resets: selection, rename target and the last error. The listing
  *  itself is loaded by useListing, which reads these values. */
-export function useNavigation(initialTabs?: { paths: string[]; active: number }) {
+export function useNavigation(
+  services: NavigationServices,
+  initialTabs?: { paths: string[]; active: number },
+) {
   const initialIndex = initialTabs?.paths.length
     ? Math.min(Math.max(0, initialTabs.active), initialTabs.paths.length - 1)
     : -1
-  const initialPath = initialIndex >= 0 ? initialTabs!.paths[initialIndex] : ''
+  const initialPath = initialIndex >= 0 ? (initialTabs?.paths[initialIndex] ?? '') : ''
   const [path, setPath] = useState(initialPath)
   const [navigationRequests] = useState(createNavigationRequestLifecycle)
   const setCurrentPath = useCallback(
@@ -47,12 +58,15 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   // The search mode is a pane preference, not query state: switching modes
   // cancels the old session and re-runs the query with the other capability.
   const [searchMode, setSearchModeState] = useState<'name' | 'content'>(() =>
-    localStorage.getItem('fiex:search-mode') === 'content' ? 'content' : 'name',
+    services.readSearchMode() === 'content' ? 'content' : 'name',
   )
-  const setSearchMode = useCallback((mode: 'name' | 'content') => {
-    setSearchModeState(mode)
-    localStorage.setItem('fiex:search-mode', mode)
-  }, [])
+  const setSearchMode = useCallback(
+    (mode: 'name' | 'content') => {
+      setSearchModeState(mode)
+      services.writeSearchMode(mode)
+    },
+    [services],
+  )
   const [history, setHistory] = useState<string[]>(initialPath ? [initialPath] : [])
   const [cursor, setCursor] = useState(initialPath ? 0 : -1)
   const [tabs, setTabs] = useState<string[]>(initialTabs?.paths || [])
@@ -249,13 +263,9 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     canBack: cursor > 0,
     canForward: cursor < history.length - 1,
     up: async () => {
-      const uriParent = parent(path)
+      const uriParent = services.parentPath(path)
       if (uriParent === path) return
-      const result = await navigationRequests.run(() =>
-        path.startsWith('applications://')
-          ? call('file_parent', { path })
-          : Promise.resolve(uriParent),
-      )
+      const result = await navigationRequests.run(() => services.resolveParentPath(path, uriParent))
       if (result.status === 'stale') return
       if (result.status === 'failed') {
         setError(String(result.error))
