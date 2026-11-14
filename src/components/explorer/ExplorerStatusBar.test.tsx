@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { AppController } from '@/hooks/useAppController'
 import { ExplorerStatusBar } from './ExplorerStatusBar'
 
 describe('ExplorerStatusBar terminal button', () => {
@@ -10,7 +9,7 @@ describe('ExplorerStatusBar terminal button', () => {
       path: 'recent://',
       searchStats: '',
       tagFilter: '',
-    } as unknown as AppController['x']
+    }
     const html = renderToStaticMarkup(
       <ExplorerStatusBar
         x={x}
@@ -22,9 +21,6 @@ describe('ExplorerStatusBar terminal button', () => {
           open: false,
           items: [],
           setOpen: () => {},
-          add: () => {},
-          remove: () => {},
-          clear: () => {},
         }}
       />,
     )
