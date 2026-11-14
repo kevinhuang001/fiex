@@ -216,7 +216,9 @@ export function useListing(
   const cancelRename = useCallback(() => setRenaming(null), [getLocale()])
   const renameTo = useCallback(
     async (target: string, name: string) => {
-      const result = await renameSingleEntry(target, name, entries)
+      const result = await renameSingleEntry(target, name, entries, (resourcePath, nextName) =>
+        call('rename_entry', { path: resourcePath, name: nextName }),
+      )
       if (result.status === 'unsupported') {
         setError(t('此位置不支持该操作'))
         return false
