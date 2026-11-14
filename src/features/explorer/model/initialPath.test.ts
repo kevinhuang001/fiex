@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Location } from '@/lib/types'
-import { resolveInitialPath } from './initialPath'
+import { resolveInitialPath, resolveInitialPathRequest } from './initialPath'
 
 const locations: Location[] = [
   {
@@ -60,5 +60,39 @@ describe('resolveInitialPath', () => {
     expect(
       resolveInitialPath({ startPage: 'home', initialPath: '/tmp/fallback', locations: [] }),
     ).toBe('/tmp/fallback')
+  })
+
+  it('stops startup resolution when the pane is cancelled after launch lookup', async () => {
+    let cancelled = false
+    const loadLastPath = vi.fn(async () => '/work/old')
+    const resolve = resolveInitialPathRequest({
+      startPage: 'last',
+      native: true,
+      isCancelled: () => cancelled,
+      loadLaunchPath: async () => null,
+      loadLastPath,
+      loadInitialPath: async () => '/home/kevin',
+      loadLocations: async () => locations,
+    })
+    cancelled = true
+
+    await expect(resolve).resolves.toBeNull()
+    expect(loadLastPath).not.toHaveBeenCalled()
+  })
+
+  it('falls back from failed startup lookups to the configured Documents location', async () => {
+    await expect(
+      resolveInitialPathRequest({
+        startPage: 'last',
+        native: true,
+        isCancelled: () => false,
+        loadLaunchPath: async () => {
+          throw new Error('launch state unavailable')
+        },
+        loadLastPath: async () => null,
+        loadInitialPath: async () => null,
+        loadLocations: async () => locations,
+      }),
+    ).resolves.toBe('/home/kevin/Documents')
   })
 })
