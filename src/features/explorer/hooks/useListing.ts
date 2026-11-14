@@ -7,6 +7,7 @@ import { requestDirectoryRefresh } from '@/lib/listing'
 import { isVirtualResource } from '@/lib/files'
 import { useListingSearch } from './useListingSearch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
+import { canRenameEntry, renameSingleEntry } from '@/features/explorer/operations/rename'
 import { useDirectorySnapshot } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
@@ -203,7 +204,7 @@ export function useListing(
   const beginRename = useCallback(
     (target: string, createdEntry?: Entry) => {
       const entry = entries.find((item) => item.path === target) ?? createdEntry
-      if (entry?.path !== target || !entry.allowedOps?.includes('rename')) return
+      if (entry?.path !== target || !canRenameEntry(entry)) return
       if (!entries.some((item) => item.path === target))
         setEntries((previous) => [...previous, entry])
       setSelected([target])
@@ -214,21 +215,20 @@ export function useListing(
   const cancelRename = useCallback(() => setRenaming(null), [getLocale()])
   const renameTo = useCallback(
     async (target: string, name: string) => {
-      if (!entries.find((entry) => entry.path === target)?.allowedOps?.includes('rename')) {
+      const result = await renameSingleEntry(target, name, entries)
+      if (result.status === 'unsupported') {
         setError(t('此位置不支持该操作'))
         return false
       }
-      setError('')
-      try {
-        const next = await call('rename_entry', { path: target, name })
-        setRenaming(null)
-        setSelected([next])
-        requestDirectoryRefresh([path])
-        return true
-      } catch (e) {
-        setError(String(e))
+      if (result.status === 'failed') {
+        setError(result.message)
         return false
       }
+      setError('')
+      setRenaming(null)
+      setSelected([result.path])
+      requestDirectoryRefresh([path])
+      return true
     },
     [entries, getLocale(), path],
   )

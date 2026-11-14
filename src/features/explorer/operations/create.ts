@@ -3,6 +3,7 @@ import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { uniqueName } from '@/lib/files'
 import type { Entry } from '@/lib/types'
+import { canRenameEntry } from './rename'
 import type { FileOpsContext } from './types'
 
 export type OfficeFileTemplate = 'docx' | 'xlsx' | 'pptx'
@@ -18,7 +19,7 @@ export function createActions({ x, run }: FileOpsContext) {
       if (!reportFilesystemPermissionError(message, `stat\n${path}`)) x.setError(message)
       return
     }
-    if (entry.allowedOps?.includes('rename')) x.beginRename(path, entry)
+    if (canRenameEntry(entry)) x.beginRename(path, entry)
   }
   const create = async () => {
     if (!x.directoryAllowedOps.includes('mkdir')) {
