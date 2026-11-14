@@ -1,27 +1,22 @@
 import type { Preferences } from '@/lib/types'
-import { call } from '@/lib/api'
-import { parent } from '@/lib/files'
-import { useListing } from './useListing'
+import { useListing, type ListingServices } from './useListing'
 import { useNavigation, type NavigationServices } from './useNavigation'
-import { explorerListingServices } from '@/features/explorer/services/listingAdapters'
 
-const navigationServices: NavigationServices = {
-  readSearchMode: () => localStorage.getItem('fiex:search-mode'),
-  writeSearchMode: (mode) => localStorage.setItem('fiex:search-mode', mode),
-  parentPath: parent,
-  resolveParentPath: (path, fallback) =>
-    path.startsWith('applications://') ? call('file_parent', { path }) : Promise.resolve(fallback),
+export interface ExplorerServices {
+  navigation: NavigationServices
+  listing: ListingServices
 }
 
 export function useExplorer(
   prefs: Preferences,
+  services: ExplorerServices,
   startOverride?: string,
   enabled = true,
   pane = 'left',
   initialTabs?: { paths: string[]; active: number },
 ) {
-  const nav = useNavigation(navigationServices, initialTabs)
-  const listing = useListing(prefs, nav, explorerListingServices, enabled, pane, startOverride)
+  const nav = useNavigation(services.navigation, initialTabs)
+  const listing = useListing(prefs, nav, services.listing, enabled, pane, startOverride)
   return {
     path: nav.path,
     previousPath: nav.previousPath,
