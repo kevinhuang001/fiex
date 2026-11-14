@@ -17,6 +17,7 @@ export function useExplorer(
     entries: listing.entries,
     decorations: listing.decorations,
     connections: listing.connections,
+    connectionsLoaded: listing.connectionsLoaded,
     refreshConnections: listing.refreshConnections,
     tagFilter: listing.tagFilter,
     setTagFilter: listing.setTagFilter,
