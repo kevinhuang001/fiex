@@ -1,3 +1,4 @@
+use super::execute::native_action_authorized;
 use super::*;
 
 fn ctx(plugin_id: &str, kind: &str, mount: &str, saved: bool, autostart: bool) -> Context {
