@@ -2,37 +2,21 @@ import { showLogs } from '@/lib/logCenter'
 import { ActivityDetails, StatusIcon } from './activity/ActivityDetails'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Clock3, Filter, ScrollText, X } from 'lucide-react'
-import { useActivity, type ActivityKind } from '@/hooks/useActivity'
+import { ArrowLeft, ChevronRight, Clock3, Filter, ScrollText, X } from 'lucide-react'
+import { useActivity } from '@/hooks/useActivity'
 import { usePluginCatalog } from '@/lib/plugins'
 import { activityEta as eta } from '@/lib/activity'
 import { size } from '@/lib/files'
+import { ActivityFilterMenu } from './activity/ActivityFilterMenu'
+import {
+  getActivityFilterLabel,
+  getActivityPluginFilters,
+  matchesActivityFilter,
+  type ActivityFilter,
+} from './activity/filters'
 
 const time = (value: number) =>
   new Date(value).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })
-
-type ActivityFilter = 'all' | `builtin:${ActivityKind}` | `plugin:${string}`
-
-const builtinFilters: { kind: ActivityKind; get label(): string }[] = [
-  {
-    kind: 'transfer',
-    get label() {
-      return t('传输')
-    },
-  },
-  {
-    kind: 'delete',
-    get label() {
-      return t('删除')
-    },
-  },
-  {
-    kind: 'sync',
-    get label() {
-      return t('同步')
-    },
-  },
-]
 
 export function ActivityCenter() {
   const activity = useActivity()
@@ -43,14 +27,7 @@ export function ActivityCenter() {
   const panel = useRef<HTMLElement>(null)
   const plugins = usePluginCatalog()
   const pluginFilters = useMemo(() => {
-    const names = new Map(plugins.map((plugin) => [plugin.id, plugin.name]))
-    const groups = new Map<string, { id: string; label: string }>()
-    for (const item of activity.items) {
-      if (item.kind !== 'plugin') continue
-      const id = item.pluginId || ''
-      if (!groups.has(id)) groups.set(id, { id, label: id ? names.get(id) || id : t('未标记插件') })
-    }
-    return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label, getLocale()))
+    return getActivityPluginFilters(activity.items, plugins)
   }, [activity.items, plugins, getLocale()])
   useEffect(() => {
     if (!activity.open) {
@@ -81,19 +58,9 @@ export function ActivityCenter() {
   }, [filterOpen])
   if (!activity.open) return null
   const selected = activity.items.find((item) => item.id === selectedId)
-  const filtered = activity.items.filter((item) => {
-    if (filter === 'all') return true
-    if (filter.startsWith('builtin:')) return item.kind === filter.slice('builtin:'.length)
-    if (item.kind !== 'plugin') return false
-    return (item.pluginId || '') === filter.slice('plugin:'.length)
-  })
+  const filtered = activity.items.filter((item) => matchesActivityFilter(item, filter))
   const running = filtered.filter((item) => item.status === 'running').length
-  const activeFilterLabel =
-    filter === 'all'
-      ? t('全部操作')
-      : filter.startsWith('builtin:')
-        ? builtinFilters.find((entry) => `builtin:${entry.kind}` === filter)?.label || t('操作类型')
-        : pluginFilters.find((entry) => `plugin:${entry.id}` === filter)?.label || t('插件')
+  const activeFilterLabel = getActivityFilterLabel(filter, pluginFilters)
   return (
     <aside
       ref={panel}
@@ -141,66 +108,14 @@ export function ActivityCenter() {
                 <Filter size={16} />
               </button>
               {filterOpen && (
-                <div className="activity-filter-menu" role="menu" aria-label={t('筛选操作')}>
-                  <button
-                    role="menuitemradio"
-                    aria-checked={filter === 'all'}
-                    className={filter === 'all' ? 'active' : ''}
-                    onClick={() => {
-                      setFilter('all')
-                      setFilterOpen(false)
-                    }}
-                  >
-                    <span>{t('全部操作')}</span>
-                    {filter === 'all' && <Check size={14} />}
-                  </button>
-                  <div className="activity-filter-group" role="group" aria-label={t('操作类型')}>
-                    {builtinFilters.map((entry) => {
-                      const value: ActivityFilter = `builtin:${entry.kind}`
-                      return (
-                        <button
-                          key={value}
-                          role="menuitemradio"
-                          aria-checked={filter === value}
-                          className={filter === value ? 'active' : ''}
-                          onClick={() => {
-                            setFilter(value)
-                            setFilterOpen(false)
-                          }}
-                        >
-                          <span>{entry.label}</span>
-                          {filter === value && <Check size={14} />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {pluginFilters.length > 0 && (
-                    <div className="activity-filter-group" role="group" aria-label={t('插件')}>
-                      <span className="activity-filter-heading" aria-hidden>
-                        {t('插件')}
-                      </span>
-                      {pluginFilters.map((entry) => {
-                        const value: ActivityFilter = `plugin:${entry.id}`
-                        return (
-                          <button
-                            key={value}
-                            role="menuitemradio"
-                            aria-checked={filter === value}
-                            className={filter === value ? 'active' : ''}
-                            title={entry.id || undefined}
-                            onClick={() => {
-                              setFilter(value)
-                              setFilterOpen(false)
-                            }}
-                          >
-                            <span>{entry.label}</span>
-                            {filter === value && <Check size={14} />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                <ActivityFilterMenu
+                  filter={filter}
+                  pluginFilters={pluginFilters}
+                  onSelect={(value) => {
+                    setFilter(value)
+                    setFilterOpen(false)
+                  }}
+                />
               )}
             </div>
           )}
