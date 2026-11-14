@@ -1,15 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { call, openFilePicker } = vi.hoisted(() => ({
-  call: vi.fn(),
-  openFilePicker: vi.fn(),
-}))
-
-vi.mock('@/lib/api', () => ({ call }))
-vi.mock('@/lib/filePicker', () => ({ openFilePicker }))
-
-import { call as apiCall } from '@/lib/api'
-import { openFilePicker as pickFromApp } from '@/lib/filePicker'
 import type { FileOpsContext } from './types'
 import { restoreActions } from './restore'
 
@@ -21,30 +11,33 @@ describe('trash restore fallback selection', () => {
     const notify = vi.fn()
     const setSelected = vi.fn()
     const run = vi.fn(async (_label: string, operation: () => Promise<unknown>) => operation())
-    vi.mocked(apiCall).mockImplementation(async (command) => {
-      if (command === 'trash_restore_needs_folder') return true
-      if (command === 'restore_from_trash') return 1
-      return undefined
-    })
-    vi.mocked(pickFromApp).mockResolvedValue('/Users/kevin/Downloads')
+    const services = {
+      fileInfo: vi.fn(),
+      createEntry: vi.fn(),
+      createFileEntry: vi.fn(),
+      recycle: vi.fn(),
+      deletePermanently: vi.fn(),
+      emptyTrash: vi.fn(),
+      trashRestoreNeedsFolder: vi.fn(async () => true),
+      restoreFromTrash: vi.fn(async () => 1),
+      undo: vi.fn(),
+      pickDirectory: vi.fn(async () => '/Users/kevin/Downloads'),
+      reportPermissionError: vi.fn(() => false),
+    }
 
     const actions = restoreActions({
       x: { path: 'trash://', setSelected } as unknown as FileOpsContext['x'],
       notify,
       run,
+      services,
     } as unknown as FileOpsContext)
 
     actions.restoreFromTrash(paths)
     await vi.waitFor(() =>
-      expect(apiCall).toHaveBeenCalledWith('restore_from_trash', expect.anything()),
+      expect(services.restoreFromTrash).toHaveBeenCalledWith(paths, '/Users/kevin/Downloads'),
     )
 
-    expect(pickFromApp).toHaveBeenCalledWith({ mode: 'openDirectory' })
-    expect(apiCall).not.toHaveBeenCalledWith('pick_folder', {})
-    expect(apiCall).toHaveBeenCalledWith('restore_from_trash', {
-      paths,
-      fallback: '/Users/kevin/Downloads',
-    })
+    expect(services.pickDirectory).toHaveBeenCalledOnce()
     expect(notify).toHaveBeenCalled()
     expect(setSelected).toHaveBeenCalledWith([])
   })

@@ -1,10 +1,8 @@
 import { t } from '@/i18n'
-import { call } from '@/lib/api'
-import { openFilePicker } from '@/lib/filePicker'
 import type { FileOpsContext } from './types'
 
 /** Putting Trash contents back and undoing the last file operation. */
-export function restoreActions({ x, notify, run }: FileOpsContext) {
+export function restoreActions({ x, notify, run, services }: FileOpsContext) {
   const restoreFromTrash = (paths: string[]) => {
     if (!paths.length) return
     let fallbackDirectory: string | null = null
@@ -12,13 +10,12 @@ export function restoreActions({ x, notify, run }: FileOpsContext) {
     void run(
       t('正在复原…'),
       async () => {
-        const needsFolder = await call('trash_restore_needs_folder', { paths })
-        const picked = needsFolder ? await openFilePicker({ mode: 'openDirectory' }) : null
-        const fallback = typeof picked === 'string' ? picked : null
+        const needsFolder = await services.trashRestoreNeedsFolder(paths)
+        const fallback = needsFolder ? await services.pickDirectory() : null
         if (needsFolder && !fallback) return
         fallbackDirectory = fallback
         restoreStarted = true
-        const restored = await call('restore_from_trash', { paths, fallback })
+        const restored = await services.restoreFromTrash(paths, fallback)
         if (restored === undefined) return
         notify(t('已复原 {0} 个项目', restored))
         x.setSelected([])
@@ -40,7 +37,7 @@ export function restoreActions({ x, notify, run }: FileOpsContext) {
     void run(
       t('正在撤销…'),
       async () => {
-        await call('undo')
+        await services.undo()
         notify(t('已撤销上一次文件操作'))
       },
       undefined,

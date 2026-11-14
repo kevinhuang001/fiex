@@ -13,6 +13,19 @@ function createActions(run: FileOpsContext['run']) {
       dialog.current = value
     },
     run,
+    services: {
+      fileInfo: vi.fn(),
+      createEntry: vi.fn(),
+      createFileEntry: vi.fn(),
+      recycle: vi.fn(),
+      deletePermanently: vi.fn(async () => 1),
+      emptyTrash: vi.fn(async () => 1),
+      trashRestoreNeedsFolder: vi.fn(),
+      restoreFromTrash: vi.fn(),
+      undo: vi.fn(),
+      pickDirectory: vi.fn(),
+      reportPermissionError: vi.fn(() => false),
+    },
     activity: {
       progressChannel: vi.fn(),
       quietProgressChannel: vi.fn(),

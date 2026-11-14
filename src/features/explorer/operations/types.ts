@@ -23,6 +23,26 @@ export interface OperationActivity {
   updateActivity: (id: string, patch: { detail?: string; indeterminate?: boolean }) => void
 }
 
+/** Native and picker effects stay at the hook boundary so operation groups
+ * can be tested and checked without importing the full API adapter. */
+export interface FileOperationServices {
+  fileInfo: (path: string) => Promise<Entry>
+  createEntry: (path: string, name: string) => Promise<string>
+  createFileEntry: (
+    path: string,
+    name: string,
+    template?: 'docx' | 'xlsx' | 'pptx',
+  ) => Promise<string>
+  recycle: (paths: string[], onProgress: Channel<OperationProgress>) => Promise<OperationResult>
+  deletePermanently: (paths: string[]) => Promise<number>
+  emptyTrash: () => Promise<number>
+  trashRestoreNeedsFolder: (paths: string[]) => Promise<boolean>
+  restoreFromTrash: (paths: string[], fallback: string | null) => Promise<number>
+  undo: () => Promise<void>
+  pickDirectory: () => Promise<string | null>
+  reportPermissionError: (message: string, context: string) => boolean
+}
+
 export type Clipboard = { paths: string[]; moving: boolean } | null
 
 export type ConflictState = {
@@ -65,6 +85,7 @@ export interface FileOpsContext {
   setConflict: Dispatch<SetStateAction<ConflictState>>
   setClipboard: Dispatch<SetStateAction<Clipboard>>
   run: Run
+  services: FileOperationServices
   handleResult: HandleResult
   activity: OperationActivity
 }
