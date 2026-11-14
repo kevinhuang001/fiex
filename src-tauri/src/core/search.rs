@@ -7,6 +7,7 @@
 use crate::core::files::Entry;
 mod adapter_content;
 mod providers;
+mod virtual_roots;
 mod walker;
 pub use providers::accessible_roots;
 use providers::search_root;
