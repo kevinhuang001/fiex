@@ -89,8 +89,16 @@ fn main() {
         std::fs::read_to_string(uri_file).expect("fresh Core process did not persist the VFS URI")
     };
 
-    // This opens the provider through ResourceBroker's VFS routing and the
-    // plugin host's actual framed JSON-RPC process boundary.
+    // Deliberately crash the SDK provider during a real VFS operation. Core
+    // must surface that failure, replace the process, and serve the retry.
+    let failure = match vfs::list(&uri, true, &[]) {
+        Ok(_) => panic!("the fixture must terminate during the hidden listing"),
+        Err(error) => error,
+    };
+    assert!(failure.contains("control channel"), "{failure}");
+
+    // This reopens the provider through ResourceBroker's VFS routing and the
+    // plugin host's actual framed JSON-RPC process boundary after recovery.
     verify_vfs(&uri);
     plugin_host::global().stop(PLUGIN_ID);
     println!("PASS: {phase}: reopened registered VFS Provider through Core/Host IPC");
