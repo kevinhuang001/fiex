@@ -18,7 +18,6 @@
   "src-tauri/src/core/fs/provider_registry/plugin.rs": 352,
   "src-tauri/src/plugins/host/manifest/validation.rs": 414,
   "src-tauri/src/plugins/host/process/rpc/transport.rs": 312,
-  "src-tauri/src/plugins/providers/context_menu/file_ops.rs": 315,
   "src-tauri/src/plugins/providers/context_menu/mod.rs": 409,
   "src/components/ActivityCenter.tsx": 311,
   "src/components/explorer/ExplorerToolbar.tsx": 312,
