@@ -183,7 +183,10 @@
 | src-tauri/src/core/transfers/copy/staging.rs                     | OPS-XFER-01、OPS-XFER-05、ARCH-03（冲突、取消和暂存复制）                               |
 | src/features/explorer/model/listColumns.test.ts                  | UI-VIEW-02、ARCH-01（列宽约束和严格边界类型检查）                                       |
 | src/features/explorer/model/folderView.test.ts                   | UI-VIEW-01、ARCH-01（文件夹展示状态和严格边界类型检查）                                 |
-| src/features/explorer/model/searchBatch.test.ts                  | SEARCH-01、SEARCH-06（流式批次合并与稳定结果）                                          |
+| src/features/explorer/model/searchBatch.test.ts                  | SEARCH-01、SEARCH-06、ARCH-01（流式批次合并、稳定结果与严格边界类型检查）               |
+| src/features/explorer/model/listingDiff.test.ts                  | REL-01、ARCH-01（列表身份比较与严格边界类型检查）                                       |
+| src/features/explorer/model/paintedListingCache.test.ts          | UI-VIEW-04、REL-01、ARCH-01（大目录快照缓存与严格边界类型检查）                         |
+| src/lib/files.test.ts                                            | ARCH-01（路径解析、VFS 身份和严格边界类型检查）                                         |
 | src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                                |
 | src/features/explorer/model/transferPolicy.test.ts               | OPS-CLIP-01（按目标能力判断副本可用性并过滤已满足的移动）                               |
 | src/features/explorer/model/moreMenu.test.ts                     | UI-WORK-01（工作区与更多菜单项排序策略）                                                |

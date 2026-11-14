@@ -122,4 +122,4 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 
 P3-01 PR #186–#188 已完成共享操作合同、传输暂存与路径工具的分离，并将 ResourceBroker 从 `core/fs/mod.rs` 移至 `core/fs/broker.rs`，随后把读取/搜索和写入/变更服务拆入子模块。既有传输测试覆盖取消、源变化、Provider 写入失败回滚与 preflight 拒绝；Provider/cache/preflight/通知边界的可注入故障和事务恢复测试仍需补齐，因此阶段整体仍在进行。
 P3-02 PR #189–#190 先完成 Host/RPC 回复边界与远端上传流的失败控制：非法 JSON-RPC reply、超时和断连会失败关闭；上传按偏移发送分块，只有完整写入后才 commit，短写或断连不会提交，未完成的 WriteLease 会发送 abort。现有测试尚未覆盖真实连接/session 恢复、持久缓存基线在上传失败后的端到端保留、断网 reconcile 和 Host 进程重启后的跨层行为，需继续补齐。
-P4-02 的严格类型边界现扩展到 Explorer 文件名、文件夹视图、菜单、列宽和传输策略纯模型，以及共享列宽偏好；检查同时覆盖 `shortcuts/matching` 的别名回退。其余源码仍存在 `noUncheckedIndexedAccess` 与 `exactOptionalPropertyTypes` 诊断，需分批修复后再纳入。10,000 项 Playwright 流程现在随测试 artifact 记录每次运行的目录加载、视图切换和 End 导航耗时；这提供原始样本，不构成跨平台 p95 或性能通过阈值。
+P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单、列宽、传输策略、目录 diff、快照缓存和流式搜索纯模型，以及虚拟路径解析和共享列宽偏好；`tsconfig.boundary.json` 对这些模块开启 `noUncheckedIndexedAccess` 与 `exactOptionalPropertyTypes`。扩展到面板和操作 orchestration 会触发多个既有 UI/hooks/E2E fixture 诊断，因此这些依赖层仍需分批处理。10,000 项 Playwright 流程记录目录加载、视图切换与 End 导航的原始运行耗时；目前还没有跨平台重复样本与通过阈值，不能声称跨平台 p95 已达标。

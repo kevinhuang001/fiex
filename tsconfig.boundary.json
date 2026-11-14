@@ -13,6 +13,9 @@
     "src/features/explorer/model/listColumns.ts",
     "src/features/explorer/model/moreMenu.ts",
     "src/features/explorer/model/transferPolicy.ts",
+    "src/features/explorer/model/listingDiff.ts",
+    "src/features/explorer/model/paintedListingCache.ts",
+    "src/features/explorer/model/searchBatch.ts",
     "src/lib/listColumns.ts"
   ]
 }
