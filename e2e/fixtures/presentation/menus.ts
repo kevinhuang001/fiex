@@ -69,6 +69,9 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
         ? []
         : [
             item('open', '打开', 'open'),
+            ...(recentView && paths.length === 1
+              ? [item('reveal', '显示所在文件夹', 'reveal')]
+              : []),
             ...(paths.length === 1
               ? [
                   ...(permits('read') ? [item('preview', '快速查看', 'eye', 'quickLook')] : []),
@@ -156,6 +159,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   const providerForAction: Record<string, string> = {
     open: 'builtin:open',
+    reveal: 'builtin:reveal',
     'openWith-choose': 'builtin:open-with',
     preview: 'builtin:preview',
     info: 'builtin:info',

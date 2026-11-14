@@ -1,4 +1,5 @@
 import type { RemoteConnection } from '@/lib/types'
+import { parent } from '@/lib/files'
 import { root } from '../data'
 import { notHandled } from './shared'
 
@@ -41,6 +42,11 @@ let fixtureUsbMounted = true
 
 export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
+    case 'recent_navigation_target': {
+      const alias = String(a.alias || '')
+      if (!alias) throw new Error('Recent navigation requires a resource path')
+      return { parent: parent(alias), target: alias }
+    }
     case 'state_get': {
       const namespace = String(a.namespace || '')
       const key = String(a.key || '')

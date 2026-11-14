@@ -8,7 +8,7 @@ import {
   sameDirectoryDecorations,
   type PaintedListingCache,
 } from '@/features/explorer/model/paintedListingCache'
-import { reconcileDirectorySnapshot } from '@/features/explorer/model/directorySnapshot'
+import { decideDirectoryStreamUpdate } from '@/features/explorer/model/directoryStreamUpdate'
 import type { Entry, EntryDecoration, Listing, Location, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
@@ -100,6 +100,10 @@ export function useDirectorySnapshot({
         return sameDirectoryDecorations(oldValues, decorations) ? previous : next
       })
     }
+    const navigateHome = () => {
+      const home = locations.find((item) => item.name === '个人文件夹')?.path
+      if (home) navigate(home)
+    }
     if (paintedSnapshot) {
       paintedByPath.current.touch(viewKey)
       if (
@@ -125,82 +129,56 @@ export function useDirectorySnapshot({
     if (paintedSnapshot === null || isNewView) setError('')
     void openDirectoryStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
       if (!active || id !== request.current) return
-      if (paintedSnapshot && snapshot.revision < paintedSnapshot.revision) return
-      const listing = snapshot.listing
-      if (!listing) {
-        if (!paintedSnapshot) return
-        const decorations = new Map(paintedSnapshot.decorations.map((value) => [value.path, value]))
-        for (const value of snapshot.decorations) decorations.set(value.path, value)
-        const nextDecorations = [...decorations.values()]
-        paintedSnapshot = {
-          ...paintedSnapshot,
-          decorations: nextDecorations,
-          revision: snapshot.revision,
-        }
-        paintedByPath.current.remember(viewKey, paintedSnapshot)
-        cachePresentationPatch(paintedSnapshot.listing.entries, snapshot.decorations)
-        publishPresentationIcons(paintedSnapshot.listing.entries, snapshot.presentationPending)
-        if (snapshot.decorations.length)
+      const decision = decideDirectoryStreamUpdate({
+        path,
+        update: snapshot,
+        previous: paintedSnapshot,
+        sort: prefs.sort,
+        descending: prefs.descending,
+        historyLength: history.length,
+        pendingSelection,
+      })
+      if (decision.kind === 'ignore') return
+      if (decision.kind === 'navigate') {
+        navigate(decision.path)
+        return
+      }
+      if (decision.kind === 'patch') {
+        paintedSnapshot = decision.snapshot
+        paintedByPath.current.remember(viewKey, decision.snapshot)
+        cachePresentationPatch(decision.snapshot.listing.entries, decision.patchDecorations)
+        publishPresentationIcons(decision.snapshot.listing.entries, decision.presentationPending)
+        if (decision.shouldApplyDecorations)
           setDirectoryDecorations(
-            Object.fromEntries(nextDecorations.map((value) => [value.path, value])),
+            Object.fromEntries(decision.snapshot.decorations.map((value) => [value.path, value])),
           )
-        if (
-          snapshot.complete &&
-          path === 'recent://' &&
-          paintedSnapshot.listing.entries.length === 0 &&
-          history.length <= 1
-        ) {
-          const home = locations.find((item) => item.name === '个人文件夹')?.path
-          if (home) navigate(home)
-        }
+        if (decision.redirectHome) navigateHome()
         return
       }
-      if (listing.path !== path) {
-        navigate(listing.path)
-        return
-      }
-      const pending = pendingSelection
-      if (pending?.directory === path) {
-        if (listing.entries.some((entry) => entry.path === pending.target)) {
-          setSelected([pending.target])
-          clearPendingSelection(pending.generation)
-        } else if (snapshot.complete) {
-          clearPendingSelection(pending.generation)
-          setError(t('无法定位已打开的文件'))
-        }
-      }
-      cachePresentations(listing.entries, snapshot.decorations)
+      const listing = decision.snapshot.listing
+      cachePresentations(listing.entries, decision.decorations)
       publishPresentationIcons(listing.entries, snapshot.presentationPending)
-      const reconciled = reconcileDirectorySnapshot(
-        paintedSnapshot,
-        listing,
-        snapshot.decorations,
-        snapshot.revision,
-        prefs.sort,
-        prefs.descending,
-      )
-      paintedSnapshot = reconciled.snapshot
-      paintedByPath.current.remember(viewKey, paintedSnapshot)
-      applyDirectoryMetadata(reconciled.snapshot.listing, snapshot.decorations)
-      if (renderedKey.current !== viewKey || reconciled.visibleChanged) {
+      paintedSnapshot = decision.snapshot
+      paintedByPath.current.remember(viewKey, decision.snapshot)
+      applyDirectoryMetadata(listing, decision.decorations)
+      if (decision.selection.kind === 'select') {
+        setSelected([decision.selection.target])
+        clearPendingSelection(decision.selection.generation)
+      } else if (decision.selection.kind === 'missing') {
+        clearPendingSelection(decision.selection.generation)
+        setError(t('无法定位已打开的文件'))
+      }
+      if (renderedKey.current !== viewKey || decision.visibleChanged) {
         renderedKey.current = viewKey
         renderedPathRef.current = path
         setRenderedPath(path)
-        setEntries(reconciled.entries)
-        const paths = new Set(reconciled.entries.map((entry) => entry.path))
+        setEntries(decision.entries)
+        const paths = new Set(decision.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((item) => paths.has(item)))
       }
       setListedPath(path)
       setLoading(false)
-      if (
-        snapshot.complete &&
-        path === 'recent://' &&
-        listing.entries.length === 0 &&
-        history.length <= 1
-      ) {
-        const home = locations.find((item) => item.name === '个人文件夹')?.path
-        if (home) navigate(home)
-      }
+      if (decision.redirectHome) navigateHome()
     })
       .catch((error) => {
         if (!active || id !== request.current) return

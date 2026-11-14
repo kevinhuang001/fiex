@@ -28,8 +28,6 @@ export function useListing(
     path,
     query,
     setSelected,
-    pendingSelection,
-    clearPendingSelection,
     setRenaming,
     setError,
   } = nav
@@ -118,14 +116,6 @@ export function useListing(
     window.addEventListener('fiex:directory-mutated', refresh)
     return () => window.removeEventListener('fiex:directory-mutated', refresh)
   }, [enabled, path, query])
-
-  useEffect(() => {
-    if (!pendingSelection || pendingSelection.directory !== path || listedPath !== path) return
-    if (entries.some((entry) => entry.path === pendingSelection.target)) {
-      setSelected([pendingSelection.target])
-      clearPendingSelection(pendingSelection.generation)
-    }
-  }, [pendingSelection, path, listedPath, entries, setSelected, clearPendingSelection])
 
   useDirectorySnapshot({
     enabled,
