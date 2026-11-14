@@ -38,7 +38,7 @@ function normalizedKey(event: KeyboardEvent): string | null {
     else if (/^Digit[0-9]$/.test(code)) key = code.slice(5)
   }
   if (!key || MODIFIER_KEYS.has(key) || key === 'Dead' || key === 'Unidentified') return null
-  if (KEY_ALIASES[key]) key = KEY_ALIASES[key]
+  if (KEY_ALIASES[key]) key = KEY_ALIASES[key] ?? key
   if (key.length === 1) return /[a-z]/.test(key) ? key.toUpperCase() : key
   return key
 }

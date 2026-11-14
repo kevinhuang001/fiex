@@ -8,8 +8,11 @@
     "src/lib/ipcValidation/json.ts",
     "src/lib/ipcValidation/info.ts",
     "src/features/explorer/model/fileNameDisplay.ts",
+    "src/features/explorer/model/folderView.ts",
     "src/features/explorer/model/menuVisibility.ts",
     "src/features/explorer/model/listColumns.ts",
+    "src/features/explorer/model/moreMenu.ts",
+    "src/features/explorer/model/transferPolicy.ts",
     "src/lib/listColumns.ts"
   ]
 }
