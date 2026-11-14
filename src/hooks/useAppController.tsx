@@ -13,12 +13,14 @@ import { useAppControllerActions } from './controller/useAppControllerActions'
 import { usePaneLayout } from './usePaneLayout'
 import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
+import { explorerServices } from '@/features/explorer/services/listingAdapters'
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
   const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(
     prefs,
+    explorerServices,
     undefined,
     true,
     'left',
@@ -45,7 +47,7 @@ export function useAppController() {
     moveWorkspaceTab,
     openPane,
     closePane,
-  } = usePaneLayout(prefs, left)
+  } = usePaneLayout(prefs, left, explorerServices)
   useEffect(() => {
     if (left.tabs.length) saveTabs(left.tabs, left.tab)
   }, [left.tabs, left.tab])
