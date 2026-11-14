@@ -7,8 +7,15 @@ import { createActions } from '@/features/explorer/operations/create'
 import { recycleActions } from '@/features/explorer/operations/recycle'
 import { createResultHandler } from '@/features/explorer/operations/result'
 import { restoreActions } from '@/features/explorer/operations/restore'
-import type { Clipboard, ConflictState } from '@/features/explorer/operations/types'
+import type {
+  Clipboard,
+  ConflictState,
+  FileOperationServices,
+} from '@/features/explorer/operations/types'
 import { transferActions } from '@/features/explorer/operations/transfer'
+import { call } from '@/lib/api'
+import { openFilePicker } from '@/lib/filePicker'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { useRunner } from './run'
 
 export function useFileOperations({
@@ -30,6 +37,22 @@ export function useFileOperations({
   const [clipboard, setClipboard] = useState<Clipboard>(null)
   const { run } = useRunner({ x, setBusy })
   const handleResult = createResultHandler(notify)
+  const services: FileOperationServices = {
+    fileInfo: (path) => call('file_info', { path }),
+    createEntry: (path, name) => call('create_entry', { path, name }),
+    createFileEntry: (path, name, template) => call('create_file_entry', { path, name, template }),
+    recycle: (paths, onProgress) => call('recycle', { paths, onProgress }),
+    deletePermanently: (paths) => call('delete_permanently', { paths }),
+    emptyTrash: () => call('empty_trash'),
+    trashRestoreNeedsFolder: (paths) => call('trash_restore_needs_folder', { paths }),
+    restoreFromTrash: (paths, fallback) => call('restore_from_trash', { paths, fallback }),
+    undo: () => call('undo'),
+    pickDirectory: async () => {
+      const picked = await openFilePicker({ mode: 'openDirectory' })
+      return typeof picked === 'string' ? picked : null
+    },
+    reportPermissionError: reportFilesystemPermissionError,
+  }
   const context = {
     x,
     notify,
@@ -39,6 +62,7 @@ export function useFileOperations({
     setConflict,
     setClipboard,
     run,
+    services,
     handleResult,
     activity: { progressChannel, quietProgressChannel, updateActivity },
   }
