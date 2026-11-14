@@ -78,6 +78,13 @@ fn downloaded_meta(local: &std::path::Path) -> (RemoteMeta, RemoteMetaFile) {
     (meta, file)
 }
 
+fn persisted_meta(meta: &RemoteMeta) -> RemoteMeta {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("remote-meta.json");
+    save_meta_to(&path, meta).unwrap();
+    load_meta_from(&path)
+}
+
 #[test]
 fn disconnected_stat_keeps_the_cached_bytes_and_baseline_for_retry() {
     let conn = connection();
@@ -116,6 +123,9 @@ fn disconnected_stat_keeps_the_cached_bytes_and_baseline_for_retry() {
     assert_eq!(meta.files["document.txt"].revision, "remote-v1");
     assert!(!meta.files["document.txt"].conflict);
     assert!(changes.is_empty());
+    let recovered = persisted_meta(&meta);
+    assert_eq!(recovered.files["document.txt"].baseline, baseline);
+    assert_eq!(recovered.files["document.txt"].revision, "remote-v1");
 }
 
 #[test]
@@ -157,6 +167,9 @@ fn failed_remote_refresh_preserves_the_cached_copy_and_baseline() {
     assert_eq!(meta.files["document.txt"].baseline, baseline);
     assert_eq!(meta.files["document.txt"].revision, "remote-v1");
     assert!(changes.is_empty());
+    let recovered = persisted_meta(&meta);
+    assert_eq!(recovered.files["document.txt"].baseline, baseline);
+    assert_eq!(recovered.files["document.txt"].revision, "remote-v1");
 }
 
 #[test]

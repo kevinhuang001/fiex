@@ -104,21 +104,29 @@ pub(crate) fn forget_meta(conn: &StoredConnection) {
 }
 
 pub(crate) fn load_meta(conn: &StoredConnection) -> RemoteMeta {
-    fs::read(meta_path(conn))
+    load_meta_from(&meta_path(conn))
+}
+
+pub(crate) fn load_meta_from(path: &Path) -> RemoteMeta {
+    fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default()
 }
 
 pub(crate) fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
-    fs::create_dir_all(meta_dir()).map_err(|e| e.to_string())?;
+    save_meta_to(&meta_path(conn), meta)
+}
+
+pub(crate) fn save_meta_to(path: &Path, meta: &RemoteMeta) -> Result<(), String> {
+    let parent = path.parent().ok_or("invalid remote metadata path")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     use std::io::Write;
-    let mut temp = tempfile::NamedTempFile::new_in(meta_dir()).map_err(|e| e.to_string())?;
+    let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     temp.write_all(&serde_json::to_vec(meta).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     temp.as_file().sync_all().map_err(|e| e.to_string())?;
-    temp.persist(meta_path(conn))
-        .map_err(|e| e.error.to_string())?;
+    temp.persist(path).map_err(|e| e.error.to_string())?;
     Ok(())
 }
 
