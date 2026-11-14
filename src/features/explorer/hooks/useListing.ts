@@ -3,16 +3,29 @@ import { t } from '@/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native } from '@/lib/api'
-import { requestDirectoryRefresh } from '@/lib/listing'
+import { cachePresentationPatch, cachePresentations } from '@/lib/entryPresentation'
+import { publishPresentationIcons } from '@/lib/decorationIcons'
+import { openDirectoryStream, requestDirectoryRefresh } from '@/lib/listing'
 import { isVirtualResource } from '@/lib/files'
 import { useListingSearch } from './useListingSearch'
 import { attachDirectoryWatch } from '@/features/explorer/model/directoryWatch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
 import { canRenameEntry, renameSingleEntry } from '@/features/explorer/operations/rename'
-import { useDirectorySnapshot } from './useDirectorySnapshot'
+import {
+  useDirectorySnapshot,
+  type DirectorySnapshotServices,
+} from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
+
+const directorySnapshotServices: DirectorySnapshotServices = {
+  openStream: openDirectoryStream,
+  cachePresentationPatch,
+  cachePresentations,
+  publishPresentationIcons,
+  targetNotFoundError: () => t('无法定位已打开的文件'),
+}
 
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and current-directory capabilities. Path, history and tab
@@ -125,6 +138,7 @@ export function useListing(
     revalidation,
     nav,
     locations,
+    services: directorySnapshotServices,
     state: {
       currentViewKey: currentViewKeyRef,
       entries: entriesRef,
