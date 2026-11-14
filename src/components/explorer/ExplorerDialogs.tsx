@@ -20,7 +20,19 @@ import { Preview } from '@/components/Preview'
 import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
-import type { AppController } from '@/hooks/useAppController'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type {
+  ConflictResolution,
+  Entry,
+  Ide,
+  Preferences,
+  RemoteConnection,
+  Tag,
+  Terminal,
+  TransferConflict,
+} from '@/lib/types'
+import type { DialogState } from '@/lib/dialogs'
+import type { Dispatch, SetStateAction } from 'react'
 import { LoaderCircle } from 'lucide-react'
 export function ExplorerDialogs({
   left,
@@ -58,9 +70,45 @@ export function ExplorerDialogs({
   update,
   terminals,
   ides,
-}: Pick<
-  AppController,
-  | 'left'
+export interface ExplorerDialogsProps {
+  left: Pick<Explorer, 'locations'>
+  x: Explorer
+  preview: Entry | null
+  setPreview: Dispatch<SetStateAction<Entry | null>>
+  navigatePreview: (delta: number) => void
+  open: (entry: Entry) => void
+  dialog: DialogState | null
+  dialogBusy: boolean
+  conflict: { items: TransferConflict[]; moving: boolean } | null
+  cancelConflict: () => void
+  resolveConflict: (resolutions: ConflictResolution[]) => Promise<void>
+  busy: string
+  setDialog: Dispatch<SetStateAction<DialogState | null>>
+  setDialogBusy: Dispatch<SetStateAction<boolean>>
+  setDialogError: (error: string) => void
+  dialogValue: string
+  setDialogValue: Dispatch<SetStateAction<string>>
+  info: Entry | null
+  setInfo: (entry: Entry | null) => void
+  tagOpen: boolean
+  tagInitial: Tag[]
+  setTagOpen: Dispatch<SetStateAction<boolean>>
+  applyTags: (tags: Tag[]) => Promise<void>
+  connectionOpen: boolean
+  connectionToEdit: RemoteConnection | null
+  setConnectionOpen: Dispatch<SetStateAction<boolean>>
+  notify: (message: string) => void
+  settings: boolean
+  setSettings: Dispatch<SetStateAction<boolean>>
+  pluginManager: boolean
+  setPluginManager: Dispatch<SetStateAction<boolean>>
+  prefs: Preferences
+  update: (patch: Partial<Preferences>) => void
+  terminals: Terminal[]
+  ides: Ide[]
+}
+
+}: ExplorerDialogsProps) {  | 'left'
   | 'preview'
   | 'setPreview'
   | 'navigatePreview'
