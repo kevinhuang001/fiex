@@ -16,7 +16,6 @@
   "src-tauri/crates/builtins/fiex-info/src/media.rs": 381,
   "src-tauri/src/core/fs/decoration_cache.rs": 345,
   "src-tauri/src/core/fs/provider_registry/plugin.rs": 352,
-  "src-tauri/src/core/search/providers.rs": 303,
   "src-tauri/src/desktop/mod.rs": 317,
   "src-tauri/src/plugins/host/manifest/validation.rs": 414,
   "src-tauri/src/plugins/host/process/rpc/transport.rs": 312,
