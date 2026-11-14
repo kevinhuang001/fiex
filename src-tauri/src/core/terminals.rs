@@ -154,7 +154,10 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-fn launch_windows_terminal(directory: &std::path::Path, selected: &str) -> Result<(), String> {
+fn windows_terminal_command(
+    directory: &std::path::Path,
+    selected: &str,
+) -> Result<Command, String> {
     use std::os::windows::process::CommandExt;
 
     const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
@@ -180,10 +183,34 @@ fn launch_windows_terminal(directory: &std::path::Path, selected: &str) -> Resul
         }
         _ => {}
     }
-    command
+    Ok(command)
+}
+
+#[cfg(target_os = "windows")]
+fn launch_windows_terminal(directory: &std::path::Path, selected: &str) -> Result<(), String> {
+    windows_terminal_command(directory, selected)?
         .spawn()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_launch_tests {
+    use super::windows_terminal_command;
+
+    #[test]
+    fn selected_windows_terminal_starts_in_the_requested_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut command = windows_terminal_command(temp.path(), "cmd.exe").unwrap();
+        command.args(["/C", "echo launched>terminal-launch-probe.txt"]);
+        let status = command.spawn().unwrap().wait().unwrap();
+
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("terminal-launch-probe.txt")).unwrap(),
+            "launched\r\n"
+        );
+    }
 }
 
 pub fn open_path(path: &str) -> Result<(), String> {

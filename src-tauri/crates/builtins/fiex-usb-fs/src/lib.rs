@@ -99,4 +99,68 @@ mod tests {
             assert!(result.unwrap_err().contains("PermissionDenied"));
         }
     }
+
+    #[cfg(target_os = "linux")]
+    fn test_route(device: &str) -> Route {
+        Route {
+            device: device.to_owned(),
+            driver_device: device.to_owned(),
+            kind: FsKind::Btrfs,
+            rel: String::new(),
+            root: virtual_root(device, FsKind::Btrfs),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn loopback_block_device_uses_existing_os_access_without_chmod() {
+        use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+
+        let Ok(device) = std::env::var("FIEX_TEST_RAW_DEVICE") else {
+            eprintln!("skipped: FIEX_TEST_RAW_DEVICE is not configured");
+            return;
+        };
+        let metadata = std::fs::metadata(&device).unwrap();
+        assert!(metadata.file_type().is_block_device());
+        let mode = metadata.permissions().mode() & 0o777;
+
+        ensure_access(&test_route(&device)).unwrap();
+
+        assert_eq!(
+            std::fs::metadata(&device).unwrap().permissions().mode() & 0o777,
+            mode,
+            "raw access must not change the device node permissions"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mounted_loopback_device_is_refused_without_changing_permissions() {
+        use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+
+        let Ok(device) = std::env::var("FIEX_TEST_RAW_DEVICE_MOUNTED") else {
+            eprintln!("skipped: FIEX_TEST_RAW_DEVICE_MOUNTED is not configured");
+            return;
+        };
+        let metadata = std::fs::metadata(&device).unwrap();
+        assert!(metadata.file_type().is_block_device());
+        let mode = metadata.permissions().mode() & 0o777;
+
+        let error = ensure_access(&test_route(&device)).unwrap_err();
+
+        assert!(error.contains("unmount the device"), "{error}");
+        assert_eq!(
+            std::fs::metadata(&device).unwrap().permissions().mode() & 0o777,
+            mode,
+            "refusing a mounted device must not change node permissions"
+        );
+        let lock_error = match access::lock(&device) {
+            Ok(_guard) => panic!("mounted raw device must not be locked for fallback access"),
+            Err(error) => error,
+        };
+        assert!(
+            lock_error.contains("mounted, busy or not granted"),
+            "{lock_error}"
+        );
+    }
 }
