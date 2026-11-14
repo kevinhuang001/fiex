@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import { call, native } from '@/lib/api'
 import { resolveInitialPathRequest } from '@/features/explorer/model/initialPath'
 import { createLocationRefreshCoordinator } from '@/features/explorer/model/locationRefresh'
 import type { Location, Preferences } from '@/lib/types'
-import type { Navigation } from './useNavigation'
+
+export interface ListingLocationServices {
+  native: boolean
+  loadLocations: () => Promise<Location[]>
+  loadLaunchPath: () => Promise<string | null>
+  loadLastPath: () => Promise<string | null>
+  loadInitialPath: () => Promise<string | null>
+  persistLastPath: (path: string) => Promise<void>
+}
+
+interface ListingLocationsNavigation {
+  startAt: (path: string) => void
+}
 
 /** Sidebar locations and the asynchronous start-folder resolution for a pane. */
 export function useListingLocations({
@@ -14,6 +25,7 @@ export function useListingLocations({
   listedPath,
   prefs,
   nav,
+  services,
   startOverride,
 }: {
   enabled: boolean
@@ -21,14 +33,15 @@ export function useListingLocations({
   path: string
   query: string
   listedPath: string
-  prefs: Preferences
-  nav: Navigation
+  prefs: Pick<Preferences, 'startPage'>
+  nav: ListingLocationsNavigation
+  services: ListingLocationServices
   startOverride?: string
 }) {
   const { startAt } = nav
   const [locations, setLocations] = useState<Location[]>([])
   const [locationRefresh] = useState(() =>
-    createLocationRefreshCoordinator(() => call('locations'), setLocations),
+    createLocationRefreshCoordinator(services.loadLocations, setLocations),
   )
   const refreshLocations = useCallback(
     (force = false) => locationRefresh.refresh(force),
@@ -56,38 +69,26 @@ export function useListingLocations({
     // Resolve the first directory without waiting for the full location survey.
     void refreshLocations().catch(() => {})
     void resolveInitialPathRequest({
-      startOverride,
+      ...(startOverride === undefined ? {} : { startOverride }),
       startPage: prefs.startPage,
-      native,
+      native: services.native,
       isCancelled: () => cancelled,
-      loadLaunchPath: () => call('launch_path'),
-      loadLastPath: async () => {
-        const lastPath = await call('state_get', {
-          namespace: 'explorer',
-          key: 'lastPath',
-        }).catch(() => null)
-        return lastPath || localStorage.getItem('fiex:lastPath')
-      },
-      loadInitialPath: () => call('initial_path'),
-      loadLocations: () => call('locations'),
+      loadLaunchPath: services.loadLaunchPath,
+      loadLastPath: services.loadLastPath,
+      loadInitialPath: services.loadInitialPath,
+      loadLocations: services.loadLocations,
     }).then((start) => {
       if (start && !cancelled) startAt(start)
     })
     return () => {
       cancelled = true
     }
-  }, [refreshLocations, enabled, path, prefs.startPage, startOverride, startAt])
+  }, [refreshLocations, enabled, path, prefs.startPage, startOverride, startAt, services])
 
   useEffect(() => {
     if (!enabled || !path || query || listedPath !== path) return
-    void call('state_put', {
-      namespace: 'explorer',
-      key: 'lastPath',
-      value: path,
-    })
-      .then(() => localStorage.removeItem('fiex:lastPath'))
-      .catch(() => localStorage.setItem('fiex:lastPath', path))
-  }, [enabled, path, listedPath, query])
+    void services.persistLastPath(path)
+  }, [enabled, path, listedPath, query, services])
 
   return { locations, refreshLocations }
 }
