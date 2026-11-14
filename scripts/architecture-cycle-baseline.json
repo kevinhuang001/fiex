@@ -1,0 +1,28 @@
+[
+  [
+    "src/components/explorer/context-menu/OpenWithPicker.tsx",
+    "src/components/settings/ProviderRow.tsx",
+    "src/components/settings/ProviderSettings.tsx",
+    "src/components/settings/plugins/PluginAlerts.tsx",
+    "src/components/terminal/TerminalPanel.tsx",
+    "src/components/terminal/TerminalView.tsx",
+    "src/lib/api.ts",
+    "src/lib/decorationIcons.ts",
+    "src/lib/ipcValidation.ts",
+    "src/lib/ipcValidation/directory.ts",
+    "src/lib/ipcValidation/entries.ts",
+    "src/lib/ipcValidation/installation.ts",
+    "src/lib/ipcValidation/marketplace.ts",
+    "src/lib/ipcValidation/pluginCatalog.ts",
+    "src/lib/ipcValidation/providers.ts",
+    "src/lib/ipcValidation/runtimeCatalogs.ts",
+    "src/lib/ipcValidation/state.ts",
+    "src/lib/listing.ts",
+    "src/lib/pluginHooks.ts",
+    "src/lib/pluginPermissions.ts",
+    "src/lib/plugins.ts",
+    "src/lib/tauriCommandArgs.ts",
+    "src/lib/tauriCommandMap.ts",
+    "src/lib/themes.ts"
+  ]
+]
