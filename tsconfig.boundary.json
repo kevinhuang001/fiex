@@ -23,6 +23,7 @@
     "src/features/explorer/model/locationRefresh.ts",
     "src/features/explorer/model/searchLifecycle.ts",
     "src/features/explorer/model/directoryWatch.ts",
+    "src/features/explorer/model/navigationRequest.ts",
     "src/features/explorer/operations/rename.ts",
     "src/features/explorer/operations/batchRename.ts",
     "src/features/explorer/operations/create.ts",
