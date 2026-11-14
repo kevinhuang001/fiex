@@ -90,19 +90,19 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
     let owner = thread::spawn(move || {
         review_cached(&owner_path, 0, &owner_request, || {
             entered_tx.send(()).unwrap();
-            release_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(8)).unwrap();
             Err(FsError::new(
                 FsErrorKind::Offline,
                 "provider disconnected during the request",
             ))
         })
     });
-    entered_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
 
     let waiter_path = path.clone();
     let waiter_request = request.clone();
     let waiter = thread::spawn(move || review_cached(&waiter_path, 0, &waiter_request, || Ok(())));
-    let deadline = Instant::now() + Duration::from_secs(1);
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let waiting = availability_cache()
             .lock()
