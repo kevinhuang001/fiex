@@ -24,6 +24,8 @@ function createActions(run: FileOpsContext['run']) {
       restoreFromTrash: vi.fn(),
       undo: vi.fn(),
       pickDirectory: vi.fn(),
+      fileParent: vi.fn(),
+      transfer: vi.fn(),
       reportPermissionError: vi.fn(() => false),
     },
     activity: {
