@@ -10,6 +10,7 @@ import {
   type PendingDirectorySelection,
 } from '@/features/explorer/model/directoryStreamUpdate'
 import type { Entry, EntryDecoration, Listing, Location, Preferences } from '@/lib/types'
+
 interface SnapshotNavigation {
   clearPendingSelection: (generation: number) => void
   history: string[]
@@ -148,59 +149,66 @@ export function useDirectorySnapshot({
       setLoading(renderedPathRef.current !== path)
     }
     if (paintedSnapshot === null || isNewView) setError('')
-    void services.openStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
-      if (!active || id !== request.current) return
-      const decision = decideDirectoryStreamUpdate({
-        path,
-        update: snapshot,
-        previous: paintedSnapshot,
-        sort: prefs.sort,
-        descending: prefs.descending,
-        historyLength: history.length,
-        pendingSelection,
-      })
-      if (decision.kind === 'ignore') return
-      if (decision.kind === 'navigate') {
-        navigate(decision.path)
-        return
-      }
-      if (decision.kind === 'patch') {
+    void services
+      .openStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
+        if (!active || id !== request.current) return
+        const decision = decideDirectoryStreamUpdate({
+          path,
+          update: snapshot,
+          previous: paintedSnapshot,
+          sort: prefs.sort,
+          descending: prefs.descending,
+          historyLength: history.length,
+          pendingSelection,
+        })
+        if (decision.kind === 'ignore') return
+        if (decision.kind === 'navigate') {
+          navigate(decision.path)
+          return
+        }
+        if (decision.kind === 'patch') {
+          paintedSnapshot = decision.snapshot
+          paintedByPath.current.remember(viewKey, decision.snapshot)
+          services.cachePresentationPatch(
+            decision.snapshot.listing.entries,
+            decision.patchDecorations,
+          )
+          services.publishPresentationIcons(
+            decision.snapshot.listing.entries,
+            decision.presentationPending,
+          )
+          if (decision.shouldApplyDecorations)
+            setDirectoryDecorations(
+              Object.fromEntries(decision.snapshot.decorations.map((value) => [value.path, value])),
+            )
+          if (decision.redirectHome) navigateHome()
+          return
+        }
+        const listing = decision.snapshot.listing
+        services.cachePresentations(listing.entries, decision.decorations)
+        services.publishPresentationIcons(listing.entries, snapshot.presentationPending)
         paintedSnapshot = decision.snapshot
         paintedByPath.current.remember(viewKey, decision.snapshot)
-        services.cachePresentationPatch(decision.snapshot.listing.entries, decision.patchDecorations)
-        services.publishPresentationIcons(decision.snapshot.listing.entries, decision.presentationPending)
-        if (decision.shouldApplyDecorations)
-          setDirectoryDecorations(
-            Object.fromEntries(decision.snapshot.decorations.map((value) => [value.path, value])),
-          )
+        applyDirectoryMetadata(listing, decision.decorations)
+        if (decision.selection.kind === 'select') {
+          setSelected([decision.selection.target])
+          clearPendingSelection(decision.selection.generation)
+        } else if (decision.selection.kind === 'missing') {
+          clearPendingSelection(decision.selection.generation)
+          setError(services.targetNotFoundError())
+        }
+        if (renderedKey.current !== viewKey || decision.visibleChanged) {
+          renderedKey.current = viewKey
+          renderedPathRef.current = path
+          setRenderedPath(path)
+          setEntries(decision.entries)
+          const paths = new Set(decision.entries.map((entry) => entry.path))
+          setSelected((selected) => selected.filter((item) => paths.has(item)))
+        }
+        setListedPath(path)
+        setLoading(false)
         if (decision.redirectHome) navigateHome()
-        return
-      }
-      const listing = decision.snapshot.listing
-      services.cachePresentations(listing.entries, decision.decorations)
-      services.publishPresentationIcons(listing.entries, snapshot.presentationPending)
-      paintedSnapshot = decision.snapshot
-      paintedByPath.current.remember(viewKey, decision.snapshot)
-      applyDirectoryMetadata(listing, decision.decorations)
-      if (decision.selection.kind === 'select') {
-        setSelected([decision.selection.target])
-        clearPendingSelection(decision.selection.generation)
-      } else if (decision.selection.kind === 'missing') {
-        clearPendingSelection(decision.selection.generation)
-        setError(services.targetNotFoundError())
-      }
-      if (renderedKey.current !== viewKey || decision.visibleChanged) {
-        renderedKey.current = viewKey
-        renderedPathRef.current = path
-        setRenderedPath(path)
-        setEntries(decision.entries)
-        const paths = new Set(decision.entries.map((entry) => entry.path))
-        setSelected((selected) => selected.filter((item) => paths.has(item)))
-      }
-      setListedPath(path)
-      setLoading(false)
-      if (decision.redirectHome) navigateHome()
-    })
+      })
       .catch((error) => {
         if (!active || id !== request.current) return
         if (paintedSnapshot === null) {
