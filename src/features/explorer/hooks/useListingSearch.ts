@@ -1,18 +1,45 @@
 import { startTransition, useEffect, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { call, search } from '@/lib/api'
-import { t } from '@/i18n'
 import { mergeSearchBatch } from '@/features/explorer/model/searchBatch'
 import { createSearchLifecycle } from '@/features/explorer/model/searchLifecycle'
-import type { Entry, Preferences } from '@/lib/types'
-import type { Navigation } from './useNavigation'
+import type { Batch, Entry } from '@/lib/types'
+
+interface ListingSearchNavigation {
+  query: string
+  globalSearch: boolean
+  searchMode: 'name' | 'content'
+  setSelected: (paths: string[]) => void
+  setError: (error: string) => void
+}
+
+interface ListingSearchPreferences {
+  hidden: boolean
+  displayIgnore: string[]
+}
+
+export interface ListingSearchServices {
+  cancel: (pane: string) => Promise<unknown>
+  search: (
+    pane: string,
+    root: string,
+    query: string,
+    hidden: boolean,
+    ignores: string[],
+    mode: 'name' | 'content',
+    engine: string,
+    onBatch: (batch: Batch) => void,
+  ) => Promise<void>
+  truncatedMessage: () => string
+  skippedMessage: (count: number) => string
+}
 
 interface ListingSearchOptions {
   enabled: boolean
   pane: string
   path: string
-  prefs: Preferences
-  nav: Navigation
+  prefs: ListingSearchPreferences
+  nav: ListingSearchNavigation
+  services: ListingSearchServices
   refresh: number
   setEntries: Dispatch<SetStateAction<Entry[]>>
   setLoading: Dispatch<SetStateAction<boolean>>
@@ -25,6 +52,7 @@ export function useListingSearch({
   path,
   prefs,
   nav,
+  services,
   refresh,
   setEntries,
   setLoading,
@@ -37,7 +65,7 @@ export function useListingSearch({
   useEffect(() => {
     if (!enabled || !path) return
     const generation = lifecycle.begin()
-    const cancel = () => lifecycle.cancel(() => call('cancel_search', { pane }))
+    const cancel = () => lifecycle.cancel(() => services.cancel(pane))
     const cancelled = cancel()
     if (!query.trim()) {
       setSearching(false)
@@ -54,7 +82,7 @@ export function useListingSearch({
       void cancelled
         .then(() => {
           if (!lifecycle.isCurrent(generation)) return
-          return search(
+          return services.search(
             pane,
             root,
             query,
@@ -69,7 +97,7 @@ export function useListingSearch({
                 setSearching(false)
                 const warning = batch.warning ? `${batch.warning} · ` : ''
                 setSearchStats(
-                  `${warning}${batch.elapsedMs} ms${batch.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${batch.skipped ? t(' · {0} 个位置无法访问', batch.skipped) : ''}`,
+                  `${warning}${batch.elapsedMs} ms${batch.truncated ? services.truncatedMessage() : ''}${batch.skipped ? services.skippedMessage(batch.skipped) : ''}`,
                 )
               }
             },
@@ -98,6 +126,7 @@ export function useListingSearch({
     prefs.displayIgnore,
     refresh,
     lifecycle,
+    services,
     setSelected,
     setError,
     setEntries,
