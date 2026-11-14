@@ -1,4 +1,5 @@
 import { getLocale, t } from '@/i18n'
+import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import {
   cachePresentationPatch,
@@ -6,7 +7,8 @@ import {
   cachedPresentations,
 } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
-import { openDirectoryStream } from '@/lib/listing'
+import { openDirectoryStream, requestDirectoryRefresh } from '@/lib/listing'
+import { isVirtualResource } from '@/lib/files'
 import type { Entry, EntryDecoration } from '@/lib/types'
 
 /** Provider adapters stay at the feature composition boundary. */
@@ -75,4 +77,24 @@ export const listingLocationServices = {
       localStorage.setItem('fiex:lastPath', path)
     }
   },
+}
+
+/** Native and IPC effects used only by the Explorer listing composition. */
+export const explorerListingServices = {
+  native,
+  isVirtualResource,
+  requestDirectoryRefresh,
+  listenRemoteSync: (onSync: () => void) => listen('remote-sync', onSync),
+  listenDirectoryChanged: (onChange: () => void) => listen('directory-changed', onChange),
+  listenApplicationsChanged: (onChange: () => void) => listen('applications-changed', onChange),
+  watchDirectory: (path: string, pane: string) => call('watch_directory', { path, pane }),
+  unwatchDirectory: (path: string, pane: string) => call('unwatch_directory', { path, pane }),
+  renameEntry: (path: string, name: string) => call('rename_entry', { path, name }),
+  remoteConnections: () => call('remote_connections'),
+  watchErrorMessage: (error: unknown) => t('无法监视文件变更：{0}', error),
+  renameUnsupportedMessage: () => t('此位置不支持该操作'),
+  directorySnapshot: directorySnapshotServices,
+  decorations: entryDecorationServices,
+  locations: listingLocationServices,
+  search: listingSearchServices,
 }
