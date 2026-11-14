@@ -65,4 +65,38 @@ mod tests {
         assert!(ensure_access(&route).is_ok());
         assert!(list(&device, FsKind::Btrfs, "").is_ok());
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn raw_access_preserves_linux_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let device = temp.path().join("permission-check.img");
+        std::fs::write(&device, b"filesystem image").unwrap();
+        let route = Route {
+            device: device.to_string_lossy().into_owned(),
+            driver_device: device.to_string_lossy().into_owned(),
+            kind: FsKind::Btrfs,
+            rel: String::new(),
+            root: virtual_root(&device.to_string_lossy(), FsKind::Btrfs),
+        };
+
+        std::fs::set_permissions(&device, std::fs::Permissions::from_mode(0o400)).unwrap();
+        ensure_access(&route).unwrap();
+        assert_eq!(
+            std::fs::metadata(&device).unwrap().permissions().mode() & 0o777,
+            0o400
+        );
+
+        std::fs::set_permissions(&device, std::fs::Permissions::from_mode(0o0)).unwrap();
+        let result = ensure_access(&route);
+        assert_eq!(
+            std::fs::metadata(&device).unwrap().permissions().mode() & 0o777,
+            0
+        );
+        if unsafe { libc::geteuid() } != 0 {
+            assert!(result.unwrap_err().contains("PermissionDenied"));
+        }
+    }
 }

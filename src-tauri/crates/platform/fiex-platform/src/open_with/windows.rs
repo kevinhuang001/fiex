@@ -140,3 +140,40 @@ pub(super) fn open(file: &Path, extension: &str, application_id: &str) -> Result
 pub(super) fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn native_shell_apps_folder_is_enumerated_on_the_sta_worker() {
+        let entries = apps_folder().expect("Windows Shell AppsFolder enumeration should succeed");
+
+        assert!(
+            !entries.is_empty(),
+            "Windows AppsFolder should expose system applications on the CI runner"
+        );
+        assert!(entries.iter().all(|item| !item.name.trim().is_empty()));
+        assert!(entries.iter().any(|item| {
+            !item.aumid.trim().is_empty()
+                || !item.path.trim().is_empty()
+                || !item.parsing_name.trim().is_empty()
+        }));
+    }
+
+    #[test]
+    fn native_app_candidates_keep_unique_launchable_identities() {
+        let candidates = applications().expect("Windows application catalog should be readable");
+
+        let mut ids = HashSet::new();
+        for candidate in candidates {
+            assert!(candidate.id.starts_with("aumid:") || candidate.id.starts_with("path:"));
+            assert!(!candidate.name.trim().is_empty());
+            assert!(
+                ids.insert(candidate.id),
+                "duplicate Windows application identity"
+            );
+        }
+    }
+}
