@@ -1,12 +1,17 @@
 //! Download bookkeeping plus pin, uncache and conflict helpers.
 
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf};
+#[path = "sync/metadata.rs"]
+mod metadata;
+pub(crate) use metadata::{
+    RemoteMeta, RemoteMetaFile, forget_meta, load_meta, load_meta_from, save_meta, save_meta_to,
+};
+
+use std::{collections::HashMap, fs, path::Path};
 
 use super::{
     config::{connection_for_path, ensure_provider_access, local_for, rel_string},
     files::{TransferOptions, download_dir_inner, download_inner},
-    store::{StoredConnection, fiex_dir},
+    store::StoredConnection,
 };
 
 type SelectedConnection = (StoredConnection, Vec<(String, String)>);
@@ -54,70 +59,6 @@ fn validate_roots(meta: &RemoteMeta, roots: &[(String, String)]) -> Result<(), S
     Ok(())
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteMetaFile {
-    pub(crate) size: u64,
-    pub(crate) modified: u64,
-    pub(crate) is_dir: bool,
-    pub(crate) downloaded: bool,
-    pub(crate) node_id: String,
-    pub(crate) revision: String,
-    /// Provider `allowedOps` for this node; `None` means unrestricted.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) allowed_ops: Option<Vec<String>>,
-    pub(crate) baseline: String,
-    pub(crate) local_stamp: String,
-    pub(crate) pinned: bool,
-    pub(crate) excluded: bool,
-    pub(crate) conflict: bool,
-    /// The last local edit was accepted by the remote.
-    pub(crate) uploaded: bool,
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub(crate) struct RemoteMeta {
-    pub(crate) files: HashMap<String, RemoteMetaFile>,
-    pub(crate) listed: std::collections::HashSet<String>,
-    /// Direct child paths from the last complete listing of each directory.
-    /// This keeps offline snapshots from reviving entries removed remotely.
-    pub(crate) listed_children: HashMap<String, Vec<String>>,
-    pub(crate) errors: HashMap<String, String>,
-}
-
-fn meta_dir() -> PathBuf {
-    fiex_dir().join("remote-meta")
-}
-
-fn meta_path(conn: &StoredConnection) -> PathBuf {
-    meta_dir().join(format!("{}.json", conn.id))
-}
-
-/// Deleting a connection must not leave the cached tree or its metadata
-/// behind; the next connection that reuses the ID starts clean.
-pub(crate) fn forget_meta(conn: &StoredConnection) {
-    let _ = fs::remove_file(meta_path(conn));
-}
-
-pub(crate) fn load_meta(conn: &StoredConnection) -> RemoteMeta {
-    fs::read(meta_path(conn))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
-}
-
-pub(crate) fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
-    fs::create_dir_all(meta_dir()).map_err(|e| e.to_string())?;
-    use std::io::Write;
-    let mut temp = tempfile::NamedTempFile::new_in(meta_dir()).map_err(|e| e.to_string())?;
-    temp.write_all(&serde_json::to_vec(meta).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    temp.as_file().sync_all().map_err(|e| e.to_string())?;
-    temp.persist(meta_path(conn))
-        .map_err(|e| e.error.to_string())?;
-    Ok(())
-}
-
 // Per-connection serialization includes metadata, materialization, eviction and
 // reconciliation. No lock is held while waiting for another connection.
 pub(crate) async fn lock(conn: &StoredConnection) -> tokio::sync::OwnedMutexGuard<()> {
@@ -161,12 +102,16 @@ pub(crate) fn stamp(path: &std::path::Path) -> Result<String, String> {
 }
 
 pub(crate) fn dirty(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> bool {
+    dirty_at(&local_for(conn, rel), file)
+}
+
+pub(crate) fn dirty_at(local: &Path, file: &RemoteMetaFile) -> bool {
     file.downloaded
         && !file.is_dir
         && (file.local_stamp.is_empty()
-            || stamp(&local_for(conn, rel)).ok().as_deref() != Some(file.local_stamp.as_str()))
+            || stamp(local).ok().as_deref() != Some(file.local_stamp.as_str()))
         && (file.baseline.is_empty()
-            || fingerprint(&local_for(conn, rel))
+            || fingerprint(local)
                 .map(|hash| hash != file.baseline)
                 .unwrap_or(true))
 }
