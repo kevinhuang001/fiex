@@ -5,7 +5,7 @@ import { FileIcon } from '@/components/FileIcon'
 import { date, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 
-import type { PickerGroup } from './usePicker'
+import type { PickerGroup } from './model'
 
 export function PickerEntries({
   view,
