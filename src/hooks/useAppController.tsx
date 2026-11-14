@@ -3,7 +3,7 @@ import { useExplorer } from '@/features/explorer/hooks/useExplorer'
 import { batchRenameEntries } from '@/features/explorer/operations/batchRename'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
-import { loadSavedTabs, saveTabs } from '@/lib/tabs'
+import { loadSavedTabs } from '@/lib/tabs'
 import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
@@ -14,6 +14,7 @@ import { usePaneLayout } from './usePaneLayout'
 import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 import { explorerServices } from '@/features/explorer/services/listingAdapters'
+import { useAppSessionPersistence } from './controller/useAppSessionPersistence'
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
@@ -48,32 +49,21 @@ export function useAppController() {
     openPane,
     closePane,
   } = usePaneLayout(prefs, left, explorerServices)
-  useEffect(() => {
-    if (left.tabs.length) saveTabs(left.tabs, left.tab)
-  }, [left.tabs, left.tab])
-  useEffect(() => {
-    if (left.path && left.path !== 'recent://') localStorage.setItem('fiex:lastPath', left.path)
-  }, [left.path])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
-  const retainedViews = JSON.stringify({
-    paths: viewReferences,
-    durable: [
+  useAppSessionPersistence({
+    tabs: left.tabs,
+    activeTab: left.tab,
+    path: left.path,
+    viewReferences,
+    durablePaths: [
       ...(prefs.restoreTabs ? left.tabs : []),
       ...prefs.favorites.map((f) => f.path),
       ...workspace.items.map((e) => e.path),
       ...(prefs.startPage === 'last' ? [left.path] : []),
     ],
+    setError: left.setError,
   })
-  useEffect(() => {
-    if (!native) return
-    const timer = window.setTimeout(() => {
-      void call('vfs_retain_views', JSON.parse(retainedViews)).catch((error) =>
-        left.setError(String(error)),
-      )
-    }, 150)
-    return () => window.clearTimeout(timer)
-  }, [retainedViews])
   const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
   const focusSearch = () => {
     const selector =
