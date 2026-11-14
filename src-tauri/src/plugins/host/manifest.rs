@@ -3,15 +3,16 @@ mod connections;
 #[cfg(test)]
 mod contribution_tests;
 mod info;
+mod package_entry;
 mod permissions;
 mod provider_instances;
 mod validation;
+pub(crate) use package_entry::{preview_loading_entry, valid_package_entry};
 pub(crate) use permissions::declared;
 pub use permissions::{activation_requirements, declared_permissions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
-pub(crate) use validation::{preview_loading_entry, valid_package_entry};
 pub use validation::{valid_id, validate_extensions};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
