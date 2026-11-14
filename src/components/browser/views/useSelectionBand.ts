@@ -1,6 +1,13 @@
 import { useRef, useState } from 'react'
 import { call, native } from '@/lib/api'
 import { startFileDrag } from '@/lib/drag'
+import {
+  isSelectionBandDragged,
+  mergeBandSelection,
+  rectanglesOverlap,
+  selectionBandRectangle,
+  type SelectionBandRect,
+} from '@/features/explorer/model/selectionBand'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { Entry } from '@/lib/types'
 import type { Props } from './shared'
@@ -43,13 +50,6 @@ function clearDropHighlight() {
     .forEach((element) => element.classList.remove('workspace-drop'))
 }
 
-export interface BandRect {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
 /** Rubber-band selection over the empty space of a file area container. */
 export function useSelectionBand({
   container,
@@ -60,7 +60,7 @@ export function useSelectionBand({
   selected: string[]
   setSelected: (paths: string[]) => void
 }) {
-  const [band, setBand] = useState<BandRect | null>(null)
+  const [band, setBand] = useState<SelectionBandRect | null>(null)
   const bandStart = useRef<{ x: number; y: number; base: string[]; additive: boolean } | null>(null)
   const bandDragged = useRef(false)
   const startBand = (event: ReactPointerEvent) => {
@@ -81,25 +81,16 @@ export function useSelectionBand({
   const moveBand = (event: ReactPointerEvent) => {
     const start = bandStart.current
     if (!start || !container.current) return
-    const left = Math.min(start.x, event.clientX)
-    const top = Math.min(start.y, event.clientY)
-    const width = Math.abs(event.clientX - start.x)
-    const height = Math.abs(event.clientY - start.y)
-    if (width > 3 || height > 3) bandDragged.current = true
-    setBand({ left, top, width, height })
-    const bandRect = { left, top, right: left + width, bottom: top + height }
+    const rect = selectionBandRectangle(start, { x: event.clientX, y: event.clientY })
+    if (isSelectionBandDragged(rect)) bandDragged.current = true
+    setBand(rect)
     const picked: string[] = []
     container.current.querySelectorAll<HTMLElement>('[data-path]').forEach((element) => {
-      const rect = element.getBoundingClientRect()
-      const hit =
-        rect.left < bandRect.right &&
-        rect.right > bandRect.left &&
-        rect.top < bandRect.bottom &&
-        rect.bottom > bandRect.top
-      if (hit && element.dataset.path) picked.push(element.dataset.path)
+      const bounds = element.getBoundingClientRect()
+      if (rectanglesOverlap(bounds, rect) && element.dataset.path)
+        picked.push(element.dataset.path)
     })
-    const next = start.additive ? [...new Set([...start.base, ...picked])] : picked
-    setSelected(next)
+    setSelected(mergeBandSelection(start.base, picked, start.additive))
   }
   const endBand = () => {
     bandStart.current = null
