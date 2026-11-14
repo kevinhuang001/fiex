@@ -16,6 +16,7 @@
     "src/features/explorer/model/listingDiff.ts",
     "src/features/explorer/model/paintedListingCache.ts",
     "src/features/explorer/model/searchBatch.ts",
+    "src/features/explorer/model/renamePolicy.ts",
     "src/lib/listColumns.ts"
   ]
 }
