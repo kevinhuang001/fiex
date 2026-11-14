@@ -1,37 +1,19 @@
 import { t } from '@/i18n'
 import { commonPlaces as getCommonPlaces, setPlaceHidden } from '@/lib/places'
 import type { Location, Preferences, SidebarSection } from '@/lib/types'
-import {
-  AppWindow,
-  Clock,
-  Trash2,
-  Download,
-  FileText,
-  Film,
-  Folder,
-  GripVertical,
-  Home,
-  Image,
-  Monitor,
-  Music,
-  RotateCcw,
-} from 'lucide-react'
+import { GripVertical, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-function placeIcon(name: string) {
-  if (name === t('最近使用')) return <Clock size={14} />
-  if (name === t('废纸篓') || name === t('回收站')) return <Trash2 size={14} />
-  if (name === t('个人文件夹')) return <Home size={14} />
-  if (name === t('桌面')) return <Monitor size={14} />
-  if (name === t('下载')) return <Download size={14} />
-  if (name === t('图片')) return <Image size={14} />
-  if (name === t('音乐')) return <Music size={14} />
-  if (name === t('视频')) return <Film size={14} />
-  if (name === t('文稿')) return <FileText size={14} />
-  if (name === t('应用程序')) return <AppWindow size={14} />
-  return <Folder size={14} />
-}
-
+import { SidebarPlaceIcon } from './SidebarPlaceIcon'
+import {
+  moveItem,
+  reorderGap,
+  reorderShift,
+  reorderTargetIndex,
+  type ReorderBox,
+  type ReorderDrag,
+  type ReorderKind,
+} from './sidebarReorder'
 const SIDEBAR_LABELS: Record<SidebarSection, string> = {
   get places() {
     return t('常用位置')
@@ -48,20 +30,6 @@ const SIDEBAR_LABELS: Record<SidebarSection, string> = {
   get connections() {
     return t('连接')
   },
-}
-
-type ReorderKind = 'section' | 'place'
-type ReorderBox = { top: number; left: number; width: number; height: number; center: number }
-type ReorderDrag = {
-  kind: ReorderKind
-  from: number
-  to: number
-  left: number
-  top: number
-  width: number
-  height: number
-  gap: number
-  settling: boolean
 }
 
 export function SidebarSettings({
@@ -84,12 +52,6 @@ export function SidebarSettings({
     },
     [],
   )
-  const reorder = <T,>(items: T[], from: number, to: number) => {
-    const next = [...items]
-    const [item] = next.splice(from, 1)
-    next.splice(to, 0, item)
-    return next
-  }
   const beginReorder = (event: React.PointerEvent, kind: ReorderKind, index: number) => {
     if ((event.target as Element).closest('input,button') || drag) return
     const row = event.currentTarget as HTMLElement
@@ -106,7 +68,7 @@ export function SidebarSettings({
         center: rect.top + rect.height / 2,
       }
     })
-    const gap = rects.length > 1 ? Math.max(0, rects[1].top - (rects[0].top + rects[0].height)) : 0
+    const gap = reorderGap(rects)
     const startX = event.clientX
     const startY = event.clientY
     const grab = event.clientY - box.top
@@ -123,11 +85,7 @@ export function SidebarSettings({
       // Insert after every row whose centre the lifted row has passed. The
       // source row is excluded so the count is the final array index.
       const center = top + box.height / 2
-      let nextTo = 0
-      for (let i = 0; i < rects.length; i++) {
-        if (i !== index && center > rects[i].center) nextTo++
-      }
-      to = nextTo
+      to = reorderTargetIndex(center, rects, index)
       setDrag({
         kind,
         from: index,
@@ -156,10 +114,10 @@ export function SidebarSettings({
         setDrag(null)
         if (target === index) return
         if (kind === 'section') {
-          update({ sidebarOrder: reorder(prefs.sidebarOrder, index, target) })
+          update({ sidebarOrder: moveItem(prefs.sidebarOrder, index, target) })
         } else {
           const keys = orderedPlaces.map((location) => location.path || location.name)
-          update({ placeOrder: reorder(keys, index, target) })
+          update({ placeOrder: moveItem(keys, index, target) })
         }
       }, 160)
     }
@@ -210,7 +168,9 @@ export function SidebarSettings({
     return (
       <>
         <GripVertical size={13} className="drag-handle" />
-        <span className="settings-choice-icon place-icon">{placeIcon(location.name)}</span>
+        <span className="settings-choice-icon place-icon">
+          <SidebarPlaceIcon name={location.name} />
+        </span>
         <span className="place-name">{location.name}</span>
         <input
           type="checkbox"
@@ -232,15 +192,6 @@ export function SidebarSettings({
   }
   // While a row is lifted the rest of the list slides by the height of the
   // vacated slot, opening a gap under the pointer for the row to land in.
-  const shift = (kind: ReorderKind, index: number) => {
-    if (!drag || drag.kind !== kind || index === drag.from) return undefined
-    const distance = drag.height + drag.gap
-    if (drag.from < drag.to && index > drag.from && index <= drag.to)
-      return `translate3d(0, -${distance}px, 0)`
-    if (drag.to < drag.from && index >= drag.to && index < drag.from)
-      return `translate3d(0, ${distance}px, 0)`
-    return undefined
-  }
   const lifted = drag
   const liftedPlace =
     lifted?.kind === 'place' && orderedPlaces[lifted.from] ? orderedPlaces[lifted.from] : null
@@ -275,7 +226,7 @@ export function SidebarSettings({
               key={id}
               data-reorder="section"
               data-reorder-index={index}
-              style={{ transform: shift('section', index) }}
+              style={{ transform: reorderShift(drag, 'section', index) }}
               onPointerDown={(event) => beginReorder(event, 'section', index)}
             >
               {sectionRow(id)}
@@ -294,7 +245,7 @@ export function SidebarSettings({
               key={location.path || location.name}
               data-reorder="place"
               data-reorder-index={index}
-              style={{ transform: shift('place', index) }}
+              style={{ transform: reorderShift(drag, 'place', index) }}
               onPointerDown={(event) => beginReorder(event, 'place', index)}
             >
               {placeRow(location)}

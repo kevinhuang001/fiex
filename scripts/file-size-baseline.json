@@ -12,7 +12,6 @@
   "sdk/rust/src/tasks.rs": 343,
   "sdk/ui/src/index.ts": 450,
   "src/components/plugins/panel/usePanelBridge.ts": 432,
-  "src/components/settings/SidebarSettings.tsx": 327,
   "src/hooks/useAppController.tsx": 453,
   "src/lib/files.ts": 388
 }
