@@ -131,3 +131,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P4-02 PR #220：** 标签页打开、切换、关闭和关闭最后标签后的起始位置恢复现由 `navigationTabs` 纯状态转换统一决定；`useNavigation` 只应用结果到 React 状态。模型测试覆盖历史快照、活动标签调整、无效索引与输入不可变性，UI-NAV-03 追溯已更新。完整 Explorer 面板的异步编排与宽泛 hook 组合仍未完成。
 
 **P4-02 PR #221：** 将 `useNavigation` 的搜索模式存储和父目录解析移至组合层注入的 `NavigationServices`，并把 hook 本身纳入严格类型边界。`noUncheckedIndexedAccess` 找到了初始标签路径的可选索引问题并已显式兜底；浏览器状态、系统路径解析及存储读写仍由现有组合层实现。
+
+**P4-02 PR #222：** 将流式搜索 hook 的搜索启动、取消和本地化提示改为由 `useListing` 组合层注入；去掉 hook 对通用 IPC、i18n 及完整 Navigation hook 类型的依赖，并将其加入严格类型边界。搜索代次与取消顺序继续由已测试的 `searchLifecycle` 模型管理，SEARCH-01 与 ARCH-01 追溯同步更新。
