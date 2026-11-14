@@ -69,6 +69,15 @@ fn restore_items(
     fallback: Option<&str>,
     cancel: &AtomicBool,
 ) -> Result<usize, String> {
+    restore_items_in(paths, fallback, cancel, system_trash_directory())
+}
+
+fn restore_items_in(
+    paths: &[String],
+    fallback: Option<&str>,
+    cancel: &AtomicBool,
+    trash_directory: &TrashDirectory,
+) -> Result<usize, String> {
     let mut restored = 0;
     for uri in paths {
         check_cancelled(cancel)?;
@@ -83,7 +92,7 @@ fn restore_items(
         if uri == crate::TRASH_URI {
             return Err("ScopeDenied: Trash root cannot be restored".into());
         }
-        let source = system_trash_directory().physical(uri)?;
+        let source = trash_directory.physical(uri)?;
         match std::fs::symlink_metadata(&source) {
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,

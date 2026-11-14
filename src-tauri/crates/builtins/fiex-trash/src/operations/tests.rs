@@ -74,6 +74,92 @@ fn finder_item_put_back_does_not_request_fallback_without_fiex_journal() {
     assert!(!restore_needs_folder_in(&[uri], &trash));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn restores_an_external_finder_trash_item_from_its_ds_store_location() {
+    use super::{restore_items_in, restore_needs_folder_in};
+    use crate::{TRASH_URI, TrashDirectory};
+    use std::{path::Path, sync::atomic::AtomicBool};
+
+    let temp = tempfile::Builder::new()
+        .prefix("fiex-external-put-back-")
+        .tempdir()
+        .unwrap();
+    let temp_name = temp.path().file_name().unwrap().to_string_lossy();
+    let destination_id: String = temp_name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .rev()
+        .take(8)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    let name: String = temp_name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .rev()
+        .take(5)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    assert_eq!(name.chars().count(), 5);
+    assert_eq!(destination_id.chars().count(), 8);
+    assert!(crate::journal::original(&name).is_none());
+
+    // Keep the Finder path exactly as long as the fixture's original path so
+    // the DS_Store B-tree remains structurally unchanged.
+    let destination_parent = Path::new("/tmp").join(&destination_id);
+    std::fs::create_dir(&destination_parent).unwrap();
+    let destination = destination_parent.join(&name);
+    let finder_location = format!("System/Volumes/Data/tmp/{destination_id}/");
+    let mut store = include_bytes!("../../tests/data/putback_types.DS_Store").to_vec();
+    replace_utf16be(&mut store, "a.jpg", &name);
+    replace_utf16be(
+        &mut store,
+        "System/Volumes/Data/Users/u/Pics/",
+        &finder_location,
+    );
+
+    let trash_root = temp.path().join("trash-files");
+    std::fs::create_dir(&trash_root).unwrap();
+    let source = trash_root.join(&name);
+    std::fs::write(&source, b"deleted outside Fiex").unwrap();
+    std::fs::write(trash_root.join(".DS_Store"), store).unwrap();
+    let trash = TrashDirectory::with_root(trash_root);
+    let uri = format!("{TRASH_URI}{name}");
+
+    assert!(!restore_needs_folder_in(std::slice::from_ref(&uri), &trash));
+    assert_eq!(
+        restore_items_in(&[uri], None, &AtomicBool::new(false), &trash).unwrap(),
+        1
+    );
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        b"deleted outside Fiex"
+    );
+    assert!(!source.exists());
+
+    std::fs::remove_dir_all(destination_parent).unwrap();
+}
+
+#[cfg(not(windows))]
+fn replace_utf16be(data: &mut [u8], from: &str, to: &str) {
+    let from: Vec<u8> = from.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    let to: Vec<u8> = to.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    assert_eq!(from.len(), to.len());
+    let positions: Vec<_> = data
+        .windows(from.len())
+        .enumerate()
+        .filter_map(|(position, window)| (window == from.as_slice()).then_some(position))
+        .collect();
+    assert!(!positions.is_empty());
+    for position in positions {
+        data[position..position + to.len()].copy_from_slice(&to);
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn fiex_trashed_item_restores_to_its_original_path_without_fallback() {

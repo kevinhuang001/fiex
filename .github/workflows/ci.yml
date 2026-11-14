@@ -276,6 +276,31 @@ jobs:
             tail -40 core-test.log | sed 's/^/::error title=RUSTTEST::/'
           fi
           exit "$status"
+      - name: Linux USB raw block-device permission regression
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$RUNNER_TEMP/fiex-usb-loopback.img"
+          mountpoint="$RUNNER_TEMP/fiex-usb-loopback-mount"
+          loop_device=''
+          cleanup() {
+            if mountpoint -q "$mountpoint"; then sudo umount "$mountpoint"; fi
+            if [ -n "$loop_device" ]; then sudo losetup -d "$loop_device"; fi
+            sudo rmdir "$mountpoint" 2>/dev/null || true
+            rm -f "$image"
+          }
+          trap cleanup EXIT
+          truncate -s 64M "$image"
+          sudo mkfs.ext4 -F "$image" >/dev/null
+          loop_device=$(sudo losetup --find --show "$image")
+          sudo chmod 0444 "$loop_device"
+          export FIEX_TEST_RAW_DEVICE="$loop_device"
+          cargo test --locked --manifest-path src-tauri/Cargo.toml -p fiex-usb-fs --lib tests::loopback_block_device_uses_existing_os_access_without_chmod -- --exact
+          sudo mkdir "$mountpoint"
+          sudo mount "$loop_device" "$mountpoint"
+          export FIEX_TEST_RAW_DEVICE_MOUNTED="$loop_device"
+          cargo test --locked --manifest-path src-tauri/Cargo.toml -p fiex-usb-fs --lib tests::mounted_loopback_device_is_refused_without_changing_permissions -- --exact
       - name: macOS Trash Put Back regression
         if: runner.os == 'macOS'
         run: >-

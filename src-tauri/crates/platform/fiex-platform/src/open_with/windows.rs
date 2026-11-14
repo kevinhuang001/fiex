@@ -1,6 +1,7 @@
 use super::OpenWithCandidate;
 use std::{
     path::Path,
+    process::Child,
     sync::{OnceLock, mpsc},
 };
 use windows::Win32::System::Com::{
@@ -107,6 +108,14 @@ pub(super) fn applications() -> Result<Vec<OpenWithCandidate>, String> {
 
 pub(super) fn open_application(file: &Path, application_id: &str) -> Result<(), String> {
     let installed = applications()?;
+    open_application_from_candidates(file, application_id, &installed).map(|_| ())
+}
+
+fn open_application_from_candidates(
+    file: &Path,
+    application_id: &str,
+    installed: &[OpenWithCandidate],
+) -> Result<Option<Child>, String> {
     if !installed
         .iter()
         .any(|candidate| candidate.id == application_id)
@@ -116,7 +125,8 @@ pub(super) fn open_application(file: &Path, application_id: &str) -> Result<(), 
     if let Some(aumid) = application_id.strip_prefix("aumid:") {
         let file = file.to_path_buf();
         let aumid = aumid.to_owned();
-        return run_sta(move || unsafe { apps_folder::activate_package_for_file(&file, &aumid) });
+        run_sta(move || unsafe { apps_folder::activate_package_for_file(&file, &aumid) })?;
+        return Ok(None);
     }
     let executable = application_id
         .strip_prefix("path:")
@@ -126,7 +136,7 @@ pub(super) fn open_application(file: &Path, application_id: &str) -> Result<(), 
         .arg(file)
         .creation_flags(0x0800_0000)
         .spawn()
-        .map(|_| ())
+        .map(Some)
         .map_err(|error| error.to_string())
 }
 pub(super) fn candidates(extension: &str) -> Result<Vec<OpenWithCandidate>, String> {
@@ -175,5 +185,26 @@ mod tests {
                 "duplicate Windows application identity"
             );
         }
+    }
+
+    #[test]
+    fn open_with_starts_the_selected_native_application_with_the_file() {
+        let installed = applications().expect("Windows Shell application catalog is available");
+        let candidate = installed
+            .iter()
+            .find(|candidate| candidate.name.to_lowercase().contains("notepad"))
+            .expect("Windows CI exposes Notepad in AppsFolder");
+        let file = std::env::temp_dir().join(format!("fiex-open-with-{}.txt", std::process::id()));
+        std::fs::write(&file, "Open With integration fixture\n").unwrap();
+
+        if let Some(mut process) =
+            open_application_from_candidates(&file, &candidate.id, &installed).unwrap()
+        {
+            if process.try_wait().unwrap().is_none() {
+                process.kill().unwrap();
+            }
+            let _ = process.wait();
+        }
+        std::fs::remove_file(file).unwrap();
     }
 }
