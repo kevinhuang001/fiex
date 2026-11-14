@@ -31,16 +31,13 @@ struct WriteLease<'a> {
     mount_id: &'a str,
     stream: &'a str,
     finished: bool,
+    abort: &'a dyn Fn(&str, &str, &str),
 }
 
 impl Drop for WriteLease<'_> {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = crate::plugins::host::global().invoke(
-                self.plugin,
-                "vfs.abort",
-                json!({"mountId": self.mount_id, "streamId": self.stream}),
-            );
+            (self.abort)(self.plugin, self.mount_id, self.stream);
         }
     }
 }
