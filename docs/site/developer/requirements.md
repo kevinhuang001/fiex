@@ -28,6 +28,7 @@
 | UI-NAV-05  | 快速连续切换目录时，较早发起但较晚返回的目录列表不能覆盖当前目录。                                        | E2E：directory-race.spec.ts 的 **a late listing cannot replace the directory opened afterward**；fixture gate 控制响应顺序。                                                                                                                                                                                                                   |
 | UI-NAV-06  | 位置列表刷新合并在途请求；强制刷新优先，旧响应不能覆盖新结果，相同结果不重复发布。 | UT：`src/features/explorer/model/locationRefresh.test.ts` 覆盖合并、强制刷新竞态和去重。 |
 | UI-NAV-07  | `Up` 的异步父目录查询不能在用户已切换目录或已有更新请求后覆盖当前路径，也不能显示旧请求错误。 | UT：`src/features/explorer/model/navigationRequest.test.ts` 覆盖导航失效、并发请求胜出和过期错误抑制；严格类型由 `check:boundary-types` 验证。 |
+| UI-NAV-08  | 通过 Recent 项目“显示所在文件夹”进入目录后，只有异步目录列表确认目标可见时才选中；完整列表仍未找到目标时清除挂起请求并显示错误。 | UT：`src/features/explorer/model/directoryStreamUpdate.test.ts` 覆盖过期 revision、路径纠正、目标选中/未找到和 Recent 回退；E2E：`browsing.spec.ts` 的 **revealing a Recent item opens its source folder and selects it**；严格类型由 `check:boundary-types` 验证。 |
 | UI-VIEW-01 | 用户可切换列表、图标、列和画廊视图，并按支持字段排序、分组。                                              | E2E：browsing.spec.ts 的 **four views, grouping, and keyboard preview**；UT：files.test.ts 的排序/分组规则、`features/explorer/model/folderView.test.ts`。                                                                                                                                                                                     |
 | UI-VIEW-02 | 列宽可调整；窄面板也要保留名称列最小宽度，不得把相邻列压成不可用宽度。                                    | UT：`src/features/explorer/model/listColumns.test.ts` 覆盖宽屏保留、窄面板压缩、拖动边界及名称列最小宽度；`src/lib/listColumns.test.ts` 覆盖偏好值归一化；窄屏桌面布局仍需 PLAT 视觉检查。                                                                                                                                                     |
 | UI-VIEW-03 | 长文件名的显示缩短不修改文件名本身，保留扩展名以及组合字符、emoji 等字素边界。                            | UT：`src/features/explorer/model/fileNameDisplay.test.ts` 覆盖扩展名、点文件、组合符号和 emoji；当前没有针对真实文件名的单独 E2E。                                                                                                                                                                                                             |
@@ -195,6 +196,8 @@
 | src/features/explorer/model/listingDiff.test.ts                  | REL-01、ARCH-01（列表身份比较与严格边界类型检查）                                       |
 | src/features/explorer/model/paintedListingCache.test.ts          | UI-VIEW-04、REL-01、ARCH-01（大目录快照缓存与严格边界类型检查）                         |
 | src/features/explorer/model/directoryWatch.test.ts                 | UI-VIEW-05、ARCH-01（目录监听异步注册、事件防抖和卸载清理）                         |
+| src/features/explorer/model/directorySnapshot.test.ts       | UI-VIEW-06、ARCH-01（目录快照可见列表复用与 metadata 更新）                         |
+| src/features/explorer/model/directoryStreamUpdate.test.ts  | UI-NAV-08、ARCH-01（目录流 revision、路径纠正、目标选择与 Recent 回退）              |
 | src/lib/files.test.ts                                            | ARCH-01（路径解析、VFS 身份和严格边界类型检查）                                         |
 | src/features/explorer/operations/restore.test.ts                 | OPS-TRASH-02（缺少来源目录时使用 Fiex 目录选择器并恢复）                                |
 | src/features/explorer/model/transferPolicy.test.ts               | OPS-CLIP-01（按目标能力判断副本可用性并过滤已满足的移动）                               |
