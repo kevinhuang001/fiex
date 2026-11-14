@@ -69,11 +69,13 @@ export default function App() {
     app.update(patch)
   }
   usePluginTasks()
+  const explorerError = app.x.error
+  const clearExplorerError = app.x.setError
   useEffect(() => {
-    if (!app.x.error) return
-    reportError(app.x.error, 'explorer')
-    app.x.setError('')
-  }, [app.x.error])
+    if (!explorerError) return
+    reportError(explorerError, 'explorer')
+    clearExplorerError('')
+  }, [explorerError, clearExplorerError])
 
   useEffect(() => {
     warmFilePickerData()
@@ -134,7 +136,18 @@ export default function App() {
         className={`main ${app.split ? 'split' : ''}`}
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
-        <ExplorerTabs {...app} displayName={tabName} />
+        <ExplorerTabs
+          left={app.left}
+          panePaths={app.panePaths}
+          paneActives={app.paneActives}
+          displayName={tabName}
+          switchWorkspaceTab={app.switchWorkspaceTab}
+          closeWorkspaceTab={app.closeWorkspaceTab}
+          newWorkspaceTab={app.newWorkspaceTab}
+          moveWorkspaceTab={app.moveWorkspaceTab}
+          control={app.control}
+          platform={app.platform}
+        />
         {!fullView && (
           <ExplorerToolbar
             {...app}
