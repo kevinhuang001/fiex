@@ -1,7 +1,11 @@
 //! Download bookkeeping plus pin, uncache and conflict helpers.
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use super::{
     config::{connection_for_path, ensure_provider_access, local_for, rel_string},
@@ -161,12 +165,16 @@ pub(crate) fn stamp(path: &std::path::Path) -> Result<String, String> {
 }
 
 pub(crate) fn dirty(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> bool {
+    dirty_at(&local_for(conn, rel), file)
+}
+
+pub(crate) fn dirty_at(local: &Path, file: &RemoteMetaFile) -> bool {
     file.downloaded
         && !file.is_dir
         && (file.local_stamp.is_empty()
-            || stamp(&local_for(conn, rel)).ok().as_deref() != Some(file.local_stamp.as_str()))
+            || stamp(local).ok().as_deref() != Some(file.local_stamp.as_str()))
         && (file.baseline.is_empty()
-            || fingerprint(&local_for(conn, rel))
+            || fingerprint(local)
                 .map(|hash| hash != file.baseline)
                 .unwrap_or(true))
 }
