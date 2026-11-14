@@ -9,6 +9,7 @@ import { MenuLayer } from '@/components/ui/MenuLayer'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
+import { isOpenConnection, isPluginViewConnection } from './connectionModel'
 
 const menuIcons = {
   pencil: Pencil,
@@ -18,20 +19,6 @@ const menuIcons = {
 } as const
 
 /** Remote connections and saved SSH sessions, with add/session menus. */
-const isPluginViewConnection = (connection: RemoteConnection) =>
-  connection.mountPath.startsWith('fiex-plugin-view://')
-
-/** A connection is open when a folder tab targets its mount, or when its
- *  terminal/plugin view is the tab's target. Open sessions stay in the sidebar,
- *  so the add menu only offers the saved sessions that are not open yet. */
-const isOpen = (connection: RemoteConnection, tabs: string[]) => {
-  const mount = connection.mountPath.replace(/\/$/, '')
-  return tabs.some(
-    (path) =>
-      path === `fiex-plugin-view://${connection.id}` ||
-      (mount && (path === mount || path.startsWith(mount + '/'))),
-  )
-}
 export function Connections({
   x,
   onAddConnection,
@@ -53,7 +40,7 @@ export function Connections({
   const plusPosition = useMenuPosition(plusAnchor.x, plusAnchor.y, plusMenu, plusOpen)
   const contextPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   const saved = x.connections.filter(
-    (connection) => connection.saved !== false && !isOpen(connection, x.tabs),
+    (connection) => connection.saved !== false && !isOpenConnection(connection, x.tabs),
   )
 
   useEffect(() => {
