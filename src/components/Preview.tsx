@@ -1,33 +1,17 @@
 import type { ResolvedPreview, PluginLoadingPage } from './preview/types'
-import { t, getLocale } from '@/i18n'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertCircle,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ExternalLink,
-  Monitor,
-  Puzzle,
-} from 'lucide-react'
-import { Modal } from './ui/Modal'
-import { Button } from './ui/button'
-import { FileIcon } from './FileIcon'
+import { t } from '@/i18n'
+import { useEffect, useRef, useState } from 'react'
 import { call, asset, native } from '@/lib/api'
 import { reportError, reportFilesystemPermissionError } from '@/lib/errorCenter'
-import { date, kind, size } from '@/lib/files'
-import { highlightCode } from '@/lib/highlight'
 import {
   orderCandidates,
   pluginPreviewId,
   previewDisabled,
   type PreviewCandidate,
 } from '@/lib/preview'
-import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
 import { MemoryCache } from '@/lib/cache'
-const PdfPreview = lazy(() => import('./PdfPreview'))
+import { PreviewDialog } from './preview/PreviewDialog'
 // Candidate discovery depends on the installed/enabled plugins; keep it brief.
 const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
 /** Package-local loading document served from the Core-owned asset path. */
@@ -254,257 +238,34 @@ export function Preview({
     return () => document.removeEventListener('keydown', listener)
   }, [entry, onClose, onNavigate])
 
-  const view = resolved?.view
-  const fileSource = view?.path ? (native ? asset(view.path) : view.path) : ''
-  const highlighted = useMemo(
-    () =>
-      entry && view?.kind === 'text'
-        ? highlightCode(view.text || '', entry.extension, entry.name)
-        : null,
-    [entry, view?.kind, view?.text, getLocale()],
-  )
-  const fit = useMemo(() => {
-    if (!media || !media.width || !media.height) return null
-    const maxWidth = Math.round(window.innerWidth * 0.92)
-    const maxHeight = Math.round(window.innerHeight * 0.76)
-    const scale = Math.min(1, maxWidth / media.width, maxHeight / media.height)
-    return {
-      width: Math.max(320, Math.round(media.width * scale)),
-      height: Math.round(media.height * scale),
-    }
-  }, [media, getLocale()])
-  const current = candidates.find(
-    (candidate) => candidate.id === (resolved?.providerId || providerId),
-  )
-  const provider = resolved?.provider || current?.provider || 'Fiex'
-  const fromPlugin = pluginPreviewId(resolved?.providerId || providerId) !== null
-  const providerLabel = fromPlugin ? provider : t('Fiex 内置')
-  const activePluginId = pluginPreviewId(providerId)
-  const declaresLoading = Boolean(
-    activePluginId &&
-    candidates.some((candidate) => candidate.id === providerId && candidate.loading),
-  )
-  // The loading sheet owns the preview area from the moment the provider is
-  // selected until the plugin reports its first render. It must survive a slow
-  // conversion (large Office files) as well as a slow `preview.open`.
-  const loadingPreview = Boolean(!error && declaresLoading && !previewReady)
-  // Placeholder shown only while the package-local loading document is being
-  // resolved (normally a single IPC round-trip behind the prefetch).
-  const waitingForLoadingDocument = Boolean(loadingPreview && !loadingPage)
-  const pluginSheet = view?.kind === 'html' || loadingPreview
-  const loadingPlaceholder = <div className="preview-plugin-state">{t('正在准备预览…')}</div>
-
   return (
-    <Modal
-      open={!!entry && readyToShow}
+    <PreviewDialog
+      entry={entry}
       onClose={onClose}
-      title={entry?.name || t('快速查看')}
-      wide
-      className={`preview-modal ${
-        pluginSheet
-          ? 'preview-plugin'
-          : view?.kind === 'text'
-            ? 'preview-text'
-            : view?.kind === 'pdf'
-              ? 'preview-pdf'
-              : fit
-                ? 'preview-media'
-                : 'preview-compact'
-      }`}
-      contentStyle={
-        pluginSheet ? { width: 'min(92vw, 980px)' } : fit ? { width: fit.width } : undefined
-      }
-    >
-      {entry && (
-        <>
-          <div className="preview-body" style={fit ? { height: fit.height } : undefined}>
-            {error ? (
-              <div className="preview-fallback">
-                <AlertCircle />
-                <p>{t('无法预览')}</p>
-                <FileIcon entry={entry} size={90} />
-              </div>
-            ) : loadingPage && !resolved ? (
-              <PluginPreviewFrame
-                key={`loading:${entry.path}:${providerId}:${loadingPage.sessionId}`}
-                pluginId={loadingPage.pluginId}
-                contributionId={loadingPage.pluginId}
-                src={loadingPage.src}
-                sessionId={loadingPage.sessionId}
-                loading
-              />
-            ) : view?.kind === 'html' && view.html ? (
-              waitingForLoadingDocument ? (
-                loadingPlaceholder
-              ) : (
-                <>
-                  <PluginPreviewFrame
-                    key={`${entry.path}:${providerId}`}
-                    pluginId={view.pluginId || ''}
-                    contributionId={view.contributionId || ''}
-                    html={previewAsset ? undefined : view.html}
-                    src={previewAsset || undefined}
-                    context={view.context}
-                    sessionId={view.sessionId || ''}
-                    timeoutMs={view.timeoutMs}
-                    onPreviewReady={() => setPreviewReady(true)}
-                  />
-                  {loadingPage && !previewReady && (
-                    <div className="preview-plugin-loading">
-                      <PluginPreviewFrame
-                        key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
-                        pluginId={loadingPage.pluginId}
-                        contributionId={loadingPage.pluginId}
-                        src={loadingPage.src}
-                        sessionId={loadingPage.sessionId}
-                        loading
-                      />
-                    </div>
-                  )}
-                </>
-              )
-            ) : waitingForLoadingDocument ? (
-              loadingPlaceholder
-            ) : loading && !resolved ? (
-              <p>{t('正在读取…')}</p>
-            ) : view?.kind === 'text' ? (
-              <pre className={highlighted ? 'preview-code' : undefined}>
-                {highlighted ? (
-                  <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
-                ) : (
-                  view.text || t('（空文件）')
-                )}
-                {view.truncated && t('\n\n…仅预览前 256 KiB')}
-              </pre>
-            ) : view?.kind === 'image' ? (
-              <img
-                src={fileSource}
-                alt={entry.name}
-                onLoad={(event) =>
-                  setMedia({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  })
-                }
-                onError={() => {
-                  const message = t('此图片格式无法预览，可用默认应用打开。')
-                  setError(message)
-                  reportError(message, 'preview:media')
-                }}
-              />
-            ) : view?.kind === 'media' && view.media === 'video' ? (
-              <video
-                controls
-                autoPlay
-                src={fileSource}
-                onLoadedMetadata={(event) =>
-                  setMedia({
-                    width: event.currentTarget.videoWidth,
-                    height: event.currentTarget.videoHeight,
-                  })
-                }
-                onError={() => {
-                  const message = t('系统不支持此视频编码，可用默认应用打开。')
-                  setError(message)
-                  reportError(message, 'preview:media')
-                }}
-              />
-            ) : view?.kind === 'media' ? (
-              <div className="preview-fallback">
-                <FileIcon entry={entry} size={100} />
-                <audio
-                  controls
-                  autoPlay
-                  src={fileSource}
-                  onError={() => {
-                    const message = t('系统不支持此音频编码，可用默认应用打开。')
-                    setError(message)
-                    reportError(message, 'preview:media')
-                  }}
-                />
-              </div>
-            ) : view?.kind === 'pdf' && fileSource ? (
-              <Suspense fallback={<p>{t('正在加载 PDF…')}</p>}>
-                <PdfPreview url={fileSource} />
-              </Suspense>
-            ) : (
-              <div className="preview-fallback">
-                <FileIcon entry={entry} size={120} />
-                <h3>{view?.name || entry.name}</h3>
-                <p>{view?.message || kind(entry)}</p>
-              </div>
-            )}
-          </div>
-          <footer className="preview-footer">
-            <Button variant="ghost" size="icon" title={t('上一个')} onClick={() => onNavigate(-1)}>
-              <ChevronLeft />
-            </Button>
-            <Button variant="ghost" size="icon" title={t('下一个')} onClick={() => onNavigate(1)}>
-              <ChevronRight />
-            </Button>
-            <span>
-              {entry.isDir ? t('文件夹') : size(entry.size)} · {date(entry.modified)}
-            </span>
-            {candidates.length > 0 && (
-              <div className="preview-source" ref={sourceRef}>
-                <button
-                  type="button"
-                  className="preview-source-button"
-                  aria-haspopup="listbox"
-                  aria-expanded={menuOpen}
-                  title={t('切换预览方式')}
-                  onClick={() => setMenuOpen((value) => !value)}
-                >
-                  {fromPlugin ? <Puzzle size={13} /> : <Monitor size={13} />}
-                  <span>{providerLabel}</span>
-                  <ChevronUp
-                    size={12}
-                    style={{ transform: menuOpen ? undefined : 'rotate(180deg)' }}
-                  />
-                </button>
-                {menuOpen && (
-                  <div className="preview-source-menu" role="listbox" aria-label={t('预览方式')}>
-                    {candidates.map((candidate) => (
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={providerId === candidate.id}
-                        className={
-                          'preview-source-item' + (providerId === candidate.id ? ' active' : '')
-                        }
-                        key={candidate.id}
-                        onClick={() => {
-                          setProviderId(candidate.id)
-                          setProviderAttempt((value) => value + 1)
-                          setMenuOpen(false)
-                        }}
-                      >
-                        {candidate.id.startsWith('plugin:') ? (
-                          <Puzzle size={14} />
-                        ) : (
-                          <Monitor size={14} />
-                        )}
-                        <span className="preview-source-copy">
-                          <span className="preview-source-title">
-                            {candidate.id.startsWith('plugin:')
-                              ? candidate.provider
-                              : t('Fiex 内置')}
-                          </span>
-                        </span>
-                        {providerId === candidate.id && <Check size={14} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <Button variant="secondary" onClick={() => onOpen(entry)}>
-              {t('打开')}
-              <ExternalLink />
-            </Button>
-          </footer>
-        </>
-      )}
-    </Modal>
+      onNavigate={onNavigate}
+      onOpen={onOpen}
+      sourceRef={sourceRef}
+      state={{
+        candidates,
+        providerId,
+        resolved,
+        loading,
+        loadingPage,
+        previewReady,
+        previewAsset,
+        readyToShow,
+        error,
+        media,
+        menuOpen,
+      }}
+      actions={{
+        setPreviewReady,
+        setMedia,
+        setError,
+        setProviderId,
+        setProviderAttempt,
+        setMenuOpen,
+      }}
+    />
   )
 }

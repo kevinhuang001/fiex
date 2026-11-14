@@ -14,7 +14,6 @@
   "src/components/explorer/ExplorerToolbar.tsx": 312,
   "src/components/file-picker/usePicker.ts": 536,
   "src/components/plugins/panel/usePanelBridge.ts": 432,
-  "src/components/Preview.tsx": 514,
   "src/components/settings/SidebarSettings.tsx": 327,
   "src/components/sidebar/Connections.tsx": 320,
   "src/hooks/useAppController.tsx": 453,
