@@ -275,26 +275,57 @@ test('PDF preview renders a real document', async ({ page }) => {
 
 test('ten thousand icons stay virtualized and support end selection and rename', async ({
   page,
-}) => {
-  await page.goto('/?fixture&count=10000')
-  await openDocuments(page)
-  await expect(page.locator('.statusbar')).toContainText('10,015')
-  await page.getByRole('button', { name: '图标视图', exact: true }).click()
-  await expect(page.locator('.virtual-file-grid')).toBeVisible()
+}, testInfo) => {
+  const timingsMs: Record<string, number> = {}
+  const measure = async (name: string, action: () => Promise<void>) => {
+    const started = performance.now()
+    await action()
+    timingsMs[name] = Number((performance.now() - started).toFixed(2))
+  }
+
+  await measure('fixture_start_and_10000_entry_listing', async () => {
+    await page.goto('/?fixture&count=10000')
+    await openDocuments(page)
+    await expect(page.locator('.statusbar')).toContainText('10,015')
+  })
+  await measure('switch_to_icon_view', async () => {
+    await page.getByRole('button', { name: '图标视图', exact: true }).click()
+    await expect(page.locator('.virtual-file-grid')).toBeVisible()
+  })
   expect(await page.getByRole('gridcell').count()).toBeLessThan(180)
   const sort = page.getByRole('button', { name: '排序方式' })
   await sort.click()
   await page.getByRole('menuitem', { name: '名称' }).click()
   await sort.click()
   await page.getByRole('menuitem', { name: '降序' }).click()
-  await page.getByRole('grid', { name: '文件', exact: true }).focus()
-  await page.keyboard.press('End')
-  await expect(page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]')).toBeVisible()
+  await measure('virtualized_end_navigation', async () => {
+    await page.getByRole('grid', { name: '文件', exact: true }).focus()
+    await page.keyboard.press('End')
+    await expect(
+      page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]'),
+    ).toBeVisible()
+  })
   await page.keyboard.press('F2')
   await expect(page.getByRole('textbox', { name: '重命名 zz-file-09999.txt' })).toBeVisible()
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: '列表视图', exact: true }).click()
+  await measure('switch_to_list_view', async () => {
+    await page.getByRole('button', { name: '列表视图', exact: true }).click()
+    await expect.poll(() => page.locator('.file-row').count()).toBeLessThan(80)
+  })
   expect(await page.locator('.file-row').count()).toBeLessThan(80)
+
+  const report = {
+    schemaVersion: 1,
+    fixtureEntries: 10_000,
+    platform: process.platform,
+    project: testInfo.project.name,
+    timingsMs,
+    note: 'Per-run sample only; this is not a cross-platform p95 threshold.',
+  }
+  await testInfo.attach('fiex-10k-listing-performance.json', {
+    body: Buffer.from(JSON.stringify(report, null, 2)),
+    contentType: 'application/json',
+  })
 })
 
 test('tab dragging preserves the active folder', async ({ page }) => {
