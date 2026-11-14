@@ -64,6 +64,14 @@ test('appearance can set and remove a background image', async ({ page }) => {
   await expect(page.locator('.app.has-background')).toHaveCount(0)
 })
 
+test('file picker keeps Open disabled for a directory-only selection', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '选择图片…' }).click()
+  const picker = page.getByRole('dialog', { name: '打开文件' })
+  await picker.getByRole('option', { name: /^Documents/ }).click()
+  await expect(picker.getByRole('button', { name: '打开', exact: true })).toBeDisabled()
+})
+
 test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()

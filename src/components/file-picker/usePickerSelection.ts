@@ -7,6 +7,12 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { PickerDialogState } from './PickerDialogs'
 import type { PickerMenuState } from './PickerMenu'
 import { join } from '@/features/file-picker/types'
+import {
+  canConfirmPickerSelection,
+  pickerConfirmationDecision,
+  selectedPickerEntries,
+  togglePickerSelection,
+} from '@/features/file-picker/selectionModel'
 
 type PickerSelectionOptions = {
   request: FilePickerRequest
@@ -46,33 +52,21 @@ export function usePickerSelection({
   setError,
   navigate,
 }: PickerSelectionOptions) {
-  const selectedEntries = visible.filter((entry) => selected.includes(entry.path))
-  const canConfirm =
-    request.mode === 'saveFile'
-      ? Boolean(saveName.trim()) && Boolean(directory)
-      : request.mode === 'openDirectory'
-        ? Boolean(directory)
-        : selectedEntries.length > 0
+  const selectedEntries = selectedPickerEntries(visible, selected)
+  const canConfirm = canConfirmPickerSelection(request, directory, saveName, selectedEntries)
   const target = entries.find((entry) => entry.name === saveName.trim() && !entry.isDir)
 
   const confirm = () => {
-    if (!canConfirm) return
-    if (request.mode === 'saveFile') {
-      if (target && !replace) {
-        setReplace(true)
-        return
-      }
-      return settleFilePicker(join(directory, saveName.trim()))
-    }
-    if (request.mode === 'openDirectory') {
-      const folder = selectedEntries.find((entry) => entry.isDir)
-      return settleFilePicker(folder ? folder.path : directory)
-    }
-    const files = selectedEntries.filter((entry) => !entry.isDir)
-    if (!files.length) return
-    settleFilePicker(
-      request.mode === 'openFiles' ? files.map((entry) => entry.path) : files[0].path,
-    )
+    const decision = pickerConfirmationDecision({
+      request,
+      directory,
+      saveName,
+      selectedEntries,
+      targetExists: Boolean(target),
+      replace,
+    })
+    if (decision.kind === 'replace') setReplace(true)
+    else if (decision.kind === 'settle') settleFilePicker(decision.value)
   }
 
   const openEntry = (entry: Entry) => {
@@ -86,14 +80,8 @@ export function usePickerSelection({
   }
 
   const toggle = (entry: Entry, multi: boolean) => {
-    if (multi || request.mode === 'openFiles') {
-      setSelected((old) =>
-        old.includes(entry.path) ? old.filter((path) => path !== entry.path) : [...old, entry.path],
-      )
-    } else {
-      setSelected([entry.path])
-      if (request.mode === 'saveFile') setSaveName(entry.name)
-    }
+    setSelected((old) => togglePickerSelection(old, entry, multi, request.mode))
+    if (!multi && request.mode === 'saveFile') setSaveName(entry.name)
   }
 
   const perform = async (action: () => Promise<unknown>) => {

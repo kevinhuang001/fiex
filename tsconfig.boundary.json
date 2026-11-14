@@ -31,6 +31,7 @@
     "src/features/explorer/model/directoryStreamUpdate.ts",
     "src/features/file-picker/types.ts",
     "src/features/file-picker/model.ts",
+    "src/features/file-picker/selectionModel.ts",
     "src/features/explorer/hooks/useNavigation.ts",
     "src/features/explorer/hooks/useListingSearch.ts",
     "src/features/explorer/hooks/useListingLocations.ts",
