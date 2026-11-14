@@ -1,16 +1,15 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
-import { call } from '@/lib/api'
 import type { FileOpsContext } from './types'
 
 /** Moving entries to the Trash and deleting them for good. */
-export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOpsContext) {
+export function recycleActions({ x, inTrash, setDialog, run, activity, services }: FileOpsContext) {
   const { progressChannel, quietProgressChannel } = activity
   const moveToTrash = async (
     paths: string[],
     onProgress: ReturnType<typeof progressChannel> = quietProgressChannel(),
   ) => {
-    return call('recycle', { paths, onProgress })
+    return services.recycle(paths, onProgress)
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
   const recycle = (selection = x.selected) => {
@@ -68,7 +67,7 @@ export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOps
         }`
         const removed = await run(
           t('正在彻底删除…'),
-          () => call('delete_permanently', { paths }),
+          () => services.deletePermanently(paths),
           t('删除：\n{0}', source),
           true,
           'delete',
@@ -91,7 +90,7 @@ export function recycleActions({ x, inTrash, setDialog, run, activity }: FileOps
       action: async () => {
         const removed = await run(
           t(isWindows() ? '正在清空回收站…' : '正在清空废纸篓…'),
-          () => call('empty_trash'),
+          () => services.emptyTrash(),
           t(isWindows() ? '删除：回收站中的所有项目' : '删除：废纸篓中的所有项目'),
           true,
           'delete',
