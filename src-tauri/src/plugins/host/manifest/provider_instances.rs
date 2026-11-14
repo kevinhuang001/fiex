@@ -21,8 +21,8 @@ pub(super) fn validate(feature: &str, contribution: &Map<String, Value>) -> Resu
             .as_object()
             .ok_or_else(|| format!("{feature} provider must be an object"))?;
         if item.keys().any(|key| {
-            !matches!(key.as_str(), "id" | "match" | "priority")
-                && !(feature == "info" && matches!(key.as_str(), "title" | "subsections"))
+            !(matches!(key.as_str(), "id" | "match" | "priority")
+                || feature == "info" && matches!(key.as_str(), "title" | "subsections"))
         }) {
             return Err(format!(
                 "{feature} provider uses an unsupported descriptor field"
