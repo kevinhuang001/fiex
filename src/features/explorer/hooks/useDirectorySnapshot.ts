@@ -6,9 +6,9 @@ import { openDirectoryStream } from '@/lib/listing'
 import { sameStringSet, sameVisibleListing } from '@/features/explorer/model/listingDiff'
 import {
   sameDirectoryDecorations,
-  sameListingMetadata,
   type PaintedListingCache,
 } from '@/features/explorer/model/paintedListingCache'
+import { reconcileDirectorySnapshot } from '@/features/explorer/model/directorySnapshot'
 import type { Entry, EntryDecoration, Listing, Location, Preferences } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
@@ -55,6 +55,7 @@ export function useDirectorySnapshot({
   locations: Location[]
   state: DirectorySnapshotState
 }) {
+  const { clearPendingSelection, history, navigate, pendingSelection, setSelected } = nav
   const {
     currentViewKey,
     entries,
@@ -147,65 +148,47 @@ export function useDirectorySnapshot({
           snapshot.complete &&
           path === 'recent://' &&
           paintedSnapshot.listing.entries.length === 0 &&
-          nav.history.length <= 1
+          history.length <= 1
         ) {
           const home = locations.find((item) => item.name === '个人文件夹')?.path
-          if (home) nav.navigate(home)
+          if (home) navigate(home)
         }
         return
       }
       if (listing.path !== path) {
-        nav.navigate(listing.path)
+        navigate(listing.path)
         return
       }
-      const pending = nav.pendingSelection
+      const pending = pendingSelection
       if (pending?.directory === path) {
         if (listing.entries.some((entry) => entry.path === pending.target)) {
-          nav.setSelected([pending.target])
-          nav.clearPendingSelection(pending.generation)
+          setSelected([pending.target])
+          clearPendingSelection(pending.generation)
         } else if (snapshot.complete) {
-          nav.clearPendingSelection(pending.generation)
+          clearPendingSelection(pending.generation)
           setError(t('无法定位已打开的文件'))
         }
       }
       cachePresentations(listing.entries, snapshot.decorations)
       publishPresentationIcons(listing.entries, snapshot.presentationPending)
-      const previousPainted = paintedSnapshot?.listing.entries ?? null
-      const visibleUnchanged =
-        paintedSnapshot !== null &&
-        sameVisibleListing(
-          paintedSnapshot.listing.entries,
-          listing.entries,
-          prefs.sort,
-          prefs.descending,
-        )
-      const stableEntries =
-        paintedSnapshot && visibleUnchanged ? paintedSnapshot.listing.entries : listing.entries
-      const nextListing = { ...listing, entries: stableEntries }
-      const stableListing =
-        paintedSnapshot &&
-        visibleUnchanged &&
-        sameListingMetadata(paintedSnapshot.listing, nextListing)
-          ? paintedSnapshot.listing
-          : nextListing
-      paintedSnapshot = {
-        listing: stableListing,
-        decorations: snapshot.decorations,
-        revision: snapshot.revision,
-      }
+      const reconciled = reconcileDirectorySnapshot(
+        paintedSnapshot,
+        listing,
+        snapshot.decorations,
+        snapshot.revision,
+        prefs.sort,
+        prefs.descending,
+      )
+      paintedSnapshot = reconciled.snapshot
       paintedByPath.current.remember(viewKey, paintedSnapshot)
-      applyDirectoryMetadata(stableListing, snapshot.decorations)
-      if (
-        renderedKey.current !== viewKey ||
-        !previousPainted ||
-        !sameVisibleListing(previousPainted, stableEntries, prefs.sort, prefs.descending)
-      ) {
+      applyDirectoryMetadata(reconciled.snapshot.listing, snapshot.decorations)
+      if (renderedKey.current !== viewKey || reconciled.visibleChanged) {
         renderedKey.current = viewKey
         renderedPathRef.current = path
         setRenderedPath(path)
-        setEntries(stableEntries)
-        const paths = new Set(listing.entries.map((entry) => entry.path))
-        nav.setSelected((selected) => selected.filter((item) => paths.has(item)))
+        setEntries(reconciled.entries)
+        const paths = new Set(reconciled.entries.map((entry) => entry.path))
+        setSelected((selected) => selected.filter((item) => paths.has(item)))
       }
       setListedPath(path)
       setLoading(false)
@@ -213,10 +196,10 @@ export function useDirectorySnapshot({
         snapshot.complete &&
         path === 'recent://' &&
         listing.entries.length === 0 &&
-        nav.history.length <= 1
+        history.length <= 1
       ) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
-        if (home) nav.navigate(home)
+        if (home) navigate(home)
       }
     })
       .catch((error) => {
@@ -246,8 +229,28 @@ export function useDirectorySnapshot({
     prefs.descending,
     revalidation,
     query,
-    nav.pendingSelection,
-    nav.clearPendingSelection,
+    locations,
+    currentViewKey,
+    entries,
+    paintedByPath,
+    renderedKey,
+    renderedPathRef,
+    request,
+    setEntries,
+    setDirectoryAllowedOps,
+    setVirtualVolume,
+    setDefaultView,
+    setWarnings,
+    setDirectoryDecorations,
+    setListedPath,
+    setRenderedPath,
+    setLoading,
+    setError,
+    clearPendingSelection,
+    history,
+    navigate,
+    pendingSelection,
+    setSelected,
   ])
   currentViewKey.current = JSON.stringify([path, prefs.hidden, prefs.displayIgnore])
 }
