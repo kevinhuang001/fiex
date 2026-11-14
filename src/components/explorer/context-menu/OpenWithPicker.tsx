@@ -3,19 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { AppWindow, Search } from 'lucide-react'
 import { call } from '@/lib/api'
+import type { OpenWithPickerItem, OpenWithPickerResponse } from '@/lib/openWithPicker'
 import { Modal } from '@/components/ui/Modal'
 
-interface PickerItem {
-  id: string
-  name: string
-  iconSource?: string
-}
-export interface PickerResponse {
-  sessionId: string
-  items: PickerItem[]
-}
-
-function PickerApplication({ item, onChoose }: { item: PickerItem; onChoose: () => void }) {
+function PickerApplication({ item, onChoose }: { item: OpenWithPickerItem; onChoose: () => void }) {
   const [icon, setIcon] = useState('')
   useEffect(() => {
     if (!item.iconSource) return
@@ -47,7 +38,7 @@ export function OpenWithPicker({
   onClose: () => void
   onError: (message: string) => void
 }) {
-  const [session, setSession] = useState<PickerResponse>()
+  const [session, setSession] = useState<OpenWithPickerResponse>()
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -80,7 +71,7 @@ export function OpenWithPicker({
     }
   }, [path])
 
-  const choose = async (item: PickerItem) => {
+  const choose = async (item: OpenWithPickerItem) => {
     if (!session) return
     try {
       await call('open_with_picker_execute', {
