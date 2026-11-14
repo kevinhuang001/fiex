@@ -1,6 +1,12 @@
 import type { DialogState } from '@/lib/dialogs'
 import type { Channel } from '@tauri-apps/api/core'
-import type { Entry, OperationProgress, OperationResult, TransferConflict } from '@/lib/types'
+import type {
+  ConflictResolution,
+  Entry,
+  OperationProgress,
+  OperationResult,
+  TransferConflict,
+} from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 
 export type ActivityKind = 'transfer' | 'delete' | 'sync' | 'plugin'
@@ -40,6 +46,16 @@ export interface FileOperationServices {
   restoreFromTrash: (paths: string[], fallback: string | null) => Promise<number>
   undo: () => Promise<void>
   pickDirectory: () => Promise<string | null>
+  fileParent: (path: string) => Promise<string>
+  transfer: (request: {
+    paths: string[]
+    destination: string
+    moving: boolean
+    keepBoth: boolean
+    ignores: string[]
+    resolutions?: ConflictResolution[]
+    onProgress: Channel<OperationProgress>
+  }) => Promise<OperationResult>
   reportPermissionError: (message: string, context: string) => boolean
 }
 
