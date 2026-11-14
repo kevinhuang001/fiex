@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
-import type { AppController } from '@/hooks/useAppController'
-import { PathToolbar } from './PathToolbar'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type { FormEvent, RefObject } from 'react'
+import { PathToolbar, type Crumb } from './PathToolbar'
 export function ExplorerPathBar({
   x,
   startPathEdit,
@@ -12,12 +13,26 @@ export function ExplorerPathBar({
   setEditingPath,
   searchInput,
   crumbs,
-  hint,
+  searchHint,
   split,
   closePane,
-}: Pick<
-  AppController,
-  | 'x'
+export interface ExplorerPathBarProps {
+  x: Explorer
+  startPathEdit: () => void
+  editingPath: boolean
+  submitPath: (event: FormEvent) => void
+  pathInput: RefObject<HTMLInputElement | null>
+  pathDraft: string
+  setPathDraft: (value: string) => void
+  setEditingPath: (editing: boolean) => void
+  searchInput: RefObject<HTMLInputElement | null>
+  crumbs: Crumb[]
+  searchHint: string
+  split: boolean
+  closePane: (side?: 'left' | 'right') => void
+}
+
+}: ExplorerPathBarProps) {  | 'x'
   | 'startPathEdit'
   | 'editingPath'
   | 'submitPath'
@@ -43,7 +58,7 @@ export function ExplorerPathBar({
       stopEdit={() => setEditingPath(false)}
       pathInput={pathInput}
       searchInput={searchInput}
-      searchHint={hint('search')}
+      searchHint={searchHint}
       ariaLabel={t('当前位置')}
       pathLabel={t('文件夹路径')}
       searchLabel={t('搜索文件')}

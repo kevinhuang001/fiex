@@ -146,3 +146,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 
 **P2-01 后续 PR #228：** `ExplorerTabs` 改用标签栏所需的窄 props 合同，`App` 显式传递字段，不再将整个 `AppController` 扩散到标签组件。并修复 App 错误回报 effect 与菜单关闭 effect 的 Hooks 依赖告警。其余宽泛 `...app` 消费者将按组件边界继续迁移。
+
+
+**P2-01 后续 PR #229：** 标签栏、路径栏与状态栏改用各自所需的窄 props 合同；`App` 到三个 UI 区域的字段转换集中在 app-shell binding adapter，组件与测试不再依赖 `AppController` 全量类型。现有标签拖动、双面板状态与状态栏按钮回归用例继续覆盖可见行为。

@@ -18,7 +18,7 @@ type DragState = {
   settling: boolean
 }
 
-interface ExplorerTabsProps {
+export interface ExplorerTabsProps {
   left: { tabs: string[]; tab: number }
   panePaths: (string | null)[]
   paneActives: ('left' | 'right')[]

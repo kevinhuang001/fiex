@@ -7,6 +7,11 @@ import { ErrorDialogHost } from '@/components/ErrorDialogHost'
 import { reportError } from '@/lib/errorCenter'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import {
+  explorerPathBarProps,
+  explorerStatusBarProps,
+  explorerTabsProps,
+} from '@/components/explorer/appShellBindings'
 import { LogCenter } from '@/components/activity/LogCenter'
 import { ActivityCenter } from '@/components/ActivityCenter'
 import { SecondaryPane } from '@/components/SecondaryPane'
@@ -136,18 +141,7 @@ export default function App() {
         className={`main ${app.split ? 'split' : ''}`}
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
-        <ExplorerTabs
-          left={app.left}
-          panePaths={app.panePaths}
-          paneActives={app.paneActives}
-          displayName={tabName}
-          switchWorkspaceTab={app.switchWorkspaceTab}
-          closeWorkspaceTab={app.closeWorkspaceTab}
-          newWorkspaceTab={app.newWorkspaceTab}
-          moveWorkspaceTab={app.moveWorkspaceTab}
-          control={app.control}
-          platform={app.platform}
-        />
+        <ExplorerTabs {...explorerTabsProps(app, tabName)} />
         {!fullView && (
           <ExplorerToolbar
             {...app}
@@ -157,7 +151,7 @@ export default function App() {
             onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
           />
         )}
-        {!fullView && <ExplorerPathBar {...app} x={app.left} />}
+        {!fullView && <ExplorerPathBar {...explorerPathBarProps(app)} />}
         {fullViews.map((view) => (
           <div
             className="full-view-pane"
@@ -251,7 +245,7 @@ export default function App() {
             }
           />
         )}
-        {!fullView && <ExplorerStatusBar {...app} />}
+        {!fullView && <ExplorerStatusBar {...explorerStatusBarProps(app)} />}
         <ActivityCenter />
         <LogCenter />
       </main>
