@@ -1,4 +1,3 @@
-import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
 import { canRenameEntry } from '../model/renamePolicy'
 
@@ -16,7 +15,7 @@ export async function renameSingleEntry(
   target: string,
   name: string,
   entries: Entry[],
-  invoke: RenameInvoker = (path, nextName) => call('rename_entry', { path, name: nextName }),
+  invoke: RenameInvoker,
 ): Promise<SingleRenameResult> {
   if (!canRenameEntry(entries.find((entry) => entry.path === target)))
     return { status: 'unsupported' }
