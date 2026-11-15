@@ -80,6 +80,17 @@ test('removing a Recent item preserves its source file', async ({ page }) => {
   ).toBeVisible()
 })
 
+test('a stale Recent mapping does not open a guessed source path', async ({ page }) => {
+  await page.goto('/?fixture&pluginFixture&staleRecent')
+  await openDocuments(page)
+  await page.getByRole('button', { name: '最近使用', exact: true }).click()
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '显示所在文件夹', exact: true }).click()
+
+  await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('最近使用')
+  await expect(page.getByRole('alert')).toContainText('Recent mapping is stale')
+})
+
 test('closing the last tab reopens the configured start page', async ({ page }) => {
   await page.getByText('Research', { exact: true }).dblclick()
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
