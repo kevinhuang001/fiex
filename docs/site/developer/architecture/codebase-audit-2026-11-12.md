@@ -175,3 +175,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P2-03 单项原位重命名（PR #247）：** 将 `useListing` 中开始、取消和提交重命名的状态编排迁入 `features/file-operations/hooks/useInlineRename`；列表 hook 只传递当前目录、条目状态与导航 setter。新增严格边界检查和开始、取消、能力拒绝、Provider 失败及成功刷新测试，`OPS-RENAME-01`/`ARCH-01` 追溯同步更新。
 
 **P2-01 共享连接状态（PR #248）：** 将连接列表从每个 Explorer pane 的 `useListing` 状态迁至应用级 `features/connections/hooks/useConnections`，左右面板共享一次加载结果；连接刷新、加载失败与完成状态由独立服务处理。Core IPC adapter 留在 feature 服务层，连接状态 hook 纳入严格边界，`CONN-01`/`ARCH-01` 测试追溯同步更新。
+
+**P2-01 侧边栏窄化 Explorer 合同（PR #249）：** 侧边栏及其 Places、Favorites、Tags、Connections、Devices 子组件只接收自己使用的 Explorer 字段；`App` 显式构造侧边栏合同，不再扩散活动面板的完整 Explorer 对象。导航与连接展示行为保持现有 E2E 覆盖。
