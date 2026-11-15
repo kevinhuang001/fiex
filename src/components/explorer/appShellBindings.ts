@@ -7,8 +7,20 @@ import type { ExplorerDialogsProps } from './ExplorerDialogs'
 import type { ContextMenuProps } from '@/features/context-menu/types'
 import type { Preferences } from '@/lib/types'
 
+type Bindings<Fields extends keyof AppController> = Pick<AppController, Fields>
+
 export function explorerTabsProps(
-  app: AppController,
+  app: Bindings<
+    | 'left'
+    | 'panePaths'
+    | 'paneActives'
+    | 'switchWorkspaceTab'
+    | 'closeWorkspaceTab'
+    | 'newWorkspaceTab'
+    | 'moveWorkspaceTab'
+    | 'control'
+    | 'platform'
+  >,
   displayName: ExplorerTabsProps['displayName'],
 ): ExplorerTabsProps {
   return {
@@ -25,7 +37,23 @@ export function explorerTabsProps(
   }
 }
 
-export function explorerPathBarProps(app: AppController): ExplorerPathBarProps {
+export function explorerPathBarProps(
+  app: Bindings<
+    | 'left'
+    | 'startPathEdit'
+    | 'editingPath'
+    | 'submitPath'
+    | 'pathInput'
+    | 'pathDraft'
+    | 'setPathDraft'
+    | 'setEditingPath'
+    | 'searchInput'
+    | 'crumbs'
+    | 'hint'
+    | 'split'
+    | 'closePane'
+  >,
+): ExplorerPathBarProps {
   return {
     x: app.left,
     startPathEdit: app.startPathEdit,
@@ -43,7 +71,9 @@ export function explorerPathBarProps(app: AppController): ExplorerPathBarProps {
   }
 }
 
-export function explorerStatusBarProps(app: AppController): ExplorerStatusBarProps {
+export function explorerStatusBarProps(
+  app: Bindings<'x' | 'chosenAll' | 'selectedAll' | 'clipboard' | 'setClipboard' | 'workspace'>,
+): ExplorerStatusBarProps {
   return {
     x: app.x,
     chosenAll: app.chosenAll,
@@ -55,7 +85,22 @@ export function explorerStatusBarProps(app: AppController): ExplorerStatusBarPro
 }
 
 export function explorerToolbarProps(
-  app: AppController,
+  app: Bindings<
+    | 'sidebar'
+    | 'setSidebar'
+    | 'x'
+    | 'displayName'
+    | 'hint'
+    | 'create'
+    | 'ides'
+    | 'terminals'
+    | 'openIde'
+    | 'terminal'
+    | 'setSettings'
+    | 'setPluginManager'
+    | 'refreshAll'
+    | 'split'
+  >,
   prefs: Preferences,
   update: (patch: Partial<Preferences>) => void,
   onToggleSplit: () => void,
@@ -81,7 +126,45 @@ export function explorerToolbarProps(
   }
 }
 
-export function explorerDialogProps(app: AppController): ExplorerDialogsProps {
+export function explorerDialogProps(
+  app: Bindings<
+    | 'left'
+    | 'x'
+    | 'preview'
+    | 'setPreview'
+    | 'navigatePreview'
+    | 'open'
+    | 'dialog'
+    | 'dialogBusy'
+    | 'conflict'
+    | 'cancelConflict'
+    | 'resolveConflict'
+    | 'busy'
+    | 'setDialog'
+    | 'setDialogBusy'
+    | 'setDialogError'
+    | 'dialogValue'
+    | 'setDialogValue'
+    | 'info'
+    | 'setInfo'
+    | 'tagOpen'
+    | 'tagInitial'
+    | 'setTagOpen'
+    | 'applyTags'
+    | 'connectionOpen'
+    | 'connectionToEdit'
+    | 'setConnectionOpen'
+    | 'notify'
+    | 'settings'
+    | 'setSettings'
+    | 'pluginManager'
+    | 'setPluginManager'
+    | 'prefs'
+    | 'update'
+    | 'terminals'
+    | 'ides'
+  >,
+): ExplorerDialogsProps {
   return {
     left: app.left,
     x: app.x,
@@ -121,7 +204,31 @@ export function explorerDialogProps(app: AppController): ExplorerDialogsProps {
   }
 }
 
-export function explorerContextMenuProps(app: AppController): ContextMenuProps {
+export function explorerContextMenuProps(
+  app: Bindings<
+    | 'menu'
+    | 'hint'
+    | 'open'
+    | 'previewEntry'
+    | 'setInfo'
+    | 'openBatchRename'
+    | 'openTags'
+    | 'x'
+    | 'run'
+    | 'copy'
+    | 'duplicate'
+    | 'addWorkspace'
+    | 'workspace'
+    | 'notify'
+    | 'recycle'
+    | 'create'
+    | 'createFile'
+    | 'deletePermanently'
+    | 'emptyTrash'
+    | 'restoreFromTrash'
+    | 'setMenu'
+  >,
+): ContextMenuProps {
   return {
     menu: app.menu,
     hint: app.hint,
