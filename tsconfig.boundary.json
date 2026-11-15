@@ -70,6 +70,7 @@
     "src/features/connections/types.ts",
     "src/features/connections/services/refreshConnections.ts",
     "src/features/connections/hooks/useConnections.ts",
+    "src/components/sidebar/types.ts",
     "src/components/sidebar/connectionModel.ts",
     "src/hooks/autostartSessions.ts",
     "src/hooks/controller/appSessionPersistence.ts",

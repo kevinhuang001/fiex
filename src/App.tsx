@@ -126,7 +126,18 @@ export default function App() {
         />
       )}
       <Sidebar
-        x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
+        x={{
+          path: app.x.path,
+          locations: app.left.locations,
+          connections: app.left.connections,
+          tabs: app.x.tabs,
+          setError: app.x.setError,
+          refreshConnections: app.x.refreshConnections,
+          reload: app.x.reload,
+          navigate: app.x.navigate,
+          tagFilter: app.x.tagFilter,
+          setTagFilter: app.x.setTagFilter,
+        }}
         prefs={app.prefs}
         update={app.update}
         onTrash={app.openTrash}

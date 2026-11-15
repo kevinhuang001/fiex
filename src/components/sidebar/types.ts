@@ -1,10 +1,22 @@
-import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { useMenuPosition } from '@/lib/menuPosition'
-import type { Preferences, RemoteConnection } from '@/lib/types'
+import type { Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 
+export interface SidebarExplorer {
+  path: string
+  locations: Location[]
+  connections: RemoteConnection[]
+  tabs: string[]
+  setError: (error: string) => void
+  refreshConnections: () => Promise<void>
+  reload: () => void
+  navigate: (path: string) => void
+  tagFilter: string | null
+  setTagFilter: (tag: string | null) => void
+}
+
 export interface SidebarProps {
-  x: Explorer
+  x: SidebarExplorer
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
   onTrash: () => void
