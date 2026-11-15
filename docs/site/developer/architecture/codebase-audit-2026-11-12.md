@@ -179,3 +179,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P2-01 侧边栏窄化 Explorer 合同（PR #249）：** 侧边栏及其 Places、Favorites、Tags、Connections、Devices 子组件只接收自己使用的 Explorer 字段；`App` 显式构造侧边栏合同，不再扩散活动面板的完整 Explorer 对象。导航与连接展示行为保持现有 E2E 覆盖。
 
 **Explorer 列表选择模型：** 单选、多选、范围选取、全选和方向键/Home/End 导航规则已从文件视图事件处理器移入纯模型；失效范围锚点会回退为当前项目，避免筛选或导航后选中错误区间。新增模型测试并将其纳入严格类型边界，`OPS-SEL-01` 追溯已更新。
+
+**Explorer 面板视图偏好：** 将 `App` 中双面板展示偏好的解析、目录级持久化和工具栏排序路由迁入 `features/explorer/services/paneViewPreferences`；UI shell 只组合当前左右面板输入并转发更新。保留改变共享默认视图前保存另一面板目录视图的行为；新增服务级回归测试并纳入严格类型边界。

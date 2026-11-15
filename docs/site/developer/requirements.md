@@ -211,7 +211,8 @@
 | src-tauri/src/core/fs/path_utils.rs                                     | ARCH-03（同名目标后缀保留和目录编号）                                                   |
 | src-tauri/src/core/transfers/copy/staging.rs                            | OPS-XFER-01、OPS-XFER-05、ARCH-03（冲突、取消和暂存复制）                               |
 | src/features/explorer/model/listColumns.test.ts                         | UI-VIEW-02、ARCH-01（列宽约束和严格边界类型检查）                                       |
-| src/features/explorer/model/folderView.test.ts                          | UI-VIEW-01、ARCH-01（文件夹展示状态和严格边界类型检查）                                 |
+| src/features/explorer/model/folderView.test.ts                          | UI-VIEW-01、ARCH-01（文件夹展示状态、面板偏好路由和严格边界类型检查）                   |
+| src/features/explorer/services/paneViewPreferences.test.ts              | UI-VIEW-01、ARCH-01（双面板目录偏好保存、活动面板排序路由和共享默认设置转发）           |
 | src/features/explorer/model/searchBatch.test.ts                         | SEARCH-01、SEARCH-06、ARCH-01（流式批次合并、稳定结果与严格边界类型检查）               |
 | src/features/file-operations/model/renamePolicy.test.ts                 | OPS-RENAME-01、ARCH-01（显式重命名能力策略与严格边界类型检查）                          |
 | src/features/file-operations/hooks/useInlineRename.test.ts              | OPS-RENAME-01、ARCH-01（原位重命名交互生命周期与操作归属）                              |

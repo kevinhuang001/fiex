@@ -62,7 +62,20 @@ export function patchFolderView(
   current: Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>,
   patch: Partial<Pick<Preferences, 'view' | 'sort' | 'descending' | 'group'>>,
 ): FolderViewState {
-  return { ...current, ...patch }
+  return {
+    view: patch.view ?? current.view,
+    sort: patch.sort ?? current.sort,
+    descending: patch.descending ?? current.descending,
+    group: patch.group ?? current.group,
+  }
+}
+
+export function hasFolderViewChange(patch: Partial<Preferences>): boolean {
+  return 'view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch
+}
+
+export function hasFolderOrderingChange(patch: Partial<Preferences>): boolean {
+  return 'sort' in patch || 'descending' in patch || 'group' in patch
 }
 
 /** Persist a toolbar change for the focused folder and pin the other pane's
