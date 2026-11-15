@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
-import { FileIcon } from '../../FileIcon'
+import { FileIcon } from '@/shared/ui/FileIcon'
 import { DecoratedValue, NameCell, rowVars } from './shared'
 import { date, kind, size } from '@/lib/files'
 import { listGridTemplate, resizeListColumn } from '@/features/explorer/model/listColumns'

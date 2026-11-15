@@ -181,3 +181,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **Explorer 列表选择模型：** 单选、多选、范围选取、全选和方向键/Home/End 导航规则已从文件视图事件处理器移入纯模型；失效范围锚点会回退为当前项目，避免筛选或导航后选中错误区间。新增模型测试并将其纳入严格类型边界，`OPS-SEL-01` 追溯已更新。
 
 **Explorer 面板视图偏好：** 将 `App` 中双面板展示偏好的解析、目录级持久化和工具栏排序路由迁入 `features/explorer/services/paneViewPreferences`；UI shell 只组合当前左右面板输入并转发更新。保留改变共享默认视图前保存另一面板目录视图的行为；新增服务级回归测试并纳入严格类型边界。
+
+**Explorer 文件视图组件归属：** 将列表、图标、画廊和列视图及其行、拖拽、装饰徽标组件从 `components/browser` 整体迁入 `features/explorer/components`，并删除旧目录入口。将多 feature 共用的 FileIcon 放入 `shared/ui`；App 与次面板直接引用 Explorer 组件，列表视图从 sorting 专用模块导入规则。更新装饰徽标需求追溯及架构文档路径。

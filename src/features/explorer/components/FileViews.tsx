@@ -8,7 +8,7 @@ import { ColumnsView } from './views/ColumnsView'
 import { GridView } from './views/GridView'
 import { ListView } from './views/ListView'
 import { useFileDrag, useSelectionBand } from './views/useSelectionBand'
-import { groups, nextSort, sortEntries } from '@/lib/files'
+import { groups, nextSort, sortEntries } from '@/lib/files/sorting'
 import {
   moveVisiblePathSelection,
   selectAllVisiblePaths,

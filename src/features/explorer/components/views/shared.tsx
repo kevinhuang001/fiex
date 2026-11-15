@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DecorationBadges as Badges } from '../DecorationBadges'
-import { FileIcon } from '../../FileIcon'
+import { FileIcon } from '@/shared/ui/FileIcon'
 import { InlineRename } from '../InlineRename'
 import { asset } from '@/lib/api'
 import { useDecorationIcon } from '@/lib/decorationIcons'

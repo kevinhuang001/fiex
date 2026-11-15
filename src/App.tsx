@@ -1,6 +1,6 @@
 import { useAppEnvironment } from '@/hooks/useAppEnvironment'
 import { t, useLocale } from '@/i18n'
-import { FileViews } from '@/components/browser/FileViews'
+import { FileViews } from '@/features/explorer/components/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ErrorDialogHost } from '@/components/ErrorDialogHost'
