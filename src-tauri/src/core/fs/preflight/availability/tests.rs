@@ -76,7 +76,7 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
     let _guard = CACHE_TEST_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    clear_availability_cache();
+    let cache = Arc::new(Mutex::new(LruMap::default()));
     let path = tempfile::tempdir()
         .unwrap()
         .path()
@@ -92,9 +92,10 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
     let (release_tx, release_rx) = mpsc::channel();
     let owner_path = path.clone();
     let owner_request = request.clone();
+    let owner_cache = Arc::clone(&cache);
 
     let owner = thread::spawn(move || {
-        review_cached(&owner_path, 0, &owner_request, || {
+        review_cached_with_cache(&owner_cache, &owner_path, 0, &owner_request, || {
             entered_tx.send(()).unwrap();
             release_rx.recv_timeout(Duration::from_secs(8)).unwrap();
             Err(FsError::new(
@@ -107,10 +108,13 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
 
     let waiter_path = path.clone();
     let waiter_request = request.clone();
-    let waiter = thread::spawn(move || review_cached(&waiter_path, 0, &waiter_request, || Ok(())));
+    let waiter_cache = Arc::clone(&cache);
+    let waiter = thread::spawn(move || {
+        review_cached_with_cache(&waiter_cache, &waiter_path, 0, &waiter_request, || Ok(()))
+    });
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let waiting = availability_cache()
+        let waiting = cache
             .lock()
             .unwrap()
             .get_mut(&key)
@@ -128,7 +132,6 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
     release_tx.send(()).unwrap();
     assert!(!owner.join().unwrap());
     assert!(waiter.join().unwrap());
-    clear_availability_cache();
 }
 
 #[test]
