@@ -1,4 +1,5 @@
 import type { Preferences } from '@/lib/types'
+import type { ConnectionState } from '@/features/connections/types'
 import { useListing, type ListingServices } from './useListing'
 import { useNavigation, type NavigationServices } from './useNavigation'
 
@@ -10,22 +11,31 @@ export interface ExplorerServices {
 export function useExplorer(
   prefs: Preferences,
   services: ExplorerServices,
+  connectionState: ConnectionState,
   startOverride?: string,
   enabled = true,
   pane = 'left',
   initialTabs?: { paths: string[]; active: number },
 ) {
   const nav = useNavigation(services.navigation, initialTabs)
-  const listing = useListing(prefs, nav, services.listing, enabled, pane, startOverride)
+  const listing = useListing(
+    prefs,
+    nav,
+    services.listing,
+    connectionState.connections,
+    enabled,
+    pane,
+    startOverride,
+  )
   return {
     path: nav.path,
     previousPath: nav.previousPath,
     referencedPaths: nav.referencedPaths,
     entries: listing.entries,
     decorations: listing.decorations,
-    connections: listing.connections,
-    connectionsLoaded: listing.connectionsLoaded,
-    refreshConnections: listing.refreshConnections,
+    connections: connectionState.connections,
+    connectionsLoaded: connectionState.connectionsLoaded,
+    refreshConnections: connectionState.refreshConnections,
     tagFilter: listing.tagFilter,
     setTagFilter: listing.setTagFilter,
     directoryAllowedOps: listing.directoryAllowedOps,

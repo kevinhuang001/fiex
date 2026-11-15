@@ -94,7 +94,6 @@ export const explorerListingServices = {
     renameEntry: (path: string, name: string) => call('rename_entry', { path, name }),
     renameUnsupportedMessage: () => t('此位置不支持该操作'),
   },
-  remoteConnections: () => call('remote_connections'),
   watchErrorMessage: (error: unknown) => t('无法监视文件变更：{0}', error),
   directorySnapshot: directorySnapshotServices,
   decorations: entryDecorationServices,

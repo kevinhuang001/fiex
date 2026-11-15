@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Preferences } from '@/lib/types'
+import type { ConnectionState } from '@/features/connections/types'
 import {
   useExplorer,
   type Explorer,
@@ -10,11 +11,16 @@ type Side = 'left' | 'right'
 type TabPane = { right: ReturnType<Explorer['snapshotNavigation']> | null; active: Side }
 
 /** A tab owns one or two panes. Only the visible tab mounts a second explorer. */
-export function usePaneLayout(prefs: Preferences, left: Explorer, services: ExplorerServices) {
+export function usePaneLayout(
+  prefs: Preferences,
+  left: Explorer,
+  services: ExplorerServices,
+  connectionState: ConnectionState,
+) {
   const [split, setSplit] = useState(false)
   const [active, setActive] = useState<Side>('left')
   const [paneWidth, setPaneWidth] = useState(46)
-  const right = useExplorer(prefs, services, left.path, split, 'right')
+  const right = useExplorer(prefs, services, connectionState, left.path, split, 'right')
   const x = split && active === 'right' ? right : left
   const tabs = useRef<TabPane[]>([])
 

@@ -1,4 +1,6 @@
 import { useExplorer } from '@/features/explorer/hooks/useExplorer'
+import { useConnections } from '@/features/connections/hooks/useConnections'
+import { connectionServices } from '@/features/connections/services/adapters'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { loadSavedTabs } from '@/lib/tabs'
@@ -17,12 +19,15 @@ import {
   mergePaneSelections,
   selectedEntriesAcrossPanes,
 } from '@/features/explorer/model/paneSelection'
+
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
+  const connections = useConnections(connectionServices)
   const left = useExplorer(
     prefs,
     explorerServices,
+    connections,
     undefined,
     true,
     'left',
@@ -49,7 +54,7 @@ export function useAppController() {
     moveWorkspaceTab,
     openPane,
     closePane,
-  } = usePaneLayout(prefs, left, explorerServices)
+  } = usePaneLayout(prefs, left, explorerServices, connections)
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
   useAppSessionPersistence({
