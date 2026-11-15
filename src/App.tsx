@@ -30,12 +30,7 @@ import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, native } from '@/lib/api'
-import {
-  folderViewPreferences,
-  patchFolderView,
-  saveActiveFolderView,
-  saveFolderView,
-} from '@/features/explorer/model/folderView'
+import { createPaneViewPreferences } from '@/features/explorer/services/paneViewPreferences'
 import { Download, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -43,39 +38,20 @@ export default function App() {
   useLocale()
 
   const app = useAppController()
-  const leftPrefs = folderViewPreferences(app.prefs, app.left.path, app.left.defaultView)
-  const rightPrefs = folderViewPreferences(app.prefs, app.right.path, app.right.defaultView)
-  const updatePaneView =
-    (path: string, current: typeof app.prefs, otherPath: string, other: typeof app.prefs) =>
-    (patch: Partial<typeof app.prefs>) => {
-      const changesView =
-        'view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch
-      if (changesView) {
-        if (otherPath && otherPath !== path) saveFolderView(otherPath, patchFolderView(other, {}))
-        if (path) saveFolderView(path, patchFolderView(current, patch))
-      }
-      app.update(patch)
-    }
-  const updateLeftView = updatePaneView(app.left.path, leftPrefs, app.right.path, rightPrefs)
-  const updateRightView = updatePaneView(app.right.path, rightPrefs, app.left.path, leftPrefs)
-  const activePrefs = app.active === 'right' ? rightPrefs : leftPrefs
-  const updateActiveView = app.active === 'right' ? updateRightView : updateLeftView
-  const updateToolbarView = (patch: Partial<typeof app.prefs>) => {
-    const changesOrdering = 'sort' in patch || 'descending' in patch || 'group' in patch
-    if (!changesOrdering) {
-      updateActiveView(patch)
-      return
-    }
-    saveActiveFolderView(
-      app.active,
-      {
-        left: { path: app.left.path, preferences: leftPrefs },
-        right: { path: app.right.path, preferences: rightPrefs },
-      },
-      patch,
-    )
-    app.update(patch)
-  }
+  const {
+    left: leftPrefs,
+    right: rightPrefs,
+    active: activePrefs,
+    updateLeft: updateLeftView,
+    updateRight: updateRightView,
+    updateToolbar: updateToolbarView,
+  } = createPaneViewPreferences({
+    prefs: app.prefs,
+    left: { path: app.left.path, defaultView: app.left.defaultView },
+    right: { path: app.right.path, defaultView: app.right.defaultView },
+    active: app.active,
+    update: app.update,
+  })
   usePluginTasks()
   const explorerError = app.x.error
   const clearExplorerError = app.x.setError

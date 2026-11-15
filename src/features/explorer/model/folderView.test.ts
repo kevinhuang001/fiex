@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Preferences } from '@/lib/types'
 import {
   folderViewPreferences,
+  hasFolderOrderingChange,
+  hasFolderViewChange,
   loadFolderView,
   patchFolderView,
   saveActiveFolderView,
@@ -67,6 +69,28 @@ describe('folderView', () => {
         { sort: 'name' },
       ),
     ).toEqual({ view: 'list', sort: 'name', descending: true, group: 'modified' })
+  })
+
+  it('keeps unrelated preferences out of the directory presentation record', () => {
+    const patch: Partial<Preferences> = { view: 'icons', hidden: true }
+
+    expect(
+      patchFolderView(
+        { view: 'list', sort: 'modified', descending: true, group: 'modified' },
+        patch,
+      ),
+    ).toEqual({ view: 'icons', sort: 'modified', descending: true, group: 'modified' })
+  })
+
+  it('classifies folder presentation and ordering preference patches', () => {
+    expect(hasFolderViewChange({ view: 'icons' })).toBe(true)
+    expect(hasFolderViewChange({ descending: false })).toBe(true)
+    expect(hasFolderViewChange({})).toBe(false)
+
+    expect(hasFolderOrderingChange({ sort: 'size' })).toBe(true)
+    expect(hasFolderOrderingChange({ group: 'kind' })).toBe(true)
+    expect(hasFolderOrderingChange({ view: 'columns' })).toBe(false)
+    expect(hasFolderOrderingChange({})).toBe(false)
   })
 
   it('applies toolbar sorting only to the focused pane folder', () => {
