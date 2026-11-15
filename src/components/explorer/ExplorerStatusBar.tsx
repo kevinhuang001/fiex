@@ -1,6 +1,6 @@
 import { t, getLocale } from '@/i18n'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
-import type { Clipboard } from '@/features/explorer/operations/types'
+import type { Clipboard } from '@/features/file-operations/types'
 import type { Entry } from '@/lib/types'
 import { size } from '@/lib/files'
 import { terminalWorkingDirectory } from '@/lib/terminalPath'

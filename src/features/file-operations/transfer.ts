@@ -1,6 +1,9 @@
 import { t } from '@/i18n'
 import type { ConflictResolution } from '@/lib/types'
-import { canDuplicateEntries, planTransferPaths } from '@/features/explorer/model/transferPolicy'
+import {
+  canDuplicateEntries,
+  planTransferPaths,
+} from '@/features/file-operations/model/transferPolicy'
 import type { FileOpsContext } from './types'
 
 /** Copying, moving and duplicating entries, including conflict resolution. */

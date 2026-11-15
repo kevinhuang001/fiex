@@ -3,16 +3,16 @@ import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { createActions } from '@/features/explorer/operations/create'
-import { recycleActions } from '@/features/explorer/operations/recycle'
-import { createResultHandler } from '@/features/explorer/operations/result'
-import { restoreActions } from '@/features/explorer/operations/restore'
+import { createActions } from '@/features/file-operations/create'
+import { recycleActions } from '@/features/file-operations/recycle'
+import { createResultHandler } from '@/features/file-operations/result'
+import { restoreActions } from '@/features/file-operations/restore'
 import type {
   Clipboard,
   ConflictState,
   FileOperationServices,
-} from '@/features/explorer/operations/types'
-import { transferActions } from '@/features/explorer/operations/transfer'
+} from '@/features/file-operations/types'
+import { transferActions } from '@/features/file-operations/transfer'
 import { call } from '@/lib/api'
 import { openFilePicker } from '@/lib/filePicker'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'

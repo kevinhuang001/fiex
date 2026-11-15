@@ -4,10 +4,10 @@ export { quietProgressChannel } from '@/lib/operationProgress'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import type { OperationProgress } from '@/lib/types'
-import type { ActivityKind } from '@/features/explorer/operations/types'
+import type { ActivityKind } from '@/features/file-operations/types'
 
 type ActivityStatus = 'running' | 'done' | 'error'
-export type { ActivityKind } from '@/features/explorer/operations/types'
+export type { ActivityKind } from '@/features/file-operations/types'
 
 export interface ActivityItem {
   id: string

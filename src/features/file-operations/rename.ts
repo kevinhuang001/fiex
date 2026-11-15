@@ -1,7 +1,7 @@
 import type { Entry } from '@/lib/types'
-import { canRenameEntry } from '../model/renamePolicy'
+import { canRenameEntry } from './model/renamePolicy'
 
-export { canRenameEntry } from '../model/renamePolicy'
+export { canRenameEntry } from './model/renamePolicy'
 
 export type SingleRenameResult =
   | { status: 'renamed'; path: string }

@@ -5,8 +5,8 @@ import type { OperationProgress } from '@/lib/types'
 import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
 import type { PluginMenu } from '@/lib/pluginMenu'
 import type { ShortcutAction } from '@/lib/shortcuts'
-import type { OfficeFileTemplate } from '@/features/explorer/operations/create'
-import type { Run } from '@/features/explorer/operations/types'
+import type { OfficeFileTemplate } from '@/features/file-operations/create'
+import type { Run } from '@/features/file-operations/types'
 
 export type MenuRequest = { x: number; y: number; entry: Entry | null }
 export type SetMenu = Dispatch<SetStateAction<MenuRequest | null>>
