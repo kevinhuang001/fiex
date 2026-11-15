@@ -21,7 +21,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
   }
   switch (command) {
     case 'plugins_list':
-      return structuredClone(fixturePlugins)
+      return structuredClone(
+        fixturePlugins.map((plugin) => ({
+          schemaVersion: 2,
+          id: plugin.id,
+          name: plugin.name,
+          version: plugin.version,
+          description: plugin.description ?? '',
+          icon: null,
+          extensions: plugin.extensions ?? null,
+          uiTimeoutMs: 30_000,
+          backendAvailable: plugin.backendAvailable,
+          enabled: plugin.enabled,
+          author: plugin.author
+            ? { name: plugin.author.name, url: plugin.author.url ?? null }
+            : null,
+          approved: plugin.approved,
+          declaredPermissions: plugin.declaredPermissions,
+          grantedPermissions: plugin.grantedPermissions,
+          requestedNetworkAll: plugin.requestedNetworkAll ?? false,
+          requestedNetworkDomains: plugin.requestedNetworkDomains,
+          allowedNetworkAll: plugin.allowedNetworkAll ?? false,
+          allowedNetworkDomains: plugin.allowedNetworkDomains,
+          requestedCommands: plugin.requestedCommands ?? [],
+          allowedCommands: plugin.allowedCommands ?? [],
+          missingCommands: (plugin.requestedCommands ?? []).filter(
+            (command) => !(plugin.allowedCommands ?? []).includes(command),
+          ),
+        })),
+      )
     case 'plugin_logs':
       return { entries: [], cursor: Number(a.after) || 0, hasMore: false }
     case 'plugin_logs_clear':
@@ -212,24 +240,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     case 'plugin_secret_available':
       return true
-    case 'connection_open': {
-      if (String(a.id || '') === 'demo-ssh') {
-        return {
-          kind: 'pluginView',
-          pluginId: 'org.example.terminal',
-          connectionId: 'demo-ssh',
-          assetPath: '/demo/connection.html',
-          state: {},
-        }
-      }
-      // The browser fixture has one WebDAV connection and it registers a VFS,
-      // so Core's two-branch navigation resolves to the remote Explorer root.
-      if (String(a.id || '') === 'demo-webdav') {
-        return { kind: 'vfs', path: 'fiex://mount/demo-webdav/' }
-      }
-      throw new Error('Unknown demo connection')
-    }
-
     default:
       return notHandled
   }

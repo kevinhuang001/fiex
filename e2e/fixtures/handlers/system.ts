@@ -164,6 +164,8 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         { id: 'iTerm', name: 'iTerm2' },
         { id: 'Tabby', name: 'Tabby' },
       ]
+    case 'local_terminal_open':
+      return `fixture-terminal-${crypto.randomUUID()}`
     case 'native_icon':
       throw new Error('UI fixture')
     case 'open_path':
@@ -198,7 +200,13 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'remote_connection_config': {
       const connection = fixtureConnections.find((item) => item.id === a.id)
       if (!connection) throw new Error('connection not found')
-      return { ...connection, settings: { ...fixtureConnectionSettings[connection.id] } }
+      return {
+        id: connection.id,
+        name: connection.name,
+        kind: connection.kind,
+        pluginId: connection.pluginId ?? null,
+        settings: { ...fixtureConnectionSettings[connection.id] },
+      }
     }
     case 'save_remote_connection': {
       const input = a.input as RemoteConnection & {
@@ -229,6 +237,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
             connectionId: connection.id,
             assetPath: '/demo/connection.html',
             state: {},
+            tabTitle: null,
           }
         : { kind: 'vfs', path: connection.mountPath }
     }
