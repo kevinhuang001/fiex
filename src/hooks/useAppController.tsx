@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useExplorer } from '@/features/explorer/hooks/useExplorer'
-import { batchRenameEntries } from '@/features/explorer/operations/batchRename'
+import { batchRenameEntries } from '@/features/file-operations/batchRename'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { loadSavedTabs } from '@/lib/tabs'
