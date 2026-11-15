@@ -29,6 +29,22 @@ export interface OperationActivity {
   updateActivity: (id: string, patch: { detail?: string; indeterminate?: boolean }) => void
 }
 
+/** App adapters provide IPC, activity lifecycle, and directory refresh effects. */
+export interface FileOperationRuntimeServices extends OperationActivity {
+  beginOperation: () => Promise<void>
+  cancelOperation: () => Promise<void>
+  beginActivity: (
+    label: string,
+    detail: string | undefined,
+    cancel: (() => void) | undefined,
+    kind: ActivityKind,
+    pluginId: string | undefined,
+    reveal: boolean,
+  ) => string
+  finishActivity: (id: string, error?: string, detail?: string) => void
+  requestDirectoryRefresh: (paths: string[]) => void
+}
+
 /** Native and picker effects stay at the hook boundary so operation groups
  * can be tested and checked without importing the full API adapter. */
 export interface FileOperationServices {

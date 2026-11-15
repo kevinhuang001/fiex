@@ -186,6 +186,8 @@
 | src/features/file-operations/create.test.ts                             | OPS-CREATE-01、OPS-CREATE-02（能力拒绝、新文件选中与内联重命名）                        |
 | src/features/file-operations/recycle.test.ts                            | OPS-TRASH-03（删除失败保留选择，成功后清除选择）                                        |
 | src/features/file-operations/transfer.test.ts                           | OPS-XFER-04、ARCH-01（传输服务注入和源目录刷新范围）                                    |
+| src/features/file-operations/services/createRunner.test.ts              | OPS-XFER-04、ARCH-01（操作串行化、进度生命周期、失败反馈和目录对账）                    |
+| src/features/file-operations/hooks/useFileOperations.ts                 | ARCH-01（feature hook 严格类型边界及应用服务注入）                                      |
 | src-tauri/crates/builtins/fiex-trash/src/operations/tests.rs            | OPS-TRASH-02（外部 Finder DS_Store 元数据恢复并落盘）                                   |
 | src-tauri/crates/platform/fiex-platform/src/open_with/windows.rs        | OPS-OPEN-01（AppsFolder Notepad 实际打开文件）                                          |
 | src-tauri/src/core/terminals.rs                                         | OPS-OPEN-02（cmd.exe 在指定目录启动）                                                   |
