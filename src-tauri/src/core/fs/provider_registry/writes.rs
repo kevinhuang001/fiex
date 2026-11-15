@@ -10,9 +10,10 @@ use fiex_provider_contracts::{
 use serde_json::{Value, to_value};
 
 #[cfg(test)]
-thread_local! {
-    static NEXT_PROVIDER_WRITE_FAILURES: std::cell::RefCell<std::collections::VecDeque<String>> =
-        const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
+fn next_provider_write_failures() -> &'static std::sync::Mutex<std::collections::VecDeque<String>> {
+    static FAILURES: std::sync::OnceLock<std::sync::Mutex<std::collections::VecDeque<String>>> =
+        std::sync::OnceLock::new();
+    FAILURES.get_or_init(|| std::sync::Mutex::new(std::collections::VecDeque::new()))
 }
 
 #[cfg(test)]
@@ -22,27 +23,32 @@ pub(crate) fn fail_next_provider_write_for_test(path: &str) {
 
 #[cfg(test)]
 pub(crate) fn fail_provider_writes_for_test(paths: &[String]) {
-    NEXT_PROVIDER_WRITE_FAILURES.with(|failures| {
-        *failures.borrow_mut() = paths.iter().cloned().collect();
-    });
+    *next_provider_write_failures()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = paths.iter().cloned().collect();
 }
 
 #[cfg(test)]
 pub(crate) fn clear_provider_write_failures_for_test() {
-    NEXT_PROVIDER_WRITE_FAILURES.with(|failures| failures.borrow_mut().clear());
+    next_provider_write_failures()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
 }
 
 #[cfg(test)]
 fn injected_write_failure(resource: &ResourceBroker) -> Option<FsWrite> {
-    let should_fail = NEXT_PROVIDER_WRITE_FAILURES.with(|failures| {
-        let mut failures = failures.borrow_mut();
+    let should_fail = {
+        let mut failures = next_provider_write_failures()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if failures.front().is_some_and(|path| path == &resource.path) {
             failures.pop_front();
             true
         } else {
             false
         }
-    });
+    };
     should_fail.then(|| {
         struct FailingProviderWriter;
         impl std::io::Write for FailingProviderWriter {
