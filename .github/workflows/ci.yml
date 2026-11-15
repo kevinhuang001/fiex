@@ -208,7 +208,6 @@ jobs:
             test-results/
   e2e-performance:
     name: 10k directory p95 (${{ matrix.os }})
-    needs: checks
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
