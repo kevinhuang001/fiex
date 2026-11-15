@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { CreateTagDialog } from '@/components/CreateTagDialog'
 import { Button } from '@/shared/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { tagHex } from '@/lib/tags'
 import type { Preferences, Tag } from '@/lib/types'
 import { Pencil, Plus, Trash2 } from 'lucide-react'

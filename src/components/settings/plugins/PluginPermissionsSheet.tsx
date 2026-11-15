@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
 import { PermissionList } from './PermissionList'
 import { pluginIcon } from '../PluginInstaller'

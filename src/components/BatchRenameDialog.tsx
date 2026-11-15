@@ -3,7 +3,7 @@ import { t, getLocale } from '@/i18n'
 import { reportError } from '@/lib/errorCenter'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Hash, CaseSensitive, Replace, RotateCcw, Wand2 } from 'lucide-react'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 import type { Entry } from '@/lib/types'
 import {

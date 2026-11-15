@@ -1,15 +1,16 @@
 import type { RefObject } from 'react'
+import type { ComponentType } from 'react'
 import { useMemo } from 'react'
 import { t, getLocale } from '@/i18n'
-import { Modal } from '../ui/Modal'
-import { asset, native } from '@/lib/api'
+import { Modal } from '@/shared/ui/Modal'
 import { highlightCode } from '@/lib/highlight'
-import { pluginPreviewId } from '@/features/preview/model'
+import { pluginPreviewId } from '../model'
 import type { PreviewSessionActions, PreviewSessionState } from '@/features/preview/types'
 import type { Entry } from '@/lib/types'
 import { PreviewContent } from './PreviewContent'
 import { PreviewFooter } from './PreviewFooter'
 import { fitPreviewMedia, previewDialogClass } from './layout'
+import type { PluginPreviewFrameProps } from './PreviewContent'
 
 export type PreviewDialogState = PreviewSessionState
 export type PreviewDialogActions = PreviewSessionActions
@@ -22,6 +23,9 @@ export function PreviewDialog({
   sourceRef,
   state,
   actions,
+  fileSource,
+  PluginFrame,
+  onReportError,
 }: {
   entry: Entry | null
   onClose: () => void
@@ -30,6 +34,9 @@ export function PreviewDialog({
   sourceRef: RefObject<HTMLDivElement | null>
   state: PreviewDialogState
   actions: PreviewDialogActions
+  fileSource: string
+  PluginFrame: ComponentType<PluginPreviewFrameProps>
+  onReportError: (error: unknown, source: string) => void
 }) {
   const {
     candidates,
@@ -45,7 +52,6 @@ export function PreviewDialog({
     menuOpen,
   } = state
   const view = resolved?.view
-  const fileSource = view?.path ? (native ? asset(view.path) : view.path) : ''
   const highlighted = useMemo(
     () =>
       entry && view?.kind === 'text'
@@ -105,6 +111,8 @@ export function PreviewDialog({
               providerId={providerId}
               previewAsset={previewAsset}
               previewReady={previewReady}
+              PluginFrame={PluginFrame}
+              onReportError={onReportError}
               onPreviewReady={() => actions.setPreviewReady(true)}
               onMediaChange={(value) => actions.setMedia(value)}
               onError={(message) => actions.setError(message)}

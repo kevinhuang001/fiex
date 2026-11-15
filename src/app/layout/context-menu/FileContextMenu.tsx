@@ -7,7 +7,7 @@ import {
   SubmenuGroupContext,
   type PluginMenuItem,
 } from '@/components/plugins/PluginMenuNode'
-import { MenuLayer } from '@/components/ui/MenuLayer'
+import { MenuLayer } from '@/shared/ui/MenuLayer'
 import { OpenWithPicker } from './OpenWithPicker'
 import { useContextMenu } from '@/features/context-menu/hooks/useContextMenu'
 import { hasTopLevelMenuActions } from '@/features/context-menu/model/menuVisibility'
