@@ -20,7 +20,7 @@ import { PinnedTools } from './toolbar/PinnedTools'
 import { ToolbarPickerMenu, useToolbarPicker } from './toolbar/ToolbarMenus'
 import { GroupControl, SortControl, ViewSwitch } from './toolbar/ViewControls'
 import { useToolbarOrder } from './toolbar/useToolbarOrder'
-import { orderedToolbarKeys, toolbarItemStyle } from './toolbar/layout'
+import { orderedToolbarKeys, toolbarItemStyle } from '@/features/explorer/model/toolbarLayout'
 
 export interface ExplorerToolbarProps {
   sidebar: boolean

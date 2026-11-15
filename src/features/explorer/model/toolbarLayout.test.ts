@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orderedToolbarKeys, toolbarItemStyle } from './layout'
+import { orderedToolbarKeys, toolbarItemStyle } from './toolbarLayout'
 
 describe('orderedToolbarKeys', () => {
   it('ignores unknown saved keys and appends newly available defaults', () => {
