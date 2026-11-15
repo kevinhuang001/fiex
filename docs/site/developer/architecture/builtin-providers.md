@@ -18,8 +18,8 @@ Core 和插件菜单共用 event router。请求开始时 Core 捕获有效选�
 
 ## 对应验证
 
-- 菜单可见性：src/components/explorer/context-menu/menuVisibility.test.ts。
-- 菜单分组与 workspace 行为：src/components/explorer/context-menu/moreMenu.test.ts。
+- 菜单可见性：src/features/context-menu/model/menuVisibility.test.ts。
+- 菜单分组与 workspace 行为：src/features/context-menu/model/moreMenu.test.ts。
 - action/session/provider 归属：src-tauri/src/plugins/providers/context_menu/tests/contracts.rs、routing.rs 和 native_views/tests.rs。
 - 标签与连接装饰：src-tauri/src/plugins/providers/decorations/tests.rs、dynamic/tests.rs；UI 名称转义见 src/components/browser/DecorationBadges.test.tsx。
 - 用户点击流程：e2e/explorer/operations.spec.ts、plugins-providers.spec.ts。

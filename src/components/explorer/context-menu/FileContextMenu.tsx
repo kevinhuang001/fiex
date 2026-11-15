@@ -1,25 +1,6 @@
 import { t } from '@/i18n'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  CloudCheck,
-  CloudDownload,
-  CloudOff,
-  Copy,
-  ExternalLink,
-  FilePlus,
-  FolderOpen,
-  FolderPlus,
-  Eye,
-  Info,
-  AppWindow,
-  Pencil,
-  PinOff,
-  RotateCcw,
-  Scissors,
-  Tags,
-  Trash2,
-} from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
 import {
   PluginMenuNode,
@@ -28,33 +9,13 @@ import {
 } from '@/components/plugins/PluginMenuNode'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { OpenWithPicker } from './OpenWithPicker'
-import { useContextMenu } from './useContextMenu'
-import { hasTopLevelMenuActions } from '@/features/explorer/model/menuVisibility'
-import { buildMoreMenuPlan, isMoreAction } from '@/features/explorer/model/moreMenu'
-import { executeCoreMenu } from './execute'
-import type { CoreMenu, CoreMenuItem } from '@/lib/coreMenu'
-import type { ContextMenuProps } from './types'
-
-const icons = {
-  open: ExternalLink,
-  reveal: FolderOpen,
-  eye: Eye,
-  info: Info,
-  pencil: Pencil,
-  tags: Tags,
-  copy: Copy,
-  scissors: Scissors,
-  trash: Trash2,
-  restore: RotateCcw,
-  'cloud-check': CloudCheck,
-  'cloud-download': CloudDownload,
-  'cloud-off': CloudOff,
-  'pin-off': PinOff,
-  'file-plus': FilePlus,
-  'folder-plus': FolderPlus,
-  application: AppWindow,
-  'application-search': AppWindow,
-}
+import { useContextMenu } from '@/features/context-menu/hooks/useContextMenu'
+import { hasTopLevelMenuActions } from '@/features/context-menu/model/menuVisibility'
+import { buildMoreMenuPlan } from '@/features/context-menu/model/moreMenu'
+import { executeCoreMenu } from '@/features/context-menu/services/executeCoreMenu'
+import type { ContextMenuProps } from '@/features/context-menu/types'
+import { CoreMenuItems } from './CoreMenuItems'
+import { contextMenuExecutionServices, contextMenuSessionServices } from './contextMenuAdapters'
 
 export function FileContextMenu(props: ContextMenuProps) {
   const { menu, x, setMenu } = props
@@ -74,7 +35,7 @@ export function FileContextMenu(props: ContextMenuProps) {
     pluginError,
     retryPlugins,
     resolveCoreChildren,
-  } = useContextMenu(props)
+  } = useContextMenu(props, contextMenuSessionServices)
   const [openCoreChild, setOpenCoreChild] = useState<string | null>(null)
   const rootSubmenuGroup = useMemo(
     () => ({ openId: openCoreChild, setOpenId: setOpenCoreChild }),
@@ -181,47 +142,6 @@ export function FileContextMenu(props: ContextMenuProps) {
   if (!hasCoreActions && pluginLoading && !hasWorkspaceAction) return null
   if (!hasCoreActions && !pluginLoading && !pluginError && !hasPluginActions && !hasWorkspaceAction)
     return null
-  const render = (group: CoreMenu, item: CoreMenuItem) => {
-    if (item.kind === 'separator')
-      return <div key={item.id} role="separator" className="context-divider" />
-    if (item.kind === 'submenu') {
-      return (
-        <PluginMenuNode
-          key={`${group.providerId}:${item.id}`}
-          item={item as PluginMenuItem}
-          items={group.items as PluginMenuItem[]}
-          onAction={(selected) => {
-            const coreItem = group.items.find((candidate) => candidate.id === selected.id)
-            if (coreItem) {
-              setMenu(null)
-              void executeCoreMenu(group, coreItem, props, setOpenWithPath)
-            }
-          }}
-          onExpand={(parentId) => {
-            void resolveCoreChildren(group, parentId).catch((reason) => x.setError(String(reason)))
-          }}
-        />
-      )
-    }
-    const Icon = icons[item.icon as keyof typeof icons]
-    return (
-      <button
-        key={`${group.providerId}:${item.id}`}
-        role="menuitem"
-        disabled={item.disabled}
-        className={item.danger ? 'context-danger' : undefined}
-        onMouseEnter={() => setOpenCoreChild(null)}
-        onClick={() => {
-          setMenu(null)
-          void executeCoreMenu(group, item, props, setOpenWithPath)
-        }}
-      >
-        {Icon && <Icon />}
-        {item.title}
-        {item.shortcut && <span className="shortcut">{props.hint(item.shortcut)}</span>}
-      </button>
-    )
-  }
   return (
     <>
       <MenuLayer>
@@ -233,13 +153,17 @@ export function FileContextMenu(props: ContextMenuProps) {
           style={position}
         >
           <SubmenuGroupContext.Provider value={rootSubmenuGroup}>
-            {menus.flatMap((group) =>
-              group.items
-                .filter(
-                  (item) => !item.parentId && item.placement !== 'tail' && !isMoreAction(item.id),
-                )
-                .map((item) => render(group, item)),
-            )}
+            <CoreMenuItems
+              placement="regular"
+              menus={menus}
+              actions={props}
+              hint={props.hint}
+              setMenu={setMenu}
+              setOpenChild={setOpenCoreChild}
+              onOpenWith={setOpenWithPath}
+              onError={x.setError}
+              resolveCoreChildren={resolveCoreChildren}
+            />
             {moreMenuItems.length > 1 && (
               <PluginMenuNode
                 item={moreMenuTrigger}
@@ -248,7 +172,13 @@ export function FileContextMenu(props: ContextMenuProps) {
                   const action = morePlan.coreActions.find(({ item }) => item.id === selected.id)
                   if (action) {
                     setMenu(null)
-                    void executeCoreMenu(action.group, action.item, props, setOpenWithPath)
+                    void executeCoreMenu(
+                      action.group,
+                      action.item,
+                      props,
+                      contextMenuExecutionServices,
+                      setOpenWithPath,
+                    )
                     return
                   }
                   const workspaceAction = morePlan.workspaceAction
@@ -277,13 +207,17 @@ export function FileContextMenu(props: ContextMenuProps) {
                 onError={x.setError}
               />
             )}
-            {menus.flatMap((group) =>
-              group.items
-                .filter(
-                  (item) => !item.parentId && item.placement === 'tail' && !isMoreAction(item.id),
-                )
-                .map((item) => render(group, item)),
-            )}
+            <CoreMenuItems
+              placement="tail"
+              menus={menus}
+              actions={props}
+              hint={props.hint}
+              setMenu={setMenu}
+              setOpenChild={setOpenCoreChild}
+              onOpenWith={setOpenWithPath}
+              onError={x.setError}
+              resolveCoreChildren={resolveCoreChildren}
+            />
           </SubmenuGroupContext.Provider>
         </div>
       </MenuLayer>

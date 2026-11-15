@@ -4,7 +4,7 @@ import type { ExplorerPathBarProps } from './ExplorerPathBar'
 import type { ExplorerStatusBarProps } from './ExplorerStatusBar'
 import type { ExplorerToolbarProps } from './ExplorerToolbar'
 import type { ExplorerDialogsProps } from './ExplorerDialogs'
-import type { ContextMenuProps } from './context-menu/types'
+import type { ContextMenuProps } from '@/features/context-menu/types'
 import type { Preferences } from '@/lib/types'
 
 export function explorerTabsProps(
@@ -129,10 +129,8 @@ export function explorerContextMenuProps(app: AppController): ContextMenuProps {
     previewEntry: app.previewEntry,
     setInfo: app.setInfo,
     openBatchRename: app.openBatchRename,
-    platform: app.platform,
     openTags: app.openTags,
     x: app.x,
-    isRemotePath: app.isRemotePath,
     run: app.run,
     copy: app.copy,
     duplicate: app.duplicate,
@@ -145,7 +143,6 @@ export function explorerContextMenuProps(app: AppController): ContextMenuProps {
     deletePermanently: app.deletePermanently,
     emptyTrash: app.emptyTrash,
     restoreFromTrash: app.restoreFromTrash,
-    inTrash: app.inTrash,
     setMenu: app.setMenu,
   }
 }
