@@ -207,3 +207,7 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P2-02 Preview renderer 归属：** 将 PreviewDialog、内容与 footer、PDF viewer 和展示布局模型/测试迁入 `features/preview/components`；会话适配器与入口 wrapper 放在 `app/layout/preview`。插件 iframe renderer、资源 URL 转换和错误上报由 app adapter 注入，feature 不再直接导入插件 shell 或错误中心；通用 Modal 搬到 `shared/ui` 并更新所有调用方，不留旧路径 re-export。PREVIEW-01 测试追溯同步到新布局模型路径。
 
 **P2-02 File Picker renderer 归属：** 将 Picker dialog、entries、footer、menu、sidebar 和 toolbar 迁入 `features/file-picker/components`；全局请求订阅、偏好读取和 Core IPC session adapter 留在 `app/layout/file-picker`。通用 `MenuLayer` 与 `Modal` 统一归入 `shared/ui` 并更新所有调用方；移除旧 `components/file-picker` 和根级 `FilePickerDialog` 路径，不保留兼容转发。
+
+**P2-02 Info session 归属（PR #261，堆叠开放）：** 将 Info session、增量 revision 对账、按需字段计算和取消/关闭生命周期收敛到 `features/info/hooks/useInfoSession`；字段更新合并与尚未收到 open 响应的早期 delta 队列抽为纯模型并补测试，模型、类型与会话 hook 纳入严格边界。`Channel`、Tauri commands、task ID 与错误中心由 `app/layout/info` 注入；Info dialog 和平铺 section 渲染移入 `features/info/components`，删除旧组件路径，INFO-01 测试索引已更新。
+
+**2026-11-15 本地最终复核：** 前端 110 个测试文件、548 项测试通过；生产构建、VitePress、格式、lint（0 errors；25 warnings）、严格类型（含 Info session hook）、架构边界、300 行门禁（0 项例外）、140 个 Tauri command 合同和 1,431 条 i18n 校验通过。Rust 1.100.0 的 workspace fmt、library tests 与 Linux `fiex/usbfs` profile Clippy 通过。Playwright 未进入浏览器断言：下载的 Chromium 不完整，系统 `/usr/bin/chromium` 启动又因容器 `socket() failed: Operation not permitted` 受阻。本轮按要求不等待 CI，三平台 p95 artifact 尚未收集，因此 P4-02 的跨平台性能校准和“连续三次 CI 全绿”验收证据仍未取得。现有架构扫描保留 1 组历史 type-level cycle，门禁阻止新增循环。
