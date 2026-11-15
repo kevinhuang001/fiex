@@ -57,6 +57,44 @@ fn cancelling_after_the_last_commit_does_not_delete_the_source() {
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
+    const HELPER_ROOT: &str = "FIEX_TEST_APPLICATION_EXPORT_HELPER_ROOT";
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let data = root.path().join("data");
+    let local_app_data = root.path().join("local-app-data");
+    let roaming_app_data = root.path().join("roaming-app-data");
+    for directory in [&home, &data, &local_app_data, &roaming_app_data] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let helper = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "core::fs::provider_tests::transfers::mixed_native_and_virtual_exports_helper_child",
+            "--nocapture",
+        ])
+        .env(HELPER_ROOT, root.path())
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_DATA_HOME", &data)
+        .env("LOCALAPPDATA", &local_app_data)
+        .env("APPDATA", &roaming_app_data)
+        .output()
+        .unwrap();
+    assert!(
+        helper.status.success(),
+        "export helper failed: {}{}",
+        String::from_utf8_lossy(&helper.stdout),
+        String::from_utf8_lossy(&helper.stderr)
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn mixed_native_and_virtual_exports_helper_child() {
+    const HELPER_ROOT: &str = "FIEX_TEST_APPLICATION_EXPORT_HELPER_ROOT";
+    if std::env::var_os(HELPER_ROOT).is_none() {
+        return;
+    }
     use crate::core::volumes::applications;
     let local = tempfile::tempdir().unwrap();
     let native = local.path().join("same.txt");

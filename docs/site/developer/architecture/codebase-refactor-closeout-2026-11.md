@@ -17,9 +17,10 @@
 
 - 前端：Vitest 110 个测试文件、548 项通过；生产构建、VitePress、全仓格式、边界类型、架构边界、文件尺寸、Tauri contracts、i18n 通过；ESLint 0 errors、25 warnings。
 - 架构扫描：145 个 feature 文件、430 个模块，0 个运行时循环、0 个类型循环。
-- Rust 1.100.0：Core `cargo fmt --all -- --check` 通过；Linux/no-desktop profile 的 locked workspace library tests 为 496/496 通过（`--locked --workspace --lib --no-default-features --features fiex/usbfs`）。workspace all-target Clippy 在 headless profile 通过（`--locked --workspace --all-targets --no-default-features --features fiex/usbfs -- -D warnings -A dead_code -A unused_imports`）；额外排除桌面 crate 的 library targets 也以 `-D warnings` 通过。headless Clippy 的例外只覆盖桌面 feature 关闭时不可达代码；Cargo 仍报告 3 项现有 feature-off 依赖（`fontdb`、`notify`、`portable-pty`）。SDK workspace fmt、64 项测试、1 项 doctest 和 `--all-targets -- -D warnings` Clippy 通过。默认桌面 workspace 测试当前在 `gdk-sys` 停止，因为环境没有 `gdk-3.0.pc`（GTK/WebKit 开发包也不可用）。
+- Rust 1.100.0：Core `cargo fmt --all -- --check` 通过；Linux/no-desktop profile 的 locked workspace library tests 为 497/497 通过（`--locked --workspace --lib --no-default-features --features fiex/usbfs`）。workspace all-target Clippy 在 headless profile 通过（`--locked --workspace --all-targets --no-default-features --features fiex/usbfs -- -D warnings -A dead_code -A unused_imports`）；额外排除桌面 crate 的 library targets 也以 `-D warnings` 通过。headless Clippy 的例外只覆盖桌面 feature 关闭时不可达代码；Cargo 仍报告 3 项现有 feature-off 依赖（`fontdb`、`notify`、`portable-pty`）。SDK workspace fmt、65 项测试、1 项 doctest 和 `--all-targets -- -D warnings` Clippy 通过。默认桌面 workspace 测试当前在 `gdk-sys` 停止，因为环境没有 `gdk-3.0.pc`（GTK/WebKit 开发包也不可用）。
 - Playwright `--list` 收集到 69 个用例。Recent 正常导航、移除、失效映射拒绝与键盘撤销流程已加入 E2E；本地尝试用 `/usr/bin/chromium` 执行 Recent 用例，但 Chromium 在启动阶段遇到 `socket() failed: Operation not permitted`，尚未进入浏览器断言。
 - SDK/API 配套：Core submodule、SDK PR #37 与官方插件 PR #37 均锁定 SDK `c304aff91dc9a8a3564b7fa67c1aac89ed363f41`；插件协议为 8.0。统一文件流/TCP API 没有 `OwnedFileReader`、`OwnedFileWriter` 或业务侧 `HostProxy` 调用；SDK 测试覆盖 Reader 离开 `Files` 局部作用域后仍满足 `Read + Seek + Send + 'static`，以及流式读写、Seek、共享窗口复用、IPC fallback、事务提交和 TCP 标准流接口。
+- 已完成 CI 回归复核：Core 的 provider 写入故障注入改为跨工作线程可见，应用目录清理测试使用隔离用户数据目录；10k 性能工作流会初始化锁定的 SDK 子模块。SDK PR #36/#37 的 Windows `cargo test --all-features` 已完成运行但以 `0xc0000005 (STATUS_ACCESS_VIOLATION)` 异常退出，Linux 与 macOS 通过；本地没有 Windows 主机复现，因此该 Windows 运行时问题仍需后续确认。本轮不等待新 CI。
 
 ## 合并与发布检查表
 
