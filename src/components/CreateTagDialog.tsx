@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useState } from 'react'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 import { ColorPicker } from './ui/ColorPicker'
 import { TAG_PALETTE, nearestFinderColor, tagHex } from '@/lib/tags'

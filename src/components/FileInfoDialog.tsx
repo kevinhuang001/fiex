@@ -6,7 +6,7 @@ import type {
 } from '@/lib/ipcValidation/infoTypes'
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { FileIcon } from '@/shared/ui/FileIcon'
 import { FileInfoSections } from './FileInfoSections'
 import { tagHex } from '@/lib/tags'

@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { PluginSettings } from './PluginSettings'
 
 /**

@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 import type { PluginField } from '@/lib/plugins'
 

@@ -3,7 +3,7 @@ import { requestDirectoryRefresh } from '@/lib/listing'
 import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
-import { FilePickerDialog } from '@/components/FilePickerDialog'
+import { FilePickerDialog } from '@/app/layout/file-picker/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
@@ -16,10 +16,10 @@ const PluginManagerDialog = lazy(() =>
     default: m.PluginManagerDialog,
   })),
 )
-import { Preview } from '@/components/Preview'
+import { Preview } from './preview/Preview'
 import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/shared/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type {
   ConflictResolution,

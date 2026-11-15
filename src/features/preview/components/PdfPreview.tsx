@@ -1,5 +1,4 @@
 import { t } from '@/i18n'
-import { reportError } from '@/lib/errorCenter'
 import { useEffect, useRef, useState } from 'react'
 import {
   getDocument,
@@ -10,7 +9,13 @@ import worker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 GlobalWorkerOptions.workerSrc = worker
-export default function PdfPreview({ url }: { url: string }) {
+export default function PdfPreview({
+  url,
+  onReportError,
+}: {
+  url: string
+  onReportError: (error: unknown, source: string) => void
+}) {
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null)
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
@@ -32,7 +37,7 @@ export default function PdfPreview({ url }: { url: string }) {
       .catch((e) => {
         if (active) {
           setError(t('无法预览 PDF：{0}', String(e)))
-          reportError(e, 'preview:pdf')
+          onReportError(e, 'preview:pdf')
           setLoading(false)
         }
       })
@@ -40,7 +45,7 @@ export default function PdfPreview({ url }: { url: string }) {
       active = false
       void task.destroy()
     }
-  }, [url])
+  }, [url, onReportError])
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) =>
       setWidth(Math.max(200, entry.contentRect.width - 50)),
@@ -76,7 +81,7 @@ export default function PdfPreview({ url }: { url: string }) {
       .catch((e) => {
         if (active) {
           setError(String(e))
-          reportError(e, 'preview:pdf')
+          onReportError(e, 'preview:pdf')
           setLoading(false)
         }
       })
@@ -84,7 +89,7 @@ export default function PdfPreview({ url }: { url: string }) {
       active = false
       cancel?.()
     }
-  }, [document, page, width])
+  }, [document, onReportError, page, width])
   return (
     <div className="pdf-preview" ref={container}>
       <div className="pdf-controls">

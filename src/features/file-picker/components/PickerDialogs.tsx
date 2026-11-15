@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import type { RefObject } from 'react'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 import type { Entry } from '@/lib/types'
 import type { PickerDialogState } from '@/features/file-picker/types'

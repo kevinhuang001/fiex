@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { ListMinus } from 'lucide-react'
-import { MenuLayer } from '@/components/ui/MenuLayer'
+import { MenuLayer } from '@/shared/ui/MenuLayer'
 import { useMenuPosition } from '@/lib/menuPosition'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from '@/shared/ui/FileIcon'

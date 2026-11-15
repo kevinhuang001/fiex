@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import type { RefObject } from 'react'
-import { MenuLayer } from '@/components/ui/MenuLayer'
+import { MenuLayer } from '@/shared/ui/MenuLayer'
 import { FolderPlus, LayoutGrid, List, Pencil, RotateCw, Trash2 } from 'lucide-react'
 import type { Entry } from '@/lib/types'
 import type { GroupKey, PickerMenuState, SortKey } from '@/features/file-picker/types'

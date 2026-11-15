@@ -1,16 +1,26 @@
 import { t } from '@/i18n'
 import { lazy, Suspense } from 'react'
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { FileIcon } from '@/shared/ui/FileIcon'
-import { reportError } from '@/lib/errorCenter'
 import { kind } from '@/lib/files'
-import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { PluginLoadingPage } from '@/features/preview/types'
 import type { ResolvedPreview } from '@/lib/preview'
 import type { Entry } from '@/lib/types'
 
-const PdfPreview = lazy(() => import('../PdfPreview'))
+const PdfPreview = lazy(() => import('./PdfPreview'))
+
+export type PluginPreviewFrameProps = {
+  pluginId: string
+  contributionId: string
+  html?: string
+  src?: string
+  context?: unknown
+  sessionId: string
+  timeoutMs?: number
+  loading?: boolean
+  onPreviewReady?: () => void
+}
 
 type PreviewContentProps = {
   entry: Entry
@@ -26,6 +36,8 @@ type PreviewContentProps = {
   providerId: string | null
   previewAsset: string
   previewReady: boolean
+  PluginFrame: ComponentType<PluginPreviewFrameProps>
+  onReportError: (error: unknown, source: string) => void
   onPreviewReady: () => void
   onMediaChange: (media: { width: number; height: number }) => void
   onError: (message: string) => void
@@ -45,13 +57,15 @@ export function PreviewContent({
   providerId,
   previewAsset,
   previewReady,
+  PluginFrame,
+  onReportError,
   onPreviewReady,
   onMediaChange,
   onError,
 }: PreviewContentProps) {
   const mediaError = (message: string) => {
     onError(message)
-    reportError(message, 'preview:media')
+    onReportError(message, 'preview:media')
   }
 
   if (error) {
@@ -65,7 +79,7 @@ export function PreviewContent({
   }
   if (loadingPage && !resolved) {
     return (
-      <PluginPreviewFrame
+      <PluginFrame
         key={`loading:${entry.path}:${providerId}:${loadingPage.sessionId}`}
         pluginId={loadingPage.pluginId}
         contributionId={loadingPage.pluginId}
@@ -79,7 +93,7 @@ export function PreviewContent({
     if (waitingForLoadingDocument) return loadingPlaceholder
     return (
       <>
-        <PluginPreviewFrame
+        <PluginFrame
           key={`${entry.path}:${providerId}`}
           pluginId={view.pluginId || ''}
           contributionId={view.contributionId || ''}
@@ -92,7 +106,7 @@ export function PreviewContent({
         />
         {loadingPage && !previewReady && (
           <div className="preview-plugin-loading">
-            <PluginPreviewFrame
+            <PluginFrame
               key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
               pluginId={loadingPage.pluginId}
               contributionId={loadingPage.pluginId}
@@ -166,7 +180,7 @@ export function PreviewContent({
   if (view?.kind === 'pdf' && fileSource) {
     return (
       <Suspense fallback={<p>{t('正在加载 PDF…')}</p>}>
-        <PdfPreview url={fileSource} />
+        <PdfPreview url={fileSource} onReportError={onReportError} />
       </Suspense>
     )
   }

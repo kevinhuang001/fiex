@@ -203,3 +203,7 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **应用组合根归属：** 将根级 `src/App.tsx` 移入 `src/app/App.tsx`，由 `main.tsx` 从新的 app shell 路径启动；`src/components/explorer` 旧业务目录已完全移除。
 
 **Explorer 工具栏归属：** 将跨 Explorer、插件、活动中心和系统控件的 toolbar composition 与子组件移入 `app/layout/toolbar`，作为应用壳组合层；纯顺序与拖动几何规则及测试移入 `features/explorer/model` 并加入严格类型边界。`App` 和壳层 adapter 只使用新路径。
+
+**P2-02 Preview renderer 归属：** 将 PreviewDialog、内容与 footer、PDF viewer 和展示布局模型/测试迁入 `features/preview/components`；会话适配器与入口 wrapper 放在 `app/layout/preview`。插件 iframe renderer、资源 URL 转换和错误上报由 app adapter 注入，feature 不再直接导入插件 shell 或错误中心；通用 Modal 搬到 `shared/ui` 并更新所有调用方，不留旧路径 re-export。PREVIEW-01 测试追溯同步到新布局模型路径。
+
+**P2-02 File Picker renderer 归属：** 将 Picker dialog、entries、footer、menu、sidebar 和 toolbar 迁入 `features/file-picker/components`；全局请求订阅、偏好读取和 Core IPC session adapter 留在 `app/layout/file-picker`。通用 `MenuLayer` 与 `Modal` 统一归入 `shared/ui` 并更新所有调用方；移除旧 `components/file-picker` 和根级 `FilePickerDialog` 路径，不保留兼容转发。

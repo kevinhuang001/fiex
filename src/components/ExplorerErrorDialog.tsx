@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { AlertCircle } from 'lucide-react'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 
 /** The single desktop error channel renders as a modal, never as a banner.

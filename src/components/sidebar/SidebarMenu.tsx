@@ -3,7 +3,7 @@ import { isWindows } from '@/lib/platform'
 import { setPlaceHidden } from '@/lib/places'
 import { Folder, Plug, Unplug, X } from 'lucide-react'
 import type { RefObject } from 'react'
-import { MenuLayer } from '@/components/ui/MenuLayer'
+import { MenuLayer } from '@/shared/ui/MenuLayer'
 import type { MenuPosition, SidebarMenuState, SidebarProps, SetSidebarMenu } from './types'
 
 /** The trash, favorite and device context menus shared by the sidebar sections. */

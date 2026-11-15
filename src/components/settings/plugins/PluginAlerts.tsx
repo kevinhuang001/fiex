@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Puzzle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
 
 /** Preview returned by the host before a local `.fiexplugin` file is confirmed. */

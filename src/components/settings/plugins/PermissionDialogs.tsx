@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { Button } from '@/shared/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
 
 function networkDomains(plugin: PluginInfo) {

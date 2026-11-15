@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Check, LoaderCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { Button } from '@/shared/ui/button'
 import { PluginGlyph } from '@/components/plugins/PluginGlyph'
 import { commandRisk, permissionHints, permissionLabels } from '@/lib/pluginPermissions'

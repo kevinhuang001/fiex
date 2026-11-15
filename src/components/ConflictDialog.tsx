@@ -4,7 +4,7 @@ import { ArrowRight, Check, Files, Replace, SkipForward } from 'lucide-react'
 import { basename, date, size } from '@/lib/files'
 import type { ConflictAction, ConflictResolution, FileVersion, TransferConflict } from '@/lib/types'
 import { Button } from '@/shared/ui/button'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 
 export function ConflictDialog({
   request,

@@ -12,7 +12,7 @@ import { ProviderSettings } from './settings/ProviderSettings'
 import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
 import { TagSettings } from './settings/TagSettings'
-import { Modal } from './ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 
 interface Props {
   open: boolean

@@ -1,7 +1,8 @@
 import type { Entry } from '@/lib/types'
 import { usePreviewSession } from '@/features/preview/hooks/usePreviewSession'
-import { previewSessionServices } from './preview/previewSessionAdapter'
-import { PreviewDialog } from './preview/PreviewDialog'
+import { previewSessionServices } from './previewSessionAdapter'
+import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
+import { PreviewDialog } from '@/features/preview/components/PreviewDialog'
 
 export function Preview({
   entry,
@@ -18,6 +19,12 @@ export function Preview({
     { entry, onClose, onNavigate },
     previewSessionServices,
   )
+  const path = state.resolved?.view?.path
+  const fileSource = path
+    ? previewSessionServices.isNative
+      ? previewSessionServices.toAssetUrl(path)
+      : path
+    : ''
   return (
     <PreviewDialog
       entry={entry}
@@ -27,6 +34,9 @@ export function Preview({
       sourceRef={sourceRef}
       state={state}
       actions={actions}
+      fileSource={fileSource}
+      PluginFrame={PluginPreviewFrame}
+      onReportError={previewSessionServices.reportError}
     />
   )
 }

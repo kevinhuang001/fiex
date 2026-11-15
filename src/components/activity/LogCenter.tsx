@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Cpu, Puzzle, Search, ScrollText } from 'lucide-react'
 import { t } from '@/i18n'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { usePluginCatalog } from '@/lib/plugins'
 import { closeLogs, showLogs, useLogSource } from '@/lib/logCenter'
 import { PluginLogViewer } from '@/components/settings/plugins/PluginLogViewer'

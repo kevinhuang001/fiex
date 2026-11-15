@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { AppWindow, Search } from 'lucide-react'
 import { call } from '@/lib/api'
 import type { OpenWithPickerItem, OpenWithPickerResponse } from '@/lib/openWithPicker'
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 
 function PickerApplication({ item, onChoose }: { item: OpenWithPickerItem; onChoose: () => void }) {
   const [icon, setIcon] = useState('')
