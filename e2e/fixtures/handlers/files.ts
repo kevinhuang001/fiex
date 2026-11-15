@@ -264,6 +264,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         return {
           path: 'recent://',
           allowedOps: ['list', 'stat', 'search'],
+          virtualVolume: true,
           entries: names
             .map((name) => state.entries.find((entry) => entry.name === name))
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
@@ -274,6 +275,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         return {
           path: a.path,
           allowedOps: ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove'],
+          virtualVolume: true,
           entries: fixtureRemoteEntries,
           warnings: fixtureRemoteWarnings,
         }
@@ -288,6 +290,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       return {
         path: a.path as string,
         allowedOps: ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove'],
+        virtualVolume: false,
         entries: state.entries.filter(
           (e) => parent(e.path) === a.path && (Boolean(a.hidden) || !e.name.startsWith('.')),
         ),
