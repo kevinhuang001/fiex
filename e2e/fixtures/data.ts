@@ -3,7 +3,7 @@ import type { Entry } from '@/lib/types'
 import { basename, join } from '@/lib/files'
 
 export const root = '/Users/kevin'
-const now = Date.now() / 1000
+const now = Math.floor(Date.now() / 1000)
 export function item(
   path: string,
   isDir = false,
@@ -25,6 +25,9 @@ export function item(
       : ['stat', 'read', 'write', 'rename', 'trash', 'remove'],
     linkTarget: null,
     tags: [],
+    hasCache: false,
+    pinned: false,
+    uploaded: false,
     sync: null,
   }
 }

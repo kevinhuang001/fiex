@@ -2,9 +2,9 @@
 
 #[path = "sync/metadata.rs"]
 mod metadata;
-pub(crate) use metadata::{
-    RemoteMeta, RemoteMetaFile, forget_meta, load_meta, load_meta_from, save_meta, save_meta_to,
-};
+pub(crate) use metadata::{RemoteMeta, RemoteMetaFile, forget_meta, load_meta, save_meta};
+#[cfg(test)]
+pub(crate) use metadata::{load_meta_from, save_meta_to};
 
 use std::{collections::HashMap, fs, path::Path};
 

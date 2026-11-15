@@ -1,4 +1,5 @@
 use super::tray::setup_tray;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::Manager;
 
 pub(super) fn configure(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
