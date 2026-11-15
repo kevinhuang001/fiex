@@ -82,7 +82,20 @@ jobs:
       - run: npm run check:size
       - run: npm run check:tauri-contracts
       - run: npm run check:i18n
-      - run: npm test
+      - run: npm run test:coverage-report
+      - run: npm run test:coverage
+      - name: Generate frontend coverage trend report
+        if: always()
+        run: npm run report:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          if-no-files-found: warn
+          path: |
+            coverage/coverage-summary.json
+            coverage/coverage-trend.md
+            coverage/lcov.info
       - name: Restore checked frontend bundle and native icons
         id: web-cache
         uses: actions/cache/restore@v4

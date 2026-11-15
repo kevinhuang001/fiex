@@ -72,5 +72,6 @@ Core 的本地搜索、Recent、Applications、Trash 和插件连接都可以由
 - [IPC 协议参考](/developer/ipc)
 - [插件开发手册](/developer/plugin-development)
 - [软件需求与测试追溯](/developer/requirements)
+- [前端覆盖率基线](/developer/architecture/frontend-coverage-baseline-2026-11-15)
 - [插件权限与安全边界](/reference/security)
 - [格式、构建与 CI](/developer/quality-ci)

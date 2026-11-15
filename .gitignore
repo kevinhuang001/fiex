@@ -6,6 +6,7 @@ src-tauri/gen/
 artifacts/
 playwright-report/
 test-results/
+coverage/
 .DS_Store
 
 src-tauri/icons/
