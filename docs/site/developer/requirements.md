@@ -159,6 +159,13 @@
 | BUILD-01 | 每个发布安装包先通过对应平台构建、测试、lint/clippy 和依赖自包含审计，再发布。                                                                                                                     | CI：ci.yml 的 frontend、Browser UI、Desktop matrix、audit:native 与 publish job；workflow 通过不代表未覆盖系统环境也通过。                                                                                                                                                                              |
 | DOC-01   | 用户指南、插件开发、协议、需求矩阵和限制说明共用 VitePress 站点，页面路径与当前代码基线一致。                                                                                                      | Docs CI：docs.yml 安装锁定 Node 依赖并执行 VitePress build；页面构建不验证产品行为。                                                                                                                                                                                                                    |
 
+## 覆盖率观测
+
+| ID          | 验收条件                                                                                         | 测试追溯与范围                                                                                                                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| QUAL-COV-01 | 前端 Vitest 运行应生成全源覆盖率摘要，并相对固定基线报告趋势；校准前只观测、不设门槛。           | UT：`scripts/coverage-report.test.mjs`；CI：`npm run test:coverage`、`npm run report:coverage` 和 `frontend-coverage` artifact；基线见[前端覆盖率基线](/developer/architecture/frontend-coverage-baseline-2026-11-15)。                                                                              |
+| QUAL-COV-02 | Rust workspace library unit tests 应生成覆盖率摘要并相对固定基线报告趋势；当前只观测、不设门槛。 | UT：`scripts/rust-coverage-report.test.mjs`；CI：`cargo llvm-cov`、`npm run report:rust-coverage` 和 `rust-coverage` artifact；统计排除 doctests、bins、integration tests 与 SDK submodule；基线见[Rust workspace 覆盖率基线](/developer/architecture/rust-workspace-coverage-baseline-2026-11-15)。 |
+
 ## 测试套件反向索引
 
 以下是常用的端到端追溯入口。单条测试的完整描述在上表中；套件文件是测试实现位置，不意味着整张表中相关需求都已覆盖。
@@ -224,6 +231,8 @@
 | src-tauri/src/remote/reconcile/tests.rs                                 | REMOTE-03（中断、刷新失败保留缓存基线；双端修改转 conflict；lease abort）               |
 | src-tauri/src/remote/sync/metadata/tests.rs                             | REMOTE-05（原子元数据替换中断后读取已提交状态并完成重试）                               |
 | src-tauri/src/remote/ tests                                             | CONN、REMOTE                                                                            |
+
+应用壳输入合同由完整 TypeScript 构建检查：`src/components/explorer/appShellBindings.ts` 为每个区域声明所需字段，`src/hooks/useAppEnvironment.ts` 仅接收环境 hook 使用的导航、自启动、插件市场和字体设置字段；自启动 readiness 模型由 `src/hooks/autostartSessions.test.ts` 覆盖。
 
 ## 本轮界面改动的按钮级冒烟追溯
 

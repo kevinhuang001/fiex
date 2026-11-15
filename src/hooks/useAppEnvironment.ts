@@ -2,10 +2,21 @@ import { useEffect, useRef } from 'react'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { call, native } from '@/lib/api'
 import { shouldRestoreAutostartSessions } from './autostartSessions'
-import type { useAppController } from './useAppController'
+import type { Explorer } from '@/features/explorer/hooks/useExplorer'
+import type { Preferences } from '@/lib/types'
+
+type AppEnvironmentBindings = {
+  left: Pick<
+    Explorer,
+    'hasListing' | 'connectionsLoaded' | 'connections' | 'tabs' | 'navigate' | 'setError'
+  >
+  newWorkspaceTab: () => void
+  setPluginManager: (open: boolean) => void
+  prefs: Pick<Preferences, 'fontSize'>
+}
 
 /** Native window integration, independent of the explorer render tree. */
-export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
+export function useAppEnvironment(app: AppEnvironmentBindings) {
   const autostarted = useRef(false)
   const {
     left: { hasListing, connectionsLoaded, connections, tabs, navigate, setError },
