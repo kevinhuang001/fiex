@@ -46,6 +46,14 @@ export default defineConfig({
               link: '/developer/architecture/codebase-audit-2026-11-12',
             },
             {
+              text: '代码库重构完成记录',
+              link: '/developer/architecture/codebase-refactor-closeout-2026-11',
+            },
+            {
+              text: 'Feature 与 IPC 边界 ADR-0001',
+              link: '/developer/architecture/decisions/0001-feature-and-ipc-boundaries',
+            },
+            {
               text: '目录缓存与传输预检',
               link: '/developer/architecture/navigation-cache-preflight',
             },
