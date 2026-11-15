@@ -1,11 +1,11 @@
 import type { Channel } from '@tauri-apps/api/core'
 import type { DropPlan } from './types'
-import type { ActivationConsent } from './pluginPermissions'
+import type { ActivationConsent } from '@/shared/ipc/contracts/plugin'
 import type { OperationProgress, Tag } from './types'
 import type { JsonValue, ResourceRef } from '../../sdk/ui/src/index'
 import type { ConflictResolution } from './types'
-import type { DirectoryViewUpdate } from './listing'
-import type { StateGetArgs } from './tauriCommandMap'
+import type { DirectoryViewUpdate } from '@/shared/ipc/contracts/directory'
+import type { StateGetArgs } from '@/shared/ipc/contracts/commands'
 
 type NoCommandArgs = { readonly __noArgs?: never }
 export type JsonInput = JsonValue | object

@@ -4,7 +4,7 @@ import { Button } from '@/shared/ui/button'
 import { Modal } from '@/shared/ui/Modal'
 import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 import { pluginIcon } from './pluginIcon'
-import type { InstallPreview } from './types'
+import type { InstallPreview } from '@/shared/ipc/contracts/pluginInstall'
 
 const permissionIcons: Record<string, typeof Info> = {
   metadata: Info,

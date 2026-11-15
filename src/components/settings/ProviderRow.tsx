@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { ArrowDown, ArrowUp, GripVertical, LockKeyhole, Puzzle, ShieldCheck } from 'lucide-react'
-import type { ProviderEntry } from './ProviderSettings'
+import type { ProviderEntry } from '@/shared/ipc/contracts/providers'
 
 export function ProviderRow({
   entry,

@@ -1,4 +1,4 @@
-import type { DirectoryViewUpdate } from '../listing'
+import type { DirectoryViewUpdate } from '@/shared/ipc/contracts/directory'
 import { parseEntryDecorations } from './decorations'
 import { objectResult } from './json'
 import { parseListing } from './entries'

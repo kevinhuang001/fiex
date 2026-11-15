@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
-import { installedThemes, type Theme } from '@/lib/themes'
+import { installedThemes } from '@/lib/themes'
+import type { Theme } from '@/shared/ipc/contracts/theme'
 import { SelectField } from '../ui/SelectField'
 import { openFilePicker } from '@/lib/filePicker'
 import { reportError } from '@/lib/errorCenter'

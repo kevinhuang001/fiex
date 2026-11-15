@@ -3,18 +3,12 @@ import type { CoreMenu, MenuChildItem } from './coreMenu'
 import type { OpenWithPickerResponse } from './openWithPicker'
 import type { InfoFieldDelta, InfoOpenResult } from '@/lib/ipcValidation/infoTypes'
 import type { PluginMenu } from './pluginMenu'
-import type { Catalog } from '@/components/settings/ProviderSettings'
-import type { InstallPreview } from '@/components/settings/installer/types'
-import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
-import type { ShellChoice } from '@/components/terminal/TerminalPanel'
 import type { ConnectionMenu } from './connectionMenu'
 import type { DropPlan } from './types'
-import type { BeforeOpenOutcome } from './pluginHooks'
 import type { PreviewCandidate } from './preview'
 import type { ResolvedPreview } from './preview'
 import type { ListColumns } from './listColumns'
 import type { Platform } from './platform'
-import type { Theme } from './themes'
 import type {
   AppErrorEvent,
   Entry,
@@ -30,28 +24,26 @@ import type {
   SystemProxyInfo,
   Terminal,
 } from './types'
-import type { MarketplacePlugin, PluginInfo } from './plugins'
 import type { TauriCommandArgs } from './tauriCommandArgs'
-
-export type ConnectionOpenResult =
-  | { kind: 'vfs'; path: string }
-  | {
-      kind: 'pluginView'
-      pluginId: string
-      connectionId: string
-      assetPath: string
-      state: JsonValue
-      tabTitle?: string
-    }
-
-export type StateGetArgs =
-  | { namespace: 'layout'; key: string }
-  | { namespace: 'explorer'; key: 'locations' }
-  | { namespace: 'explorer'; key: 'lastPath' }
-  | { namespace: 'explorer'; key: 'preferences' }
-  | { namespace: 'picker'; key: 'sort' }
-  | { namespace: 'picker'; key: 'group' }
-  | { namespace: 'picker'; key: 'lastOpenDirectory' | 'lastSaveDirectory' }
+import type { Catalog, ProviderPreferences } from '@/shared/ipc/contracts/providers'
+import type { InstallPreview, LocalPreview } from '@/shared/ipc/contracts/pluginInstall'
+import type { ShellChoice } from '@/shared/ipc/contracts/terminal'
+import type {
+  BeforeOpenOutcome,
+  MarketplacePlugin,
+  PluginInfo,
+} from '@/shared/ipc/contracts/plugin'
+import type { Theme } from '@/shared/ipc/contracts/theme'
+import type {
+  ConnectionOpenResult,
+  PickerSortState,
+  StateGetArgs,
+} from '@/shared/ipc/contracts/commands'
+export type {
+  ConnectionOpenResult,
+  PickerSortState,
+  StateGetArgs,
+} from '@/shared/ipc/contracts/commands'
 
 /** Results owned by Tauri commands. Dynamic plugin and persisted JSON is
  * represented as JsonValue and decoded before it crosses the UI boundary. */
@@ -152,7 +144,7 @@ export interface TauriCommandResults {
   preview_loading_asset: string | null
   preview_open: ResolvedPreview
   provider_catalog: { features: Catalog }
-  provider_preferences: import('@/components/settings/ProviderSettings').ProviderPreferences
+  provider_preferences: ProviderPreferences
   search_providers: SearchProviderEngine[]
   read_preview: string
   recent_navigation_target: RecentNavigationTarget
@@ -178,11 +170,11 @@ export interface TauriCommandResults {
   remote_unpin: void
   remove_remote_connection: void
   rename_entry: string
-  reset_provider_preference: import('@/components/settings/ProviderSettings').ProviderPreferences
+  reset_provider_preference: ProviderPreferences
   restore_from_trash: number
   save_remote_connection: RemoteConnection
   search_files: void
-  set_provider_preference: import('@/components/settings/ProviderSettings').ProviderPreferences
+  set_provider_preference: ProviderPreferences
   set_tags: void
   state_get: JsonValue | null
   state_put: void
@@ -207,11 +199,6 @@ export interface TauriCommandResults {
 export type TauriCommand = keyof TauriCommandResults & keyof TauriCommandArgs
 export type TauriCommandResult<C extends TauriCommand> = TauriCommandResults[C]
 export type { TauriCommandArgs } from './tauriCommandArgs'
-
-export interface PickerSortState {
-  key: 'name' | 'modified' | 'size' | 'kind'
-  direction: 'asc' | 'desc'
-}
 
 export type StateGetResult<A extends StateGetArgs> = A extends { namespace: 'layout' }
   ? ListColumns | null

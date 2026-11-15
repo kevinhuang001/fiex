@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
-import type { ConnectionOpenResult } from '../tauriCommandMap'
+import type { ConnectionOpenResult } from '@/shared/ipc/contracts/commands'
 import type { Batch, Entry, Listing } from '../types'
 import { isJsonObject, isUnsignedInteger, objectResult, onlyKeys } from './json'
 

@@ -1,6 +1,6 @@
 import type { JsonValue } from '../../../sdk/ui/src/index'
 import { normalizeListColumns, type ListColumns } from '../listColumns'
-import type { PickerSortState, StateGetArgs } from '../tauriCommandMap'
+import type { PickerSortState, StateGetArgs } from '@/shared/ipc/contracts/commands'
 import type { Location } from '../types'
 import { isJsonObject, isUnsignedInteger, onlyKeys, parseJsonValue } from './json'
 

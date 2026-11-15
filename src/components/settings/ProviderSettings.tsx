@@ -13,25 +13,7 @@ import {
 } from 'lucide-react'
 import { ProviderRow } from './ProviderRow'
 import { useEffect, useMemo, useState } from 'react'
-
-export interface ProviderEntry {
-  id: string
-  name: string
-  pluginId?: string
-  defaultPriority: number
-  builtin: boolean
-  locked?: boolean
-  available?: boolean
-  modes?: string[]
-}
-
-interface Preference {
-  order: string[]
-  disabled: string[]
-}
-
-export type ProviderPreferences = Record<string, Preference>
-export type Catalog = Record<string, ProviderEntry[]>
+import type { Catalog, ProviderEntry, ProviderPreferences } from '@/shared/ipc/contracts/providers'
 
 const FEATURES = [
   ['search', '搜索'],
@@ -45,7 +27,7 @@ const FEATURES = [
 /** One arrange/save model for every priority-aware feature: the stored order
  *  wins, new providers keep their manifest priority, locked Core providers
  *  stay pinned at the end and can never be disabled. */
-function arrange(entries: ProviderEntry[], preference?: Preference) {
+function arrange(entries: ProviderEntry[], preference?: ProviderPreferences[string]) {
   const rank = new Map((preference?.order ?? []).map((id, index) => [id, index]))
   return [...entries].sort((left, right) => {
     if (!!left.locked !== !!right.locked) return left.locked ? 1 : -1

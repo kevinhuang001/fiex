@@ -69,7 +69,7 @@ const COLORS = [
 ]
 
 function tagColor(color: number): string {
-  return COLORS[color] || COLORS[0]
+  return COLORS[color] || '#8e8e93'
 }
 
 /* A wider palette for tags created in Fiex. Finder only persists the seven

@@ -4,8 +4,8 @@ import { invoke, isTauri, convertFileSrc, Channel } from '@tauri-apps/api/core'
 import { decodeDynamicIpcResult, serializeIpcJson, parseSearchBatch } from './ipcValidation'
 import type { CoreMenu } from './coreMenu'
 import type { PluginMenu } from './pluginMenu'
+import type { StateGetArgs } from '@/shared/ipc/contracts/commands'
 import type {
-  StateGetArgs,
   StateGetResult,
   TauriCommand,
   TauriCommandArgs,

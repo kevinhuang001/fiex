@@ -36,7 +36,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
         : [],
   )
   const ops = selectedOps.map((values, index) => {
-    const effective = values.length ? values : appOps[index]
+    const effective = values.length ? values : (appOps[index] ?? [])
     return recentView
       ? effective.filter((operation) => operation === 'stat' || operation === 'read')
       : effective
@@ -61,7 +61,14 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     title: string,
     icon: string,
     shortcut?: ShortcutAction,
-  ): CoreMenuItem => ({ id, title: t(title), icon, shortcut, disabled: false, kind: 'action' })
+  ): CoreMenuItem => ({
+    id,
+    title: t(title),
+    icon,
+    ...(shortcut ? { shortcut } : {}),
+    disabled: false,
+    kind: 'action',
+  })
   const groups: [string, CoreMenuItem[]][] = [
     [
       'opening',
@@ -79,7 +86,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
                   ...(permits('read') &&
                   !entries[0]?.isDir &&
                   !trashView &&
-                  !paths[0].startsWith('applications://')
+                  !paths[0]?.startsWith('applications://')
                     ? [item('openWith-choose', '打开方式', 'application-search')]
                     : []),
                 ]

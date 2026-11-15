@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
-import type { PluginInfo } from './plugins'
+import type { ActivationConsent, PluginInfo } from '@/shared/ipc/contracts/plugin'
+export type { ActivationConsent } from '@/shared/ipc/contracts/plugin'
 
 export const commandRisk =
   '外部命令以当前用户身份运行，可能访问授权目录以外的文件、连接网络或启动其他程序。仅在信任插件及其申请的命令时授权。'
@@ -88,13 +89,6 @@ export const permissionHints: Record<string, string> = {
     )
   },
 }
-export interface ActivationConsent {
-  permissions: string[]
-  networkAll: boolean
-  domains: string[]
-  commands: string[]
-}
-
 /** Everything the manifest declares and requests: the default selection of the
  * grouped consent sheet. Activation only ever narrows this set. */
 export function activationConsent(plugin: PluginInfo): ActivationConsent {

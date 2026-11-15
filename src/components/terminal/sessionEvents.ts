@@ -19,10 +19,15 @@ export function parseTerminalEvent(value: unknown): TerminalEvent {
   if (
     event.type === 'exit' &&
     (event.code === undefined || event.code === null || typeof event.code === 'number')
-  )
-    return { type: 'exit', code: event.code as number | null | undefined }
+  ) {
+    return event.code === undefined
+      ? { type: 'exit' }
+      : { type: 'exit', code: event.code as number | null }
+  }
   if (event.type === 'error' && (event.message === undefined || typeof event.message === 'string'))
-    return { type: 'error', message: event.message as string | undefined }
+    return event.message === undefined
+      ? { type: 'error' }
+      : { type: 'error', message: event.message as string }
   throw new TypeError('Invalid terminal event')
 }
 

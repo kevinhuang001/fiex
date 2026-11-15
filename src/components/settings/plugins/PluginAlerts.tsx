@@ -3,24 +3,7 @@ import { Puzzle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 import { Modal } from '@/shared/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
-
-/** Preview returned by the host before a local `.fiexplugin` file is confirmed. */
-export interface LocalPreview {
-  ticket: string
-  id: string
-  name: string
-  version: string
-  author?: { name: string }
-  permissions: string[]
-  requestedNetworkDomains: string[]
-  commands: string[]
-  signed: boolean
-  trusted: boolean
-  publisher?: string
-  publisherName?: string
-  keyId?: string
-  fingerprint?: string
-}
+import type { LocalPreview } from '@/shared/ipc/contracts/pluginInstall'
 
 /** Success messages only. Operational failures go through ErrorDialogHost. */
 export function PluginMessage({ message }: { message: string }) {

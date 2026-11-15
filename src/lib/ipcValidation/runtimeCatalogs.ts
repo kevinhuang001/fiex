@@ -1,5 +1,5 @@
 import type { Ide, Terminal } from '../types'
-import type { ShellChoice } from '@/components/terminal/TerminalPanel'
+import type { ShellChoice } from '@/shared/ipc/contracts/terminal'
 import { isJsonObject, onlyKeys } from './json'
 
 function parseNamedItem(value: unknown, command: string): { id: string; name: string } {

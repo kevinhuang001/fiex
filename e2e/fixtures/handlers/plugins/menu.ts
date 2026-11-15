@@ -51,7 +51,7 @@ function resolveFixtureMenu(a: Record<string, unknown>) {
       : []),
     ...(pluginId === 'org.fiex.office-preview' &&
     selection.length === 1 &&
-    /\.(docx|xlsx|pptx)$/i.test(selectionNames[0])
+    /\.(docx|xlsx|pptx)$/i.test(selectionNames[0] ?? '')
       ? [
           { id: 'office.menu', title: 'Office', kind: 'submenu' },
           {
@@ -64,7 +64,7 @@ function resolveFixtureMenu(a: Record<string, unknown>) {
       : []),
     ...(pluginId === 'org.fiex.archive'
       ? selection.length === 1 &&
-        /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
+        /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0] ?? '')
         ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
         : [
             { id: 'archive.compress', title: '压缩', kind: 'submenu' },

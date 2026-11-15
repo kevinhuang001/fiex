@@ -1,4 +1,4 @@
-import type { MarketplacePlugin, PluginAuthor } from '../plugins'
+import type { MarketplacePlugin, PluginAuthor } from '@/shared/ipc/contracts/plugin'
 import { isJsonObject, onlyKeys, parseJsonValue } from './json'
 
 const MARKETPLACE_PLUGIN_KEYS = [

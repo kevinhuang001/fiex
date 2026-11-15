@@ -1,5 +1,4 @@
-import type { InstallPreview } from '@/components/settings/installer/types'
-import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
+import type { InstallPreview, LocalPreview } from '@/shared/ipc/contracts/pluginInstall'
 import { isJsonObject, objectResult } from './json'
 
 const INVALID_PREVIEW = 'Invalid plugin installation preview'
