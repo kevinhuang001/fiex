@@ -2,7 +2,7 @@ import { getLocale, setLocale } from './i18n'
 setLocale(getLocale())
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
+import App from './app/App'
 import { call, native } from './lib/api'
 import './styles/index.css'
 const render = () =>
