@@ -6,7 +6,7 @@ import { reportError } from '@/lib/errorCenter'
 import { pluginMarketplace, type MarketplacePlugin, type PluginInfo } from '@/lib/plugins'
 import { ImportSheet } from './installer/ImportSheet'
 import { MarketplaceList } from './installer/MarketplaceList'
-import type { InstallPreview } from './installer/types'
+import type { InstallPreview } from '@/shared/ipc/contracts/pluginInstall'
 
 export { pluginIcon } from './installer/pluginIcon'
 

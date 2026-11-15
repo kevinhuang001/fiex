@@ -1,11 +1,6 @@
 import { call, native } from './api'
-export interface Theme {
-  id: string
-  name: string
-  mode: 'light' | 'dark'
-  tokens: Record<string, string>
-  darkTokens?: Record<string, string>
-}
+import type { Theme } from '@/shared/ipc/contracts/theme'
+export type { Theme } from '@/shared/ipc/contracts/theme'
 let applied: string[] = []
 export async function installedThemes(): Promise<Theme[]> {
   if (native) return call('plugin_themes')

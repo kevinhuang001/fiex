@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import { usePluginConfiguration } from './usePluginConfiguration'
-import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
+import type { LocalPreview } from '@/shared/ipc/contracts/pluginInstall'
 import { openFilePicker } from '@/lib/filePicker'
 import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import {

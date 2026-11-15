@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import type { InstallPreview } from './types'
+import type { InstallPreview } from '@/shared/ipc/contracts/pluginInstall'
 
 /** Package signature details. Trust is the user's judgement of the source, so
  *  show who signed the package and the key fingerprint without claiming the

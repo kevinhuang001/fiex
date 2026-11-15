@@ -1,9 +1,7 @@
 import { call } from './api'
 import type { Entry } from './types'
-
-export interface BeforeOpenOutcome {
-  handled: boolean
-}
+import type { BeforeOpenOutcome } from '@/shared/ipc/contracts/plugin'
+export type { BeforeOpenOutcome } from '@/shared/ipc/contracts/plugin'
 
 /** Core owns provider matching, priority, consent and the scoped event.
  * Hooks may consume the open or let Core continue.

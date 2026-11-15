@@ -88,7 +88,9 @@ export async function handlePluginInvoke(
               { id: 'orders', name: 'orders', kind: 'table' },
               { id: 'active_users', name: 'active_users', kind: 'view' },
             ]
-            const table = tables[String(params.dataset || 'users')] || tables.users
+            const defaultTable = tables.users
+            if (!defaultTable) throw new Error('Fixture dataset is unavailable')
+            const table = tables[String(params.dataset || 'users')] ?? defaultTable
             const offset = Number(params.offset || 0)
             const limit = Number(params.limit || 100)
             const page = {
@@ -210,12 +212,15 @@ export async function handlePluginInvoke(
         if (method === 'gpg.createKey') return createFixtureGpgKey(params)
         if (method === 'gpg.deleteKey') return deleteFixtureGpgKey(params)
         if (method === 'gpg.keys') return fixtureGpgKeys
-        if (method === 'gpg.verify')
+        if (method === 'gpg.verify') {
+          const key = fixtureGpgKeys[0]
+          if (!key) throw new Error('Fixture GPG key is unavailable')
           return {
             valid: true,
-            signer: fixtureGpgKeys[0].name,
-            fingerprint: fixtureGpgKeys[0].fingerprint,
+            signer: key.name,
+            fingerprint: key.fingerprint,
           }
+        }
         if (method === 'gpg.import') return { imported: 1, status: 'demo' }
         if (method.startsWith('gpg.')) return { ok: true, status: 'demo' }
         if (method === 'git.identity') return { name: 'Kevin Huang', email: 'kevin@example.com' }

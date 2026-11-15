@@ -1,9 +1,5 @@
-import type { Theme } from '../themes'
-import type {
-  Catalog,
-  ProviderEntry,
-  ProviderPreferences,
-} from '@/components/settings/ProviderSettings'
+import type { Theme } from '@/shared/ipc/contracts/theme'
+import type { Catalog, ProviderEntry, ProviderPreferences } from '@/shared/ipc/contracts/providers'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
 
 function onlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {

@@ -4,7 +4,9 @@ import { call, native } from './api'
 import { parseDirectoryViewUpdate } from './ipcValidation'
 import { reportError } from './errorCenter'
 import { Channel } from '@tauri-apps/api/core'
-import type { Entry, EntryDecoration, Listing } from './types'
+import type { Entry, Listing } from './types'
+import type { DirectoryViewUpdate } from '@/shared/ipc/contracts/directory'
+export type { DirectoryViewUpdate } from '@/shared/ipc/contracts/directory'
 
 // Multiple panes, the column browser and the picker can ask for the same
 // directory concurrently. Share only in-flight work: a subsequent navigation
@@ -30,14 +32,6 @@ export function listDirectory(
     },
   )
   return request
-}
-
-export interface DirectoryViewUpdate {
-  listing?: Listing
-  decorations: EntryDecoration[]
-  complete: boolean
-  presentationPending: boolean
-  revision: number
 }
 
 /** Ask every visible pane showing one of these directories to reconcile its

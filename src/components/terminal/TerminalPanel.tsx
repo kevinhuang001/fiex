@@ -7,6 +7,7 @@ import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
 import { terminalWorkingDirectory } from '@/lib/terminalPath'
+import type { ShellChoice } from '@/shared/ipc/contracts/terminal'
 
 interface TerminalTab {
   id: string
@@ -14,12 +15,6 @@ interface TerminalTab {
   cwd: string
   shell?: string
   shellName?: string
-}
-
-export interface ShellChoice {
-  id: string
-  name: string
-  path: string
 }
 
 /** VS Code-style integrated terminal panel. Tabs stay mounted while the panel

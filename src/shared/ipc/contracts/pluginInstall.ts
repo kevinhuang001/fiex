@@ -22,3 +22,21 @@ export interface InstallPreview {
   previousVersion?: string
   permissionsChanged: boolean
 }
+
+/** Preview returned by the host before a local `.fiexplugin` file is confirmed. */
+export interface LocalPreview {
+  ticket: string
+  id: string
+  name: string
+  version: string
+  author?: { name: string }
+  permissions: string[]
+  requestedNetworkDomains: string[]
+  commands: string[]
+  signed: boolean
+  trusted: boolean
+  publisher?: string
+  publisherName?: string
+  keyId?: string
+  fingerprint?: string
+}

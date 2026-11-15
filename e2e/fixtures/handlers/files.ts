@@ -194,8 +194,14 @@ function computeFixtureField(field: FixtureInfoField, entry: (typeof state.entri
     recursiveFiles: '18',
     recursiveSize: '4.2 MiB',
   }
-  field.value = values[field.id]
-  field.status = field.value === undefined ? 'unavailable' : 'ready'
+  const value = values[field.id]
+  if (value === undefined) {
+    delete field.value
+    field.status = 'unavailable'
+  } else {
+    field.value = value
+    field.status = 'ready'
+  }
 }
 
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
@@ -488,7 +494,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           progress.onmessage({
             done: index,
             total: steps,
-            step: basename(files[Math.min(index - 1, files.length - 1)]),
+            step: basename(files[Math.min(index - 1, files.length - 1)] ?? ''),
           })
           await new Promise((resolve) => setTimeout(resolve, 120))
         }

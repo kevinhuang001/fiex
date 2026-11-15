@@ -3,12 +3,8 @@ import { useState } from 'react'
 import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import type { PluginInfo } from '@/lib/plugins'
-import {
-  activationConsent,
-  activationGroups,
-  type ActivationConsent,
-  type ActivationGroup,
-} from '@/lib/pluginPermissions'
+import { activationConsent, activationGroups, type ActivationGroup } from '@/lib/pluginPermissions'
+import type { ActivationConsent } from '@/shared/ipc/contracts/plugin'
 import { PluginPermissionPrompt } from './PluginPermissionPrompt'
 
 /**

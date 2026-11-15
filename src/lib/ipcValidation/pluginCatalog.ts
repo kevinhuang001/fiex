@@ -1,4 +1,4 @@
-import type { PluginAuthor, PluginInfo, PluginExtensions } from '../plugins'
+import type { PluginAuthor, PluginInfo, PluginExtensions } from '@/shared/ipc/contracts/plugin'
 import { isJsonObject, isUnsignedInteger, onlyKeys, parseJsonValue } from './json'
 
 const PLUGIN_INFO_KEYS = [

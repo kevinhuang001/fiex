@@ -93,7 +93,7 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
           id: entry.id,
           name: entry.name,
           version: entry.version,
-          description: entry.description,
+          ...(entry.description === undefined ? {} : { description: entry.description }),
           enabled: false,
           approved: true,
           backendAvailable: true,
@@ -102,7 +102,7 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
           grantedPermissions: [],
           requestedNetworkDomains: entry.requestedNetworkDomains,
           allowedNetworkDomains: [],
-          author: entry.author,
+          ...(entry.author === undefined ? {} : { author: entry.author }),
           extensions: entry.extensions || {},
         })
       }
