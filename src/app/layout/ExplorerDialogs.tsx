@@ -6,7 +6,8 @@ import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { FilePickerDialog } from '@/app/layout/file-picker/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
-import { FileInfoDialog } from '@/components/FileInfoDialog'
+import { FileInfoDialog } from '@/features/info/components/FileInfoDialog'
+import { infoSessionServices } from './info/infoSessionAdapter'
 import { lazy, Suspense } from 'react'
 const PreferencesDialog = lazy(() =>
   import('@/components/PreferencesDialog').then((m) => ({ default: m.PreferencesDialog })),
@@ -183,7 +184,7 @@ export function ExplorerDialogs({
         </form>
       </Modal>
 
-      <FileInfoDialog info={info} onClose={() => setInfo(null)} />
+      <FileInfoDialog info={info} onClose={() => setInfo(null)} services={infoSessionServices} />
 
       <TagDialog
         open={tagOpen}

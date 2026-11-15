@@ -40,6 +40,8 @@
     "src/features/preview/types.ts",
     "src/features/preview/hooks/usePreviewSession.ts",
     "src/features/preview/services/preferences.ts",
+    "src/features/info/types.ts",
+    "src/features/info/model.ts",
     "src/features/context-menu/types.ts",
     "src/features/context-menu/model/menuVisibility.ts",
     "src/features/context-menu/model/moreMenu.ts",

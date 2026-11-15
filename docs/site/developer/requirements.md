@@ -183,7 +183,7 @@
 | e2e/explorer/terminal.spec.ts                                           | OPS-CREATE、OPS-RENAME、OPS-TRASH、OPS-OPEN                                             |
 | e2e/explorer/settings.spec.ts                                           | PREF、PLUG-LIFE、DIAG、UI-ABOUT-01                                                      |
 | src/lib/ipcValidation.info.test.ts                                      | INFO-IPC-01（严格解析、重复身份与枚举类型校验、Session/revision 过滤）                  |
-| src/components/FileInfoSections.test.tsx                                | INFO-01、INFO-CORE-01（每 Provider 一个标题，字段平铺，Subsection 不可见）              |
+| src/features/info/components/FileInfoSections.test.tsx                  | INFO-01、INFO-CORE-01（每 Provider 一个标题，字段平铺，Subsection 不可见）              |
 | e2e/explorer/plugins-lifecycle.spec.ts                                  | PLUG-LIFE、PLUG-PERM                                                                    |
 | e2e/explorer/plugins-providers.spec.ts                                  | SEARCH、OPS-OPEN、PLUG-INST、PLUG-UI、CONN                                              |
 | e2e/connections.spec.ts                                                 | CONN-01                                                                                 |
