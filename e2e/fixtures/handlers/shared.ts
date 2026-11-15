@@ -4,4 +4,8 @@ import { fixtureEntries } from '../data'
 export const notHandled = Symbol('notHandled')
 
 // Shared mutable runtime state: file operations replace or mutate the listing.
-export const state = { entries: fixtureEntries }
+export const state = {
+  entries: fixtureEntries,
+  recentRemovedPaths: new Set<string>(),
+  undoStack: [] as { kind: 'rename'; oldPath: string; newPath: string }[],
+}
