@@ -215,6 +215,8 @@
 | src/features/explorer/model/folderView.test.ts                          | UI-VIEW-01、ARCH-01（文件夹展示状态、面板偏好路由和严格边界类型检查）                   |
 | src/features/explorer/services/paneViewPreferences.test.ts              | UI-VIEW-01、ARCH-01（双面板目录偏好保存、活动面板排序路由和共享默认设置转发）           |
 | src/features/explorer/components/DecorationBadges.test.tsx              | UI-VIEW-07、ARCH-01（徽标分组、状态呈现和插件控制文本转义）                             |
+| src/features/explorer/components/PathToolbar.test.tsx                   | UI-NAV-01（面包屑、上级入口和路径拖放目标布局）                                         |
+| src/features/explorer/components/ExplorerStatusBar.test.tsx             | OPS-OPEN-02（虚拟文件系统位置仍允许启动集成终端）                                       |
 | src/features/explorer/model/searchBatch.test.ts                         | SEARCH-01、SEARCH-06、ARCH-01（流式批次合并、稳定结果与严格边界类型检查）               |
 | src/features/file-operations/model/renamePolicy.test.ts                 | OPS-RENAME-01、ARCH-01（显式重命名能力策略与严格边界类型检查）                          |
 | src/features/file-operations/hooks/useInlineRename.test.ts              | OPS-RENAME-01、ARCH-01（原位重命名交互生命周期与操作归属）                              |

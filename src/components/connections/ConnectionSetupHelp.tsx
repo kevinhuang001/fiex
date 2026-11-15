@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
-import { Button } from '../ui/button'
+import { Button } from '@/shared/ui/button'
 export function ConnectionSetupHelp({
   factory,
   busy,

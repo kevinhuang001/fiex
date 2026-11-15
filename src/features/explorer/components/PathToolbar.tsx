@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import { ArrowUp, ChevronRight, FileText, LoaderCircle, Search, Type, X } from 'lucide-react'
 import type { FormEvent, RefObject } from 'react'

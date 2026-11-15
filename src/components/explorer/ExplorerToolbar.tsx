@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { isVirtualResource } from '@/lib/files'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { Ide, Preferences, Terminal } from '@/lib/types'

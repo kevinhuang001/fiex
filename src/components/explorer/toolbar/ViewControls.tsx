@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { Choice, Label, Menu } from '@/components/Menus'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import type { Preferences } from '@/lib/types'
 import type { Group, Sort, View } from '@/lib/types'
 import { ArrowsDownUpIcon as ArrowsDownUp } from '@phosphor-icons/react/dist/csr/ArrowsDownUp'

@@ -183,3 +183,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **Explorer 面板视图偏好：** 将 `App` 中双面板展示偏好的解析、目录级持久化和工具栏排序路由迁入 `features/explorer/services/paneViewPreferences`；UI shell 只组合当前左右面板输入并转发更新。保留改变共享默认视图前保存另一面板目录视图的行为；新增服务级回归测试并纳入严格类型边界。
 
 **Explorer 文件视图组件归属：** 将列表、图标、画廊和列视图及其行、拖拽、装饰徽标组件从 `components/browser` 整体迁入 `features/explorer/components`，并删除旧目录入口。将多 feature 共用的 FileIcon 放入 `shared/ui`；App 与次面板直接引用 Explorer 组件，列表视图从 sorting 专用模块导入规则。更新装饰徽标需求追溯及架构文档路径。
+
+**Explorer 路径与状态栏归属：** 将地址栏、面包屑、路径工具栏、Explorer 状态栏和对应测试从 `components/explorer` 迁入 `features/explorer/components`。通用 `Button` primitive 从 `components/ui` 迁入 `shared/ui` 并更新全部调用方；不保留旧路径 re-export。同步补充路径栏和虚拟文件系统终端按钮的需求追溯。

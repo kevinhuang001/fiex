@@ -18,7 +18,7 @@ const PluginManagerDialog = lazy(() =>
 )
 import { Preview } from '@/components/Preview'
 import { TagDialog } from '@/components/TagDialog'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type {

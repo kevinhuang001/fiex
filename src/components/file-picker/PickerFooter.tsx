@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import type { RefObject } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import type { FilePickerMode } from '@/lib/filePicker'
 import type { Entry } from '@/lib/types'
 

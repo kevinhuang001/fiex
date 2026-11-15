@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { FileText, FolderOpen, Globe2, Info, ShieldCheck, Terminal, Zap } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 import { pluginIcon } from './pluginIcon'

@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { call } from '@/lib/api'
 import { ExternalLink, Info, Scale } from 'lucide-react'
 

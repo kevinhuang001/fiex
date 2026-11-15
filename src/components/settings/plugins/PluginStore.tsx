@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { Download, Upload } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { PluginInstaller } from '../PluginInstaller'
 import type { PluginInfo } from '@/lib/plugins'
 import type { ReactNode } from 'react'
