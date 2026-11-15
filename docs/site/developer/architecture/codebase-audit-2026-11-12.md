@@ -216,6 +216,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 **2026-11-16 本地复核：** 前端 110 个测试文件、548 项通过；生产构建、VitePress、格式、lint（0 errors；25 warnings）、boundary types、架构检查（0 运行时循环、0 类型循环）、300 行门禁（0 例外）、140 个 Tauri contracts 和 1,431 条 i18n 校验通过。Rust 1.100.0 的 workspace fmt 与 library tests 通过；Linux `fiex/usbfs` Clippy 在 `-D warnings` 下对 headless cfg 排除项允许 `dead_code` / `unused_imports`，并保留三个既有 unused dependency 提示。Playwright 启动了 66 个 E2E 用例，但所有用例都因缺少 Chromium executable 无法启动浏览器；重新安装 Chromium 仍重复收到截断 ZIP。按要求不等待 CI；三平台性能 artifact 和连续 CI 验收仍属于外部验证证据，不能由这次本地检查替代。
 
-**P0 Recent 与撤销用户流程回归：** 新增 Recent 右键“从最近移除”E2E，检查条目从 Recent 消失且 Documents 源文件仍存在；新增键盘撤销重命名 E2E，检查原名称恢复、修改后的名称消失。E2E fixture 补齐 Recent 映射移除和重命名撤销状态。当前本地 Playwright 收集到 68 个用例；Chromium 因容器 socket 权限拒绝而无法启动，因此这两项断言尚待可启动浏览器环境执行。对应需求为 `OPS-TRASH-01` 与 `OPS-UNDO-01`。
+**P0 Recent 与撤销用户流程回归：** 新增 Recent 正常 reveal、右键“从最近移除”和 stale mapping fail-closed E2E，分别覆盖源文件导航与选择、只移除映射而保留文件、错误映射不能跳转到猜测路径；新增键盘撤销重命名 E2E，检查原名称恢复、修改后的名称消失。fixture 补齐 Recent 移除、失效映射错误和重命名撤销状态。当前本地 Playwright 收集到 69 个用例；Chromium 因容器 socket 权限拒绝而无法启动，新增断言尚待可启动浏览器环境执行。对应需求为 `LOC-RECENT-01`、`OPS-TRASH-01` 与 `OPS-UNDO-01`。
 
 **2026-11-15 Rust 增量复核：** Rust 1.100.0 workspace fmt 通过；排除 `fiex`、`fiex-platform`、`fiex-trash`（需要 GTK/GLib 开发包）的非桌面 workspace library tests 共 68 项通过，Clippy 在 `-D warnings` 下通过；`fiex-usb-fs` 8 项测试及 Clippy 单独通过。完整 workspace 测试在 GLib `pkg-config` 检查阶段受本地缺少 `glib-2.0.pc` 阻断；这不是 Rust 测试断言失败。本轮按要求不等待 CI。
