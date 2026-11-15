@@ -177,3 +177,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **P2-01 共享连接状态（PR #248）：** 将连接列表从每个 Explorer pane 的 `useListing` 状态迁至应用级 `features/connections/hooks/useConnections`，左右面板共享一次加载结果；连接刷新、加载失败与完成状态由独立服务处理。Core IPC adapter 留在 feature 服务层，连接状态 hook 纳入严格边界，`CONN-01`/`ARCH-01` 测试追溯同步更新。
 
 **P2-01 侧边栏窄化 Explorer 合同（PR #249）：** 侧边栏及其 Places、Favorites、Tags、Connections、Devices 子组件只接收自己使用的 Explorer 字段；`App` 显式构造侧边栏合同，不再扩散活动面板的完整 Explorer 对象。导航与连接展示行为保持现有 E2E 覆盖。
+
+**Explorer 列表选择模型：** 单选、多选、范围选取、全选和方向键/Home/End 导航规则已从文件视图事件处理器移入纯模型；失效范围锚点会回退为当前项目，避免筛选或导航后选中错误区间。新增模型测试并将其纳入严格类型边界，`OPS-SEL-01` 追溯已更新。

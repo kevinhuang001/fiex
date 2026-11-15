@@ -85,6 +85,8 @@
 | OPS-OPEN-01   | “打开方式”直接进入应用选择器；插件/系统应用列表不能改变当前文件资源身份。                                                                              | E2E：plugins-providers.spec.ts 的 **Core Open With action opens the application picker directly**；Rust：context_menu/tests/routing.rs 的同名 action 路由；Windows CI：`open_with/windows.rs::open_with_starts_the_selected_native_application_with_the_file` 从 AppsFolder 选中 Notepad 并启动文件。                                                                                                             |
 | OPS-OPEN-02   | 用户可在当前目录启动本地终端，或选择已检测到的系统终端打开目录；虚拟 URI 不可直接当作本地路径。                                                        | E2E：terminal.spec.ts 的 **built-in terminal opens an integrated bottom panel**、**create, rename, recycle and terminal selection**；UT：terminalPath.test.ts；Windows CI：`core/terminals.rs::selected_windows_terminal_starts_in_the_requested_directory` 启动 cmd.exe 并验证工作目录副作用。                                                                                                                   |
 
+**OPS-SEL-01 补充追溯：** `src/features/explorer/model/fileSelection.test.ts` 覆盖点击、范围选择、失效锚点恢复及方向键/Home/End；`e2e/explorer/operations.spec.ts` 的 **multi-select and select all** 流程补充了方向键与 Shift+方向键断言。
+
 ## 内置位置、连接和设置
 
 | ID              | 需求与验收条件                                                                                                  | 测试追溯与范围                                                                                                                                                                                                           |
