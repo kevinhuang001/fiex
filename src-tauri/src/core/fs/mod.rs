@@ -9,6 +9,8 @@ pub(crate) mod directory_cache;
 mod export;
 mod list_service;
 pub(crate) mod mapped_access;
+#[cfg(feature = "integration-test")]
+pub use mapped_access::UserActionContext as IntegrationTestUserActionContext;
 mod mutation_overlay;
 pub(crate) mod path_utils;
 mod preflight;

@@ -16,7 +16,10 @@ fn preserved_recovery_manifest_is_readable_after_process_restart() {
     let Some(manifest_path) = std::env::var_os(RECOVERY_MANIFEST_ENV) else {
         return;
     };
-    let target = std::env::var_os(RECOVERY_TARGET_ENV).expect("recovery target is required");
+    let target = dunce::canonicalize(
+        std::env::var_os(RECOVERY_TARGET_ENV).expect("recovery target is required"),
+    )
+    .expect("recovery target exists");
     let manifest: Value =
         serde_json::from_slice(&std::fs::read(manifest_path).expect("recovery manifest exists"))
             .expect("recovery manifest remains valid JSON");
@@ -24,7 +27,13 @@ fn preserved_recovery_manifest_is_readable_after_process_restart() {
         .as_array()
         .expect("backup records are present")
         .iter()
-        .find(|item| item["target"].as_str() == Some(target.to_string_lossy().as_ref()))
+        .find(|item| {
+            item["target"]
+                .as_str()
+                .and_then(|path| dunce::canonicalize(path).ok())
+                .as_ref()
+                == Some(&target)
+        })
         .and_then(|item| item["backup"].as_str())
         .expect("manifest retains the original target backup");
     assert_eq!(std::fs::read(backup).unwrap(), b"original first");
@@ -170,11 +179,18 @@ fn failed_provider_rollback_retains_overwritten_target_for_recovery() {
         .expect("helper should report the persisted recovery manifest");
     let recovery_path = manifest_path.parent().unwrap();
     let manifest: Value = serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let canonical_target = dunce::canonicalize(&first_target).unwrap();
     let backup = manifest["backups"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|item| item["target"] == first_target.to_string_lossy().as_ref())
+        .find(|item| {
+            item["target"]
+                .as_str()
+                .and_then(|path| dunce::canonicalize(path).ok())
+                .as_ref()
+                == Some(&canonical_target)
+        })
         .and_then(|item| item["backup"].as_str())
         .expect("original overwritten target should have a recovery backup");
     assert_eq!(std::fs::read(backup).unwrap(), b"original first");

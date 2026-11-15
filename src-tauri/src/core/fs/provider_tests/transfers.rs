@@ -61,8 +61,8 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let data = root.path().join("data");
-    let local_app_data = root.path().join("local-app-data");
-    let roaming_app_data = root.path().join("roaming-app-data");
+    let local_app_data = home.join("AppData").join("Local");
+    let roaming_app_data = home.join("AppData").join("Roaming");
     for directory in [&home, &data, &local_app_data, &roaming_app_data] {
         std::fs::create_dir_all(directory).unwrap();
     }

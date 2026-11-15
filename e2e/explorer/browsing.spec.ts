@@ -354,7 +354,10 @@ test('ten thousand icons stay virtualized and support end selection and rename',
     await sort.click()
     await page.getByRole('menuitem', { name: '名称' }).click()
     await sort.click()
-    await page.getByRole('menuitem', { name: '降序' }).click()
+    const descending = page.getByRole('menuitem', { name: '降序' })
+    await expect(descending).toBeVisible()
+    if (await descending.locator('.menu-check svg').count()) await descending.click()
+    else await page.keyboard.press('Escape')
     await measure(
       'virtualized_end_navigation',
       async () => {

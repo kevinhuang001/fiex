@@ -40,6 +40,8 @@ desktop = [
     "fiex-applications/desktop",
 ]
 ci-driver = ["desktop", "usbfs"]
+# Only external integration harnesses may construct test user-action tokens.
+integration-test = []
 usbfs = ["dep:fiex-usb-fs", "fiex-usb-fs/driver"]
 tauri-plugin-single-instance = ["dep:tauri-plugin-single-instance"]
 

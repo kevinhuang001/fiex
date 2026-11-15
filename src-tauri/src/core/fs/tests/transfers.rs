@@ -229,8 +229,8 @@ fn provider_write_failure_rolls_back_previously_committed_destinations() {
     let target_version = target_broker.stat().unwrap();
     let key = format!(
         "{}\0{}\0{}\0{}\0{}\0{}",
-        source_folder.display(),
-        target_folder.display(),
+        source_broker.path,
+        target_broker.path,
         source_version["modified"].as_u64().unwrap_or(0),
         target_version["modified"].as_u64().unwrap_or(0),
         source_version["size"].as_u64().unwrap_or(0),
