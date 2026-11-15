@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-11-15",
+  "revision": "PR #241 head 310236b4e4248b13aec66c07f24ad20b39d3fff8",
+  "scope": "src/**/*.{ts,tsx} excluding tests and declaration files",
+  "testFiles": 103,
+  "tests": 507,
+  "sourceFiles": 301,
+  "total": {
+    "statements": { "total": 24920, "covered": 6008, "pct": 24.1 },
+    "branches": { "total": 2778, "covered": 2195, "pct": 79.01 },
+    "functions": { "total": 722, "covered": 407, "pct": 56.37 },
+    "lines": { "total": 24920, "covered": 6008, "pct": 24.1 }
+  }
+}
