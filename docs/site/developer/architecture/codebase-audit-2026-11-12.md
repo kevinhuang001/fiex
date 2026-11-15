@@ -192,4 +192,6 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 **菜单 UI host 适配层归属：** 将 Core/plugin 菜单 renderer、Open With picker 和 IPC/进度适配器从 `components/explorer/context-menu` 移入 `app/layout/context-menu`。菜单模型、session hook 与执行规则仍由 `features/context-menu` 管理；App 直接引用 shell renderer，`components/explorer` 旧目录已清空。
 
+**应用组合根归属：** 将根级 `src/App.tsx` 移入 `src/app/App.tsx`，由 `main.tsx` 从新的 app shell 路径启动；`src/components/explorer` 旧业务目录已完全移除。
+
 **Explorer 工具栏归属：** 将跨 Explorer、插件、活动中心和系统控件的 toolbar composition 与子组件移入 `app/layout/toolbar`，作为应用壳组合层；纯顺序与拖动几何规则及测试移入 `features/explorer/model` 并加入严格类型边界。`App` 和壳层 adapter 只使用新路径。
