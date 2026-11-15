@@ -392,6 +392,9 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         elapsedMs: 12,
         truncated: false,
         skipped: 0,
+        scanned: state.entries.length,
+        incomplete: false,
+        replace: true,
       }
     }
     case 'create_entry': {
@@ -447,7 +450,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     }
     case 'recycle':
       state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
-      return { paths: a.paths, errors: [], skipped: 0 }
+      return { paths: a.paths, errors: [], skipped: 0, conflicts: [] }
     case 'trash_restore_needs_folder':
       return (a.paths as string[]).some((path) => {
         const original = trashOriginalPaths.get(path)
@@ -503,7 +506,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         progress.onmessage({ done: Math.round((total * index) / 6), total, step, unit: 'bytes' })
         await new Promise((resolve) => setTimeout(resolve, 140))
       }
-      return null
+      return command === 'remote_download' ? String(a.path) : null
     }
     case 'transfer': {
       const progress = a.onProgress as
@@ -534,7 +537,13 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           )?.action || ''
         if (a.keepBoth) action = 'keepBoth'
         if (existing && incoming && !action) {
-          conflicts.push({ key, source: incoming, destination: existing })
+          const version = (entry: typeof incoming) => ({
+            path: entry.path,
+            size: entry.size,
+            modified: entry.modified,
+            isDir: entry.isDir,
+          })
+          conflicts.push({ key, source: version(incoming), destination: version(existing) })
           continue
         }
         if (action === 'skip') continue

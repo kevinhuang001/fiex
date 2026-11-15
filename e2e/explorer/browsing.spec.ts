@@ -87,8 +87,9 @@ test('a stale Recent mapping does not open a guessed source path', async ({ page
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await page.getByRole('menuitem', { name: '显示所在文件夹', exact: true }).click()
 
-  await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('最近使用')
   await expect(page.getByRole('alert')).toContainText('Recent mapping is stale')
+  await page.getByRole('dialog', { name: '错误' }).getByRole('button', { name: '确定' }).click()
+  await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('最近使用')
 })
 
 test('closing the last tab reopens the configured start page', async ({ page }) => {
@@ -283,7 +284,7 @@ test('PDF preview renders a real document', async ({ page }) => {
     route.fulfill({ contentType: 'application/pdf', body: pdfFixture() }),
   )
   await page.evaluate(async () => {
-    const componentPath = '/src/components/PdfPreview.tsx'
+    const componentPath = '/src/features/preview/components/PdfPreview.tsx'
     const reactPath = '/node_modules/.vite/deps/react.js'
     const domPath = '/node_modules/.vite/deps/react-dom_client.js'
     const [{ default: Component }, react, dom] = await Promise.all([

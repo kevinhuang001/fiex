@@ -53,7 +53,7 @@ test('keyboard undo restores a renamed file', async ({ page }) => {
   await renamed.press('Enter')
   await expect(page.getByText('Notes-renamed.md', { exact: true })).toBeVisible()
 
-  await page.keyboard.press('Meta+Z')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Notes-renamed.md', { exact: true })).toHaveCount(0)
 })

@@ -105,7 +105,12 @@ function resolveFixtureMenu(a: Record<string, unknown>) {
     paths: selection,
     created: Date.now(),
   })
-  return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
+  return {
+    providerId: `${pluginId}.contextMenu`,
+    pluginId,
+    menuSessionId,
+    items: entries.filter((entry) => !('parentId' in entry)),
+  }
 }
 
 export async function handlePluginMenu(
@@ -115,10 +120,10 @@ export async function handlePluginMenu(
   switch (command) {
     case 'plugin_context_menu_resolve': {
       // Core and plugin rows resolve separately so the top-level menu never
-      // waits for plugin IPC; "all" keeps the one-batch contract for callers
-      // that still ask for it.
-      const source = String(a.source || 'all')
-      const plugins = fixturePlugins
+      // waits for plugin IPC.
+      if (a.source === 'core') return fixtureBuiltinMenus(a)
+      if (a.source !== 'plugins') throw new Error('Invalid menu source')
+      return fixturePlugins
         .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
         .flatMap((plugin) => {
           try {
@@ -127,10 +132,6 @@ export async function handlePluginMenu(
             return []
           }
         })
-      if (source === 'plugins') return plugins
-      const builtins = fixtureBuiltinMenus(a)
-      if (source === 'core') return builtins
-      return [...builtins, ...plugins]
     }
     case 'plugin_context_menu_children': {
       const builtin = fixtureBuiltinChildren(a)

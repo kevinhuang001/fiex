@@ -30,6 +30,7 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
         id: 'org.example.local',
         name: '本地示例插件',
         version: '1.2.3',
+        description: '本地示例插件',
         author: { name: 'Example Author' },
         permissions: ['folders.read', 'files.read'],
         requestedNetworkDomains: [],
@@ -53,7 +54,11 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
     case 'plugin_permission_allowed':
       return new URLSearchParams(location.search).has('pluginFixture')
     case 'plugin_marketplace':
-      return marketplace
+      return marketplace.map((entry) => ({
+        ...entry,
+        author: entry.author ? { ...entry.author, url: null } : null,
+        commands: 'commands' in entry ? entry.commands : [],
+      }))
     case 'plugin_release_assets':
       return marketplace.map((entry) => entry.asset)
     case 'plugin_prepare_install': {
