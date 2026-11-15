@@ -1,8 +1,13 @@
 import type { InfoField, InfoFieldDelta, InfoSection } from '@/lib/ipcValidation/infoTypes'
-import { parseInfoFieldDelta, shouldApplyInfoDelta } from '@/lib/ipcValidation'
+import { parseInfoFieldDelta, shouldApplyInfoDelta } from '@/lib/ipcValidation/info'
 import type { Entry } from '@/lib/types'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { appendPendingInfoDelta, mergeInfoFieldUpdates, type PendingInfoUpdates } from '../model'
+import {
+  appendPendingInfoDelta,
+  markInfoFieldPending,
+  mergeInfoFieldUpdates,
+  type PendingInfoUpdates,
+} from '../model'
 import type { InfoSessionServices, InfoSessionState } from '../types'
 
 export function useInfoSession(
@@ -112,7 +117,7 @@ export function useInfoSession(
                 ...item,
                 fields: item.fields.map((candidate) =>
                   candidate.id === field.id && candidate.subsectionId === field.subsectionId
-                    ? { ...candidate, status: 'pending', error: undefined }
+                    ? markInfoFieldPending(candidate)
                     : candidate,
                 ),
               },

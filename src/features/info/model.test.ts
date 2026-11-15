@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { InfoFieldDelta, InfoSection } from '@/lib/ipcValidation/infoTypes'
-import { appendPendingInfoDelta, mergeInfoFieldUpdates } from './model'
+import type { InfoField, InfoFieldDelta, InfoSection } from '@/lib/ipcValidation/infoTypes'
+import { appendPendingInfoDelta, markInfoFieldPending, mergeInfoFieldUpdates } from './model'
+
+const field: InfoField = {
+  id: 'duration',
+  subsectionId: 'audio',
+  label: 'Duration',
+  compute: 'onDemand',
+  status: 'idle',
+}
 
 const section: InfoSection = {
   id: 'core.media',
@@ -8,15 +16,7 @@ const section: InfoSection = {
   providerId: 'core.media',
   provider: 'Fiex',
   source: 'core',
-  fields: [
-    {
-      id: 'duration',
-      subsectionId: 'audio',
-      label: 'Duration',
-      compute: 'onDemand',
-      status: 'idle',
-    },
-  ],
+  fields: [field],
 }
 
 function delta(revision: number, value: string): InfoFieldDelta {
@@ -46,6 +46,13 @@ describe('mergeInfoFieldUpdates', () => {
   it('returns the original sections when the delta is empty', () => {
     const sections = [section]
     expect(mergeInfoFieldUpdates(sections, [])).toBe(sections)
+  })
+})
+
+describe('markInfoFieldPending', () => {
+  it('clears a previous error before a retry', () => {
+    const previous: InfoField = { ...field, status: 'error', error: 'previous failure' }
+    expect(markInfoFieldPending(previous)).toEqual({ ...field, status: 'pending' })
   })
 })
 

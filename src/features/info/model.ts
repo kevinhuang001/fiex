@@ -14,6 +14,12 @@ function updateKey(update: InfoFieldUpdate) {
   return `${update.providerId}\u0000${update.subsectionId}\u0000${update.fieldId}`
 }
 
+export function markInfoFieldPending(field: InfoField): InfoField {
+  const next: InfoField = { ...field, status: 'pending' }
+  delete next.error
+  return next
+}
+
 export function appendPendingInfoDelta(
   previous: PendingInfoUpdates | undefined,
   delta: InfoFieldDelta,
