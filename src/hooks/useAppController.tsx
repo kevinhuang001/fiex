@@ -13,7 +13,10 @@ import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 import { explorerServices } from '@/features/explorer/services/listingAdapters'
 import { useAppSessionPersistence } from './controller/useAppSessionPersistence'
-import { mergePaneSelections, selectedEntriesAcrossPanes } from '@/features/explorer/model/paneSelection'
+import {
+  mergePaneSelections,
+  selectedEntriesAcrossPanes,
+} from '@/features/explorer/model/paneSelection'
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
