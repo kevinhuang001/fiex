@@ -13,6 +13,10 @@ import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 import { explorerServices } from '@/features/explorer/services/listingAdapters'
 import { useAppSessionPersistence } from './controller/useAppSessionPersistence'
+import {
+  mergePaneSelections,
+  selectedEntriesAcrossPanes,
+} from '@/features/explorer/model/paneSelection'
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
@@ -61,7 +65,7 @@ export function useAppController() {
     ],
     setError: left.setError,
   })
-  const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
+  const selectedAll = mergePaneSelections(split, left.selected, right.selected)
   const focusSearch = () => {
     const selector =
       split && active === 'right'
@@ -105,15 +109,13 @@ export function useAppController() {
     notify,
     navigatePreview,
   } = dialogs
-  const chosenAll = split
-    ? [
-        ...new Map(
-          [...left.entries, ...right.entries]
-            .filter((entry) => selectedAll.includes(entry.path))
-            .map((entry) => [entry.path, entry]),
-        ).values(),
-      ]
-    : chosen
+  const chosenAll = selectedEntriesAcrossPanes(
+    split,
+    left.entries,
+    right.entries,
+    chosen,
+    selectedAll,
+  )
   const actions = useAppControllerActions({
     x,
     left,
