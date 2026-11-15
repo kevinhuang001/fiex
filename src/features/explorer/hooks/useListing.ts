@@ -2,7 +2,10 @@ import { useEntryDecorations } from './useEntryDecorations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useListingSearch } from './useListingSearch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
-import { canRenameEntry, renameSingleEntry } from '@/features/file-operations/rename'
+import {
+  useInlineRename,
+  type InlineRenameServices,
+} from '@/features/file-operations/hooks/useInlineRename'
 import { useDirectorySnapshot, type DirectorySnapshotServices } from './useDirectorySnapshot'
 import { useListingLocations } from './useListingLocations'
 import type { EntryDecorationServices } from './useEntryDecorations'
@@ -21,10 +24,9 @@ export interface ListingServices {
   listenApplicationsChanged: (onChange: () => void) => Promise<() => void>
   watchDirectory: (path: string, pane: string) => Promise<unknown>
   unwatchDirectory: (path: string, pane: string) => Promise<unknown>
-  renameEntry: (path: string, name: string) => Promise<string>
+  inlineRename: InlineRenameServices
   remoteConnections: () => Promise<RemoteConnection[]>
   watchErrorMessage: (error: unknown) => string
-  renameUnsupportedMessage: () => string
   directorySnapshot: DirectorySnapshotServices
   decorations: EntryDecorationServices
   locations: ListingLocationServices
@@ -108,6 +110,16 @@ export function useListing(
   const refreshSearch = useCallback(() => setSearchRefresh((value) => value + 1), [])
   const revalidateDirectory = useCallback(() => setRevalidation((value) => value + 1), [])
   const setWatchWarning = useCallback((message: string) => setWarnings([message]), [setWarnings])
+  const { beginRename, cancelRename, renameTo } = useInlineRename({
+    path,
+    entries,
+    setEntries,
+    setSelected,
+    setRenaming,
+    setError,
+    refreshDirectory: services.requestDirectoryRefresh,
+    services: services.inlineRename,
+  })
   useListingRefreshSignals({
     enabled,
     path,
@@ -153,39 +165,6 @@ export function useListing(
   useEffect(() => {
     setTagFilterState(null)
   }, [path])
-  const beginRename = useCallback(
-    (target: string, createdEntry?: Entry) => {
-      const entry = entries.find((item) => item.path === target) ?? createdEntry
-      if (entry?.path !== target || !canRenameEntry(entry)) return
-      if (!entries.some((item) => item.path === target))
-        setEntries((previous) => [...previous, entry])
-      setSelected([target])
-      setRenaming(target)
-    },
-    [entries, setRenaming, setSelected],
-  )
-  const cancelRename = useCallback(() => setRenaming(null), [setRenaming])
-  const renameTo = useCallback(
-    async (target: string, name: string) => {
-      const result = await renameSingleEntry(target, name, entries, (resourcePath, nextName) =>
-        services.renameEntry(resourcePath, nextName),
-      )
-      if (result.status === 'unsupported') {
-        setError(services.renameUnsupportedMessage())
-        return false
-      }
-      if (result.status === 'failed') {
-        setError(result.message)
-        return false
-      }
-      setError('')
-      setRenaming(null)
-      setSelected([result.path])
-      services.requestDirectoryRefresh([path])
-      return true
-    },
-    [entries, path, services, setError, setRenaming, setSelected],
-  )
   const pathEntries =
     renderedPath === path ? entries : (paintedByPath.current.get(viewKey)?.listing.entries ?? [])
   const visibleEntries = tagFilter

@@ -66,6 +66,7 @@
     "src/features/file-operations/services/batchRenameActions.ts",
     "src/features/file-operations/hooks/useRunner.ts",
     "src/features/file-operations/hooks/useFileOperations.ts",
+    "src/features/file-operations/hooks/useInlineRename.ts",
     "src/components/sidebar/connectionModel.ts",
     "src/hooks/autostartSessions.ts",
     "src/hooks/controller/appSessionPersistence.ts",
