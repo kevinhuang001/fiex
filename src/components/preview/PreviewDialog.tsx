@@ -1,38 +1,18 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { RefObject } from 'react'
 import { useMemo } from 'react'
 import { t, getLocale } from '@/i18n'
 import { Modal } from '../ui/Modal'
 import { asset, native } from '@/lib/api'
 import { highlightCode } from '@/lib/highlight'
-import { pluginPreviewId, type PreviewCandidate } from '@/lib/preview'
+import { pluginPreviewId } from '@/features/preview/model'
+import type { PreviewSessionActions, PreviewSessionState } from '@/features/preview/types'
 import type { Entry } from '@/lib/types'
-import type { PluginLoadingPage, ResolvedPreview } from './types'
 import { PreviewContent } from './PreviewContent'
 import { PreviewFooter } from './PreviewFooter'
 import { fitPreviewMedia, previewDialogClass } from './layout'
 
-export type PreviewDialogState = {
-  candidates: PreviewCandidate[]
-  providerId: string | null
-  resolved: ResolvedPreview | null
-  loading: boolean
-  loadingPage: PluginLoadingPage | null
-  previewReady: boolean
-  previewAsset: string
-  readyToShow: boolean
-  error: string
-  media: { width: number; height: number } | null
-  menuOpen: boolean
-}
-
-export type PreviewDialogActions = {
-  setPreviewReady: Dispatch<SetStateAction<boolean>>
-  setMedia: Dispatch<SetStateAction<{ width: number; height: number } | null>>
-  setError: Dispatch<SetStateAction<string>>
-  setProviderId: Dispatch<SetStateAction<string | null>>
-  setProviderAttempt: Dispatch<SetStateAction<number>>
-  setMenuOpen: Dispatch<SetStateAction<boolean>>
-}
+export type PreviewDialogState = PreviewSessionState
+export type PreviewDialogActions = PreviewSessionActions
 
 export function PreviewDialog({
   entry,

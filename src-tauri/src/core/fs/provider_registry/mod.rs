@@ -17,13 +17,13 @@ mod writes;
 pub(super) use access::require;
 pub(super) use reads::{desktop_entry, desktop_listing, list, native_export_path, open_read, stat};
 pub(super) use search::{search, search_stream};
+pub(super) use writes::{
+    begin_write, begin_write_sized, mkdir, move_to_trash, preflight, remove, rename, write_stream,
+};
 #[cfg(test)]
 pub(crate) use writes::{
     clear_provider_write_failures_for_test, fail_next_provider_write_for_test,
     fail_provider_writes_for_test,
-};
-pub(super) use writes::{
-    begin_write, begin_write_sized, mkdir, move_to_trash, preflight, remove, rename, write_stream,
 };
 
 pub(crate) use routing::{

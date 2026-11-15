@@ -9,6 +9,7 @@ import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import {
   explorerPathBarProps,
+  explorerToolbarProps,
   explorerDialogProps,
   explorerContextMenuProps,
   explorerStatusBarProps,

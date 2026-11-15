@@ -2,20 +2,6 @@ import { t } from '@/i18n'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { FormEvent, RefObject } from 'react'
 import { PathToolbar, type Crumb } from './PathToolbar'
-export function ExplorerPathBar({
-  x,
-  startPathEdit,
-  editingPath,
-  submitPath,
-  pathInput,
-  pathDraft,
-  setPathDraft,
-  setEditingPath,
-  searchInput,
-  crumbs,
-  searchHint,
-  split,
-  closePane,
 export interface ExplorerPathBarProps {
   x: Explorer
   startPathEdit: () => void
@@ -32,20 +18,21 @@ export interface ExplorerPathBarProps {
   closePane: (side?: 'left' | 'right') => void
 }
 
-}: ExplorerPathBarProps) {  | 'x'
-  | 'startPathEdit'
-  | 'editingPath'
-  | 'submitPath'
-  | 'pathInput'
-  | 'pathDraft'
-  | 'setPathDraft'
-  | 'setEditingPath'
-  | 'searchInput'
-  | 'crumbs'
-  | 'hint'
-  | 'split'
-  | 'closePane'
->) {
+export function ExplorerPathBar({
+  x,
+  startPathEdit,
+  editingPath,
+  submitPath,
+  pathInput,
+  pathDraft,
+  setPathDraft,
+  setEditingPath,
+  searchInput,
+  crumbs,
+  searchHint,
+  split,
+  closePane,
+}: ExplorerPathBarProps) {
   return (
     <PathToolbar
       x={x}

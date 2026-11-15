@@ -34,42 +34,6 @@ import type {
 import type { DialogState } from '@/lib/dialogs'
 import type { Dispatch, SetStateAction } from 'react'
 import { LoaderCircle } from 'lucide-react'
-export function ExplorerDialogs({
-  left,
-  preview,
-  setPreview,
-  navigatePreview,
-  open,
-  dialog,
-  dialogBusy,
-  conflict,
-  cancelConflict,
-  resolveConflict,
-  busy,
-  setDialog,
-  setDialogBusy,
-  setDialogError,
-  dialogValue,
-  x,
-  setDialogValue,
-  info,
-  setInfo,
-  tagOpen,
-  tagInitial,
-  setTagOpen,
-  applyTags,
-  connectionOpen,
-  connectionToEdit,
-  setConnectionOpen,
-  notify,
-  settings,
-  setSettings,
-  pluginManager,
-  setPluginManager,
-  prefs,
-  update,
-  terminals,
-  ides,
 export interface ExplorerDialogsProps {
   left: Pick<Explorer, 'locations'>
   x: Explorer
@@ -108,42 +72,43 @@ export interface ExplorerDialogsProps {
   ides: Ide[]
 }
 
-}: ExplorerDialogsProps) {  | 'left'
-  | 'preview'
-  | 'setPreview'
-  | 'navigatePreview'
-  | 'open'
-  | 'dialog'
-  | 'dialogBusy'
-  | 'conflict'
-  | 'cancelConflict'
-  | 'resolveConflict'
-  | 'busy'
-  | 'setDialog'
-  | 'setDialogBusy'
-  | 'setDialogError'
-  | 'dialogValue'
-  | 'x'
-  | 'setDialogValue'
-  | 'info'
-  | 'setInfo'
-  | 'tagOpen'
-  | 'tagInitial'
-  | 'setTagOpen'
-  | 'applyTags'
-  | 'connectionOpen'
-  | 'connectionToEdit'
-  | 'setConnectionOpen'
-  | 'notify'
-  | 'settings'
-  | 'setSettings'
-  | 'pluginManager'
-  | 'setPluginManager'
-  | 'prefs'
-  | 'update'
-  | 'terminals'
-  | 'ides'
->) {
+export function ExplorerDialogs({
+  left,
+  preview,
+  setPreview,
+  navigatePreview,
+  open,
+  dialog,
+  dialogBusy,
+  conflict,
+  cancelConflict,
+  resolveConflict,
+  busy,
+  setDialog,
+  setDialogBusy,
+  setDialogError,
+  dialogValue,
+  x,
+  setDialogValue,
+  info,
+  setInfo,
+  tagOpen,
+  tagInitial,
+  setTagOpen,
+  applyTags,
+  connectionOpen,
+  connectionToEdit,
+  setConnectionOpen,
+  notify,
+  settings,
+  setSettings,
+  pluginManager,
+  setPluginManager,
+  prefs,
+  update,
+  terminals,
+  ides,
+}: ExplorerDialogsProps) {
   return (
     <>
       <PluginPanelHost />

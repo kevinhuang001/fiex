@@ -21,7 +21,9 @@ fn request(path: &str) -> PreflightRequest {
 
 #[test]
 fn successful_availability_checks_are_cached() {
-    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    let _guard = CACHE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     clear_availability_cache();
     let path = tempfile::tempdir()
         .unwrap()
@@ -45,7 +47,9 @@ fn successful_availability_checks_are_cached() {
 
 #[test]
 fn transient_provider_failure_can_recover_on_the_next_check() {
-    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    let _guard = CACHE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     clear_availability_cache();
     let path = tempfile::tempdir()
         .unwrap()
@@ -69,7 +73,9 @@ fn transient_provider_failure_can_recover_on_the_next_check() {
 
 #[test]
 fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
-    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    let _guard = CACHE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     clear_availability_cache();
     let path = tempfile::tempdir()
         .unwrap()
@@ -116,7 +122,7 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
             Instant::now() < deadline,
             "second caller did not join flight"
         );
-        thread::yield_now();
+        thread::sleep(Duration::from_millis(1));
     }
 
     release_tx.send(()).unwrap();
@@ -127,7 +133,9 @@ fn transient_failure_wakes_single_flight_waiters_for_a_fresh_check() {
 
 #[test]
 fn filesystem_change_notification_invalidates_cached_availability() {
-    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    let _guard = CACHE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     clear_availability_cache();
     let path = tempfile::tempdir()
         .unwrap()
@@ -152,7 +160,9 @@ fn filesystem_change_notification_invalidates_cached_availability() {
 
 #[test]
 fn registered_applications_provider_decision_flows_through_availability_cache() {
-    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    let _guard = CACHE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     clear_availability_cache();
 
     let broker = crate::core::fs::binding::trusted(
