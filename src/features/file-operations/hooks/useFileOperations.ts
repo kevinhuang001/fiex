@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { DialogState } from '@/lib/dialogs'
+import type { Entry } from '@/lib/types'
 import { createActions } from '../create'
 import { recycleActions } from '../recycle'
 import { createResultHandler } from '../result'
 import { restoreActions } from '../restore'
+import { createBatchRenameActions } from '../services/batchRenameActions'
 import { transferActions } from '../transfer'
 import type {
   Clipboard,
@@ -35,6 +37,7 @@ export function useFileOperations({
   const [busy, setBusy] = useState('')
   const [conflict, setConflict] = useState<ConflictState>(null)
   const [clipboard, setClipboard] = useState<Clipboard>(null)
+  const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const { run } = useRunner({ x, setBusy, runtime, services })
   const context = {
     x,
@@ -53,6 +56,12 @@ export function useFileOperations({
   const { recycle, deletePermanently, emptyTrash } = recycleActions(context)
   const { restoreFromTrash, undo } = restoreActions(context)
   const { transfer, resolveConflict, copy, duplicate } = transferActions(context)
+  const { openBatchRename, applyBatchRename } = createBatchRenameActions({
+    x,
+    services,
+    notify,
+    setBatchRename,
+  })
   return {
     busy,
     conflict,
@@ -72,5 +81,9 @@ export function useFileOperations({
     copy,
     duplicate,
     undo,
+    batchRename,
+    setBatchRename,
+    openBatchRename,
+    applyBatchRename,
   }
 }
