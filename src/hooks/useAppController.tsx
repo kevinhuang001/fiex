@@ -109,7 +109,13 @@ export function useAppController() {
     notify,
     navigatePreview,
   } = dialogs
-  const chosenAll = selectedEntriesAcrossPanes(split, left.entries, right.entries, chosen, selectedAll)
+  const chosenAll = selectedEntriesAcrossPanes(
+    split,
+    left.entries,
+    right.entries,
+    chosen,
+    selectedAll,
+  )
   const actions = useAppControllerActions({
     x,
     left,

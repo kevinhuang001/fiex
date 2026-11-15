@@ -168,5 +168,4 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 
 **P4-02 应用组合边界（PR #244）：** `appShellBindings` 每个转换函数只接收其目标 UI 的字段集合；`useAppEnvironment` 通过窄合同获取自启动连接状态、导航、窗口偏好和插件市场动作，不再接收完整 `AppController`。应用环境 hook 依赖较多原生和 UI 模块，保持在常规 TypeScript 检查中；纯自启动 readiness 的状态矩阵继续由相邻单测覆盖。
 
-
 **双面板选择模型（PR #245）：** 将左右面板选择路径的并集去重，以及所选条目的跨面板对账迁入 `features/explorer/model/paneSelection.ts` 纯模型；保留单面板结果与引用行为，并以右侧较新条目覆盖重复路径，纳入严格类型边界和 OPS-SEL-01 需求追溯。
