@@ -3,9 +3,9 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const root = process.cwd()
-const summaryPath = resolve(root, 'coverage/coverage-summary.json')
+const summaryPath = resolve(root, 'coverage/frontend/coverage-summary.json')
 const baselinePath = resolve(root, 'scripts/coverage-baseline.json')
-const outputPath = resolve(root, 'coverage/coverage-trend.md')
+const outputPath = resolve(root, 'coverage/frontend/coverage-trend.md')
 
 export function createCoverageTrend(summary, baseline, generatedAt = new Date()) {
   const total = summary.total
@@ -18,7 +18,7 @@ export function createCoverageTrend(summary, baseline, generatedAt = new Date())
     const current = total[name]
     const initial = baseline.total[name]
     if (!current || !initial) throw new Error(`Missing ${name} coverage metric`)
-    const delta = current.pct - initial.pct
+    const delta = Number((current.pct - initial.pct).toFixed(2))
     const change = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} pp`
     return `| ${name} | ${current.covered}/${current.total} (${current.pct.toFixed(2)}%) | ${initial.pct.toFixed(2)}% | ${change} |`
   })
@@ -48,7 +48,7 @@ function main() {
   const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'))
   const report = createCoverageTrend(summary, baseline)
 
-  mkdirSync(resolve(root, 'coverage'), { recursive: true })
+  mkdirSync(resolve(root, 'coverage/frontend'), { recursive: true })
   writeFileSync(outputPath, report)
   process.stdout.write(report)
 }

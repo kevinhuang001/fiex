@@ -12,7 +12,7 @@ export default defineConfig({
       exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
       all: true,
       reporter: ['text', 'json-summary', 'lcov'],
-      reportsDirectory: 'coverage',
+      reportsDirectory: 'coverage/frontend',
       reportOnFailure: true,
     },
   },

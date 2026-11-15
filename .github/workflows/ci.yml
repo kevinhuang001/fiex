@@ -43,6 +43,52 @@ jobs:
           --manifest-path src-tauri/crates/foundation/fiex-scope-policy/Cargo.toml
           --all-features --fail-under-lines 85
 
+  rust-workspace-coverage:
+    name: Rust workspace coverage (Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      PROPTEST_RNG_SEED: '20261115'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Linux native dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev
+          version: 1.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Test Rust coverage trend report
+        run: npm run test:rust-coverage-report
+      - name: Measure workspace library coverage
+        run: |
+          mkdir -p coverage/rust
+          cargo llvm-cov --locked \
+            --manifest-path src-tauri/Cargo.toml \
+            --workspace --lib \
+            --no-default-features --features fiex/usbfs \
+            --json --summary-only \
+            --output-path coverage/rust/rust-coverage.json \
+            -- --test-threads=1
+      - name: Generate Rust coverage trend report
+        run: npm run report:rust-coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-workspace-coverage
+          if-no-files-found: warn
+          path: |
+            coverage/rust/rust-coverage.json
+            coverage/rust/rust-coverage-trend.md
+
   scope-policy-mutation:
     name: Scope policy mutation tests
     runs-on: ubuntu-24.04
@@ -93,9 +139,9 @@ jobs:
           name: frontend-coverage
           if-no-files-found: warn
           path: |
-            coverage/coverage-summary.json
-            coverage/coverage-trend.md
-            coverage/lcov.info
+            coverage/frontend/coverage-summary.json
+            coverage/frontend/coverage-trend.md
+            coverage/frontend/lcov.info
       - name: Restore checked frontend bundle and native icons
         id: web-cache
         uses: actions/cache/restore@v4

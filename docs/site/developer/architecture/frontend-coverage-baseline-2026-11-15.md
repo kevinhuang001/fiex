@@ -17,8 +17,8 @@
 
 ## 重复测量与趋势
 
-- `npm run test:coverage` 运行与普通 `npm test` 相同的 Vitest 用例，并输出 `coverage/coverage-summary.json` 和 `coverage/lcov.info`。
-- `npm run report:coverage` 将当前结果与 `scripts/coverage-baseline.json` 对比，生成 `coverage/coverage-trend.md`。
+- `npm run test:coverage` 运行与普通 `npm test` 相同的 Vitest 用例，并输出 `coverage/frontend/coverage-summary.json` 和 `coverage/frontend/lcov.info`。
+- `npm run report:coverage` 将当前结果与 `scripts/coverage-baseline.json` 对比，生成 `coverage/frontend/coverage-trend.md`。
 - CI 在前端测试 job 中上传 JSON 汇总、趋势 Markdown 和 LCOV 文件，artifact 名为 `frontend-coverage`。这项报告目前不设门槛，不改变既有测试通过条件。
 - 新增或实质修改业务逻辑时，需求追溯仍应指出对应的行为测试。达到稳定的差异覆盖率样本后，再为适合的模块讨论门槛。
 

@@ -51,7 +51,7 @@ PR #91 head 的最近一次完整 `Core tests, IPC and release` workflow 于 202
 - Linux、macOS、Windows 桌面构建与 Rust 检查；
 - 发布前原生依赖审计与安装包流程。
 
-本轮不得删除或放宽这些 job。前端全源覆盖率现由 `npm run test:coverage` 采集，并与提交库中的初始基线比较后作为 CI artifact 发布；当前只报告、不设通过门槛。Rust 全 workspace 覆盖率和关键用户操作的跨平台性能门槛仍未形成基线，需先采集可比较的三平台样本，再决定是否设差异门槛；Scope Policy 现有覆盖率门槛保持不变。
+本轮不得删除或放宽这些 job。前端全源覆盖率由 `npm run test:coverage` 采集，Rust workspace library unit tests 由 `cargo llvm-cov` 采集，两者均与提交库中的初始基线比较并发布 CI artifact；目前只报告、不设通过门槛。关键用户操作的跨平台性能门槛仍需等待三平台样本校准；Scope Policy 现有覆盖率门槛保持不变。
 
 ## 分阶段实施记录
 
