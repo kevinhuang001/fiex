@@ -45,6 +45,8 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'recent_navigation_target': {
       const alias = String(a.alias || '')
       if (!alias) throw new Error('Recent navigation requires a resource path')
+      if (new URLSearchParams(location.search).has('staleRecent'))
+        throw new Error('Recent mapping is stale')
       return { parent: parent(alias), target: alias }
     }
     case 'state_get': {
