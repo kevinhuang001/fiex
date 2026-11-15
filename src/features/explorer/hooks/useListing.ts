@@ -1,7 +1,6 @@
 import { useEntryDecorations } from './useEntryDecorations'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useListingSearch } from './useListingSearch'
-import { attachDirectoryWatch } from '@/features/explorer/model/directoryWatch'
 import { PaintedListingCache } from '@/features/explorer/model/paintedListingCache'
 import { canRenameEntry, renameSingleEntry } from '@/features/file-operations/rename'
 import { useDirectorySnapshot, type DirectorySnapshotServices } from './useDirectorySnapshot'
@@ -11,6 +10,7 @@ import type { ListingLocationServices } from './useListingLocations'
 import type { ListingSearchServices } from './useListingSearch'
 import type { Entry, EntryDecoration, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
+import { useListingRefreshSignals } from './useListingRefreshSignals'
 
 export interface ListingServices {
   native: boolean
@@ -105,32 +105,22 @@ export function useListing(
     if (query.trim()) setSearchRefresh((value) => value + 1)
     else services.requestDirectoryRefresh([path])
   }, [path, query, services])
-  useEffect(() => {
-    if (!services.native || !enabled) return
-    const stop = services.listenRemoteSync(() => {
-      if (
-        !document.hidden &&
-        connections.some(
-          (c) => path.startsWith(c.mountPath.replace(/\/$/, '') + '/') || path === c.mountPath,
-        )
-      )
-        reload()
-    })
-    return () => {
-      void stop.then((unlisten) => unlisten())
-    }
-  }, [enabled, connections, path, reload, services])
-  useEffect(() => {
-    if (!enabled || !path) return
-    const refresh = (event: Event) => {
-      const directories = (event as CustomEvent<{ directories?: unknown }>).detail?.directories
-      if (!Array.isArray(directories) || !directories.includes(path)) return
-      if (query.trim()) setSearchRefresh((value) => value + 1)
-      else setRevalidation((value) => value + 1)
-    }
-    window.addEventListener('fiex:directory-mutated', refresh)
-    return () => window.removeEventListener('fiex:directory-mutated', refresh)
-  }, [enabled, path, query])
+  const refreshSearch = useCallback(() => setSearchRefresh((value) => value + 1), [])
+  const revalidateDirectory = useCallback(() => setRevalidation((value) => value + 1), [])
+  const setWatchWarning = useCallback((message: string) => setWarnings([message]), [setWarnings])
+  useListingRefreshSignals({
+    enabled,
+    path,
+    query,
+    pane,
+    virtualVolume,
+    connections,
+    services,
+    reload,
+    refreshSearch,
+    revalidateDirectory,
+    setWatchWarning,
+  })
 
   useDirectorySnapshot({
     enabled,
@@ -160,43 +150,6 @@ export function useListing(
       setError,
     },
   })
-  useEffect(() => {
-    if (
-      !enabled ||
-      !path ||
-      !services.native ||
-      virtualVolume ||
-      services.isVirtualResource(path) ||
-      path.startsWith('fiex-plugin-view://')
-    )
-      return
-    return attachDirectoryWatch({
-      watch: () => services.watchDirectory(path, pane),
-      listen: services.listenDirectoryChanged,
-      unwatch: () => services.unwatchDirectory(path, pane),
-      onChange: reload,
-      onError: (error) => setWarnings([services.watchErrorMessage(error)]),
-      debounceMs: 250,
-    })
-  }, [enabled, path, pane, reload, virtualVolume, services])
-  useEffect(() => {
-    if (!enabled || !services.native || !path.startsWith('applications://')) return
-    let active = true
-    let cleanup: (() => void) | undefined
-    void services
-      .listenApplicationsChanged(() => {
-        if (query.trim()) setSearchRefresh((value) => value + 1)
-        else setRevalidation((value) => value + 1)
-      })
-      .then((unlisten) => {
-        if (active) cleanup = unlisten
-        else unlisten()
-      })
-    return () => {
-      active = false
-      cleanup?.()
-    }
-  }, [enabled, path, query, services])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])

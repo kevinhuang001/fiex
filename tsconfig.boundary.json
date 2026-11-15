@@ -70,6 +70,8 @@
     "src/hooks/autostartSessions.ts",
     "src/hooks/controller/appSessionPersistence.ts",
     "src/lib/listColumns.ts",
-    "src/features/explorer/model/paneSelection.ts"
+    "src/features/explorer/model/paneSelection.ts",
+    "src/features/explorer/hooks/useListingRefreshSignals.ts",
+    "src/features/explorer/model/listingRefreshPolicy.ts"
   ]
 }
