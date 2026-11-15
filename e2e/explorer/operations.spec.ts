@@ -44,6 +44,20 @@ test('inline rename works in icon and column views', async ({ page }) => {
   await page.keyboard.press('Escape')
 })
 
+test('keyboard undo restores a renamed file', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click()
+  await page.keyboard.press('F2')
+  const renamed = page.getByRole('textbox', { name: '重命名 Notes.md' })
+  await expect(renamed).toBeVisible()
+  await renamed.fill('Notes-renamed.md')
+  await renamed.press('Enter')
+  await expect(page.getByText('Notes-renamed.md', { exact: true })).toBeVisible()
+
+  await page.keyboard.press('Meta+Z')
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Notes-renamed.md', { exact: true })).toHaveCount(0)
+})
+
 test('dragging moves files and bookmarks folders', async ({ page }) => {
   const source = page.locator('[data-path="/Users/kevin/Documents/Notes.md"]')
   const research = page.locator('[data-path="/Users/kevin/Documents/Research"]')
