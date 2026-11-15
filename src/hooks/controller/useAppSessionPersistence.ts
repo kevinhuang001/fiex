@@ -49,10 +49,6 @@ export function useAppSessionPersistence(
   }, [path, services])
 
   useEffect(() => {
-    return scheduleRetainedViews(
-      JSON.parse(retainedViews) as RetainedViews,
-      services,
-      setError,
-    )
+    return scheduleRetainedViews(JSON.parse(retainedViews) as RetainedViews, services, setError)
   }, [retainedViews, setError, services])
 }

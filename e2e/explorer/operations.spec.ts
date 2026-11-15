@@ -120,7 +120,6 @@ test('rubber-band selection includes intersected entries', async ({ page }) => {
   await expect(second).toHaveAttribute('aria-selected', 'true')
 })
 
-
 test('folders offer copy, cut and duplicate in their correct context menu sections', async ({
   page,
 }) => {

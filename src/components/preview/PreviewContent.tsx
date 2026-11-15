@@ -1,4 +1,3 @@
-import type { PluginLoadingPage, ResolvedPreview } from './types'
 import { t } from '@/i18n'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
@@ -7,6 +6,8 @@ import { FileIcon } from '../FileIcon'
 import { reportError } from '@/lib/errorCenter'
 import { kind } from '@/lib/files'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
+import type { PluginLoadingPage } from '@/features/preview/types'
+import type { ResolvedPreview } from '@/lib/preview'
 import type { Entry } from '@/lib/types'
 
 const PdfPreview = lazy(() => import('../PdfPreview'))

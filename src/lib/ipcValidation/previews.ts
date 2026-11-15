@@ -1,5 +1,5 @@
 import type { PreviewCandidate } from '../preview'
-import type { ResolvedPreview } from '@/components/preview/types'
+import type { ResolvedPreview } from '../preview'
 import { isJsonObject, objectResult, parseJsonValue } from './json'
 
 const PREVIEW_KINDS = ['html', 'text', 'image', 'media', 'pdf', 'fallback'] as const

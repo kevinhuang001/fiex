@@ -87,8 +87,7 @@ export function useSelectionBand({
     const picked: string[] = []
     container.current.querySelectorAll<HTMLElement>('[data-path]').forEach((element) => {
       const bounds = element.getBoundingClientRect()
-      if (rectanglesOverlap(bounds, rect) && element.dataset.path)
-        picked.push(element.dataset.path)
+      if (rectanglesOverlap(bounds, rect) && element.dataset.path) picked.push(element.dataset.path)
     })
     setSelected(mergeBandSelection(start.base, picked, start.additive))
   }

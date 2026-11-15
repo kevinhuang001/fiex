@@ -42,17 +42,7 @@ export function ExplorerTabs({
   moveWorkspaceTab,
   control,
   platform,
-}: ExplorerTabsProps) {  | 'left'
-  | 'panePaths'
-  | 'paneActives'
-  | 'displayName'
-  | 'switchWorkspaceTab'
-  | 'closeWorkspaceTab'
-  | 'newWorkspaceTab'
-  | 'moveWorkspaceTab'
-  | 'control'
-  | 'platform'
->) {
+}: ExplorerTabsProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const dragged = useRef(false)
   const origin = useRef<DragOrigin | null>(null)
