@@ -65,6 +65,21 @@ test('revealing a Recent item opens its source folder and selects it', async ({ 
   ).toHaveAttribute('aria-selected', 'true')
 })
 
+test('removing a Recent item preserves its source file', async ({ page }) => {
+  await page.getByRole('button', { name: '最近使用', exact: true }).click()
+  const recentGrid = page.getByRole('grid', { name: '文件', exact: true })
+  await recentGrid.getByText('Notes.md', { exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '从最近移除', exact: true }).click()
+
+  await expect(recentGrid.getByText('Notes.md', { exact: true })).toHaveCount(0)
+  await openDocuments(page)
+  await expect(
+    page
+      .getByRole('grid', { name: '文件', exact: true })
+      .locator('[data-path="/Users/kevin/Documents/Notes.md"]'),
+  ).toBeVisible()
+})
+
 test('closing the last tab reopens the configured start page', async ({ page }) => {
   await page.getByText('Research', { exact: true }).dblclick()
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
