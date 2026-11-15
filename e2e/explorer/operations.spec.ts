@@ -82,6 +82,17 @@ test('batch rename previews and applies a pattern', async ({ page }) => {
 })
 
 test('multi-select and select all', async ({ page }) => {
+  const grid = page.getByRole('grid', { name: '文件', exact: true })
+  const firstVisible = grid.locator('[data-path]').nth(0)
+  const secondVisible = grid.locator('[data-path]').nth(1)
+  const thirdVisible = grid.locator('[data-path]').nth(2)
+  await firstVisible.click()
+  await page.keyboard.press('ArrowDown')
+  await expect(secondVisible).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Shift+ArrowDown')
+  await expect(thirdVisible).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.statusbar')).toContainText('已选择 2 项')
+
   await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click()
   await page
     .locator('[data-path="/Users/kevin/Documents/Meeting.txt"]')

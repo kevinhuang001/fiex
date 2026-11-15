@@ -9,6 +9,11 @@ import { GridView } from './views/GridView'
 import { ListView } from './views/ListView'
 import { useFileDrag, useSelectionBand } from './views/useSelectionBand'
 import { groups, nextSort, sortEntries } from '@/lib/files'
+import {
+  moveVisiblePathSelection,
+  selectAllVisiblePaths,
+  selectVisiblePath,
+} from '@/features/explorer/model/fileSelection'
 import type { Entry, Sort } from '@/lib/types'
 import type { FlatRow } from './views/ListView'
 import type { Props, SharedRow } from './views/shared'
@@ -35,6 +40,7 @@ export function FileViews(props: Props) {
     [x.entries, prefs.sort, prefs.descending, getLocale()],
   )
   const selectedPaths = useMemo(() => new Set(x.selected), [x.selected, getLocale()])
+  const visiblePaths = useMemo(() => entries.map((entry) => entry.path), [entries])
   // Header clicks reuse the preference the toolbar sort menu and every view
   // already read, so the header indicator, the list rows and search results
   // cannot drift apart. A fresh column starts ascending, the active one flips.
@@ -63,17 +69,16 @@ export function FileViews(props: Props) {
     ;(event.currentTarget.closest('[role="grid"]') as HTMLElement | null)?.focus({
       preventScroll: true,
     })
-    if (event.shiftKey && anchor.current) {
-      const a = entries.findIndex((x) => x.path === anchor.current)
-      const b = entries.indexOf(e)
-      x.setSelected(entries.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path))
-    } else if (event.metaKey || event.ctrlKey) {
-      x.setSelected((s) => (s.includes(e.path) ? s.filter((p) => p !== e.path) : [...s, e.path]))
-      anchor.current = e.path
-    } else {
-      x.setSelected([e.path])
-      anchor.current = e.path
-    }
+    const selection = selectVisiblePath({
+      visiblePaths,
+      selectedPaths: x.selected,
+      clickedPath: e.path,
+      anchorPath: anchor.current,
+      extendRange: event.shiftKey,
+      additive: event.metaKey || event.ctrlKey,
+    })
+    x.setSelected(selection.selectedPaths)
+    anchor.current = selection.anchorPath
   }
   const shared: SharedRow = (e) => {
     const renaming = x.renaming === e.path
@@ -123,38 +128,25 @@ export function FileViews(props: Props) {
   const onKeyDown = (event: React.KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault()
-      x.setSelected(entries.map((entry) => entry.path))
+      x.setSelected(selectAllVisiblePaths(visiblePaths))
       return
     }
-    if (x.renaming || event.metaKey || event.ctrlKey || event.altKey) return
-    if (
-      !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) ||
-      !entries.length
-    )
-      return
+    const selection = moveVisiblePathSelection({
+      visiblePaths,
+      selectedPaths: x.selected,
+      key: event.key,
+      extendSelection: event.shiftKey,
+      disabled: Boolean(x.renaming || event.metaKey || event.ctrlKey || event.altKey),
+    })
+    if (!selection) return
     event.preventDefault()
-    const last = entries.findIndex((e) => e.path === x.selected.at(-1))
-    let next =
-      event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? entries.length - 1
-          : Math.max(
-              0,
-              Math.min(
-                entries.length - 1,
-                last + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1),
-              ),
-            )
-    if (last < 0 && event.key !== 'End' && event.key !== 'Home') next = 0
-    const e = entries[next]
-    x.setSelected(event.shiftKey ? [...new Set([...x.selected, e.path])] : [e.path])
-    const row = flat.findIndex((r) => r.entry?.path === e.path)
+    x.setSelected(selection.selectedPaths)
+    const row = flat.findIndex((r) => r.entry?.path === selection.focusedPath)
     if (prefs.view === 'list') virtual.scrollToIndex(row)
     else
       requestAnimationFrame(() =>
         container.current
-          ?.querySelector(`[data-path="${CSS.escape(e.path)}"]`)
+          ?.querySelector(`[data-path="${CSS.escape(selection.focusedPath)}"]`)
           ?.scrollIntoView({ block: 'nearest' }),
       )
   }
