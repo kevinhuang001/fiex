@@ -1,17 +1,14 @@
 import { t } from '@/i18n'
-import { call } from '@/lib/api'
-import { requestDirectoryRefresh } from '@/lib/listing'
-import { reportFilesystemPermissionError } from '@/lib/errorCenter'
-import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import { parseCoreMenuAction } from '@/lib/coreMenu'
 import type { CoreMenu, CoreMenuAction, CoreMenuItem } from '@/lib/coreMenu'
-import type { ContextMenuProps } from './types'
+import type { ContextMenuExecutionServices, ContextMenuProps } from '../types'
 
 /** Fixed Core-owned UI command adapter. Availability and selection are decided
  * by the backend provider/session, not reconstructed from the current pane. */
 export function applyCoreAction(
   effect: CoreMenuAction,
   props: ContextMenuProps,
+  services: ContextMenuExecutionServices,
   chooseOpenWith?: (path: string) => void,
 ) {
   const { x } = props
@@ -27,9 +24,7 @@ export function applyCoreAction(
       return (async () => {
         const alias = effect.paths[0]
         if (!alias) throw new Error('Recent navigation requires one selected alias')
-        const target = await call('recent_navigation_target', {
-          alias,
-        })
+        const target = await services.recentNavigationTarget(alias)
         x.navigateTo(target.parent, target.target)
       })()
     case 'preview':
@@ -84,10 +79,10 @@ export function applyCoreAction(
       props.emptyTrash()
       break
     case 'removeFromRecent':
-      requestDirectoryRefresh([effect.directory])
+      services.refreshDirectories([effect.directory])
       break
     case 'copyPath':
-      return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))
+      return services.copyText(effect.path).then(() => props.notify(t('路径已复制')))
     case 'chooseOpenWith':
       chooseOpenWith?.(effect.path)
       break
@@ -99,22 +94,19 @@ export async function executeCoreMenu(
   menu: CoreMenu,
   item: CoreMenuItem,
   props: ContextMenuProps,
+  services: ContextMenuExecutionServices,
   chooseOpenWith?: (path: string) => void,
 ) {
-  let onProgress: ReturnType<typeof progressChannel> | undefined = quietProgressChannel()
+  let onProgress = services.quietProgressChannel()
   const execute = async () => {
     const effect = parseCoreMenuAction(
-      await call('plugin_context_menu_execute', {
-        menuSessionId: menu.menuSessionId,
-        itemId: item.id,
-        onProgress,
-      }),
+      await services.executeMenu(menu.menuSessionId, item.id, onProgress),
     )
     if (effect) {
-      await applyCoreAction(effect, props, chooseOpenWith)
+      await applyCoreAction(effect, props, services, chooseOpenWith)
       return true
     }
-    requestDirectoryRefresh([props.x.path])
+    services.refreshDirectories([props.x.path])
     return false
   }
   try {
@@ -126,7 +118,7 @@ export async function executeCoreMenu(
         true,
         item.activity.kind,
         (id) => {
-          onProgress = progressChannel(id) ?? quietProgressChannel()
+          onProgress = services.progressChannel(id) ?? services.quietProgressChannel()
         },
         item.activity.quiet,
         undefined,
@@ -136,7 +128,7 @@ export async function executeCoreMenu(
     else await execute()
   } catch (error) {
     const location = props.x.selected.length ? props.x.selected.join('\n') : props.x.path
-    if (!reportFilesystemPermissionError(error, `${item.title}\n${location}`)) {
+    if (!services.reportFilesystemPermissionError(error, `${item.title}\n${location}`)) {
       props.x.setError(String(error))
     }
   }

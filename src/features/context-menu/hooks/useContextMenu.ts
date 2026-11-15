@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
-import { parseCoreMenuItems } from '@/lib/ipcValidation'
 import type { CoreMenu } from '@/lib/coreMenu'
-import { call } from '@/lib/api'
-import { validPluginMenuItems, type PluginMenu } from '@/components/plugins/PluginMenuNode'
-import type { ContextMenuProps } from './types'
+import { validPluginMenuItems, type PluginMenu } from '@/lib/pluginMenu'
+import { contextMenuPaths, contextMenuRequestKey } from '../model/request'
+import type { ContextMenuProps, ContextMenuSessionServices } from '../types'
 
 interface CoreSnapshot {
   key: string
@@ -26,18 +25,30 @@ const EMPTY_PLUGIN_MENUS: PluginMenu[] = []
 /** Start Core and plugin resolution from the same right-click session. Core
  *  readiness controls the first-level menu; plugin results update only its
  *  fixed submenu entry and never change the first-level layout. */
-export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>) {
-  const paths = menu?.entry
-    ? [
-        menu.entry.path,
-        ...x.selected.filter(
-          (path) => path !== menu.entry!.path && x.selected.includes(menu.entry!.path),
-        ),
-      ]
-    : []
-  const selectionKey = JSON.stringify(paths)
-  const key = JSON.stringify([menu?.x, menu?.y, x.path, selectionKey, getLocale()])
-  const sessionId = useMemo(() => crypto.randomUUID(), [key, menu])
+export function useContextMenu(
+  { menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>,
+  services: ContextMenuSessionServices,
+) {
+  const paths = useMemo(
+    () => contextMenuPaths(menu?.entry?.path, x.selected),
+    [menu?.entry?.path, x.selected],
+  )
+  const key = contextMenuRequestKey({
+    x: menu?.x,
+    y: menu?.y,
+    directory: x.path,
+    paths,
+    locale: getLocale(),
+  })
+  const sessionRef = useRef<{
+    key: string
+    menu: ContextMenuProps['menu']
+    id: string
+  } | null>(null)
+  if (!sessionRef.current || sessionRef.current.key !== key || sessionRef.current.menu !== menu) {
+    sessionRef.current = { key, menu, id: services.newSessionId() }
+  }
+  const sessionId = sessionRef.current.id
   const [snapshot, setSnapshot] = useState<CoreSnapshot>()
   const [pluginSnapshot, setPluginSnapshot] = useState<PluginSnapshot>()
   const [failure, setFailure] = useState<MenuFailure>()
@@ -53,14 +64,13 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (!menu) return
     let active = true
     setFailure(undefined)
-    void call('plugin_context_menu_resolve', {
-      directory: x.path,
-      paths: JSON.parse(selectionKey),
-      source: 'core',
-      sessionId,
-    })
+    void services
+      .resolveCoreMenus({
+        directory: x.path,
+        paths: [...paths],
+        sessionId,
+      })
       .then((result) => {
-        if (!Array.isArray(result)) throw new Error('Invalid Core context menu response')
         if (active) setSnapshot({ key, menu, menus: result })
       })
       .catch((error) => {
@@ -69,18 +79,18 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     return () => {
       active = false
     }
-  }, [key, menu, sessionId])
+  }, [key, menu, paths, sessionId, services, x.path])
 
   useEffect(() => {
     if (!menu) return
     let active = true
     setPluginFailure(undefined)
-    void call('plugin_context_menu_resolve', {
-      directory: x.path,
-      paths: JSON.parse(selectionKey),
-      source: 'plugins',
-      sessionId,
-    })
+    void services
+      .resolvePluginMenus({
+        directory: x.path,
+        paths: [...paths],
+        sessionId,
+      })
       .then((result) => {
         if (active) setPluginSnapshot({ key, menu, menus: result })
       })
@@ -90,7 +100,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     return () => {
       active = false
     }
-  }, [key, menu, pluginRetry, sessionId])
+  }, [key, menu, paths, pluginRetry, sessionId, services, x.path])
 
   const current = snapshot && snapshot.key === key && snapshot.menu === menu ? snapshot : undefined
   const currentFailure =
@@ -109,11 +119,7 @@ export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>
     if (requestedCoreChildren.current.has(requestKey)) return
     requestedCoreChildren.current.add(requestKey)
     try {
-      const response = await call('plugin_context_menu_children', {
-        menuSessionId: group.menuSessionId,
-        parentId,
-      })
-      const children = parseCoreMenuItems(response.items)
+      const children = await services.resolveCoreChildren(group.menuSessionId, parentId)
       setSnapshot((previous) => {
         if (!previous || previous.key !== key || previous.menu !== menu) return previous
         const updated = previous.menus.map((candidate) => {
