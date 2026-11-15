@@ -49,6 +49,8 @@ Rust CI 按 OS、target、toolchain、依赖锁文件和相关源码识别 nativ
 
 文档页面和本地开发命令见[GitHub Pages 发布](/developer/publishing)。只改文档时可运行站点构建；它验证页面和链接能生成，不替代前端或 Rust 行为测试。
 
+重构迁移项、本地复核范围和合并/发布前的证据清单见[代码库重构完成记录](/developer/architecture/codebase-refactor-closeout-2026-11)。
+
 ## 如何解读验证结果
 
 - E2E fixture 成功，说明浏览器用户流程在测试数据下工作；它不是真实桌面系统回收站测试。

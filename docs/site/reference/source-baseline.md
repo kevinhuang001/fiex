@@ -13,6 +13,7 @@
 | Core 内 `sdk/` 子模块      | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4)                                                                       | Core 实际使用的协议 7.0、Rust API 和共享 provider contracts                        |
 | SDK 仓库 `main`            | `b89eb341f42552936c52d76b9ccf93568511982a`                                                                                                 | 补充理解 Rust/UI SDK；仍需与 Core pinned SDK 对照                                  |
 | 官方插件仓库 `main`        | `5c63527b57e31fc02c95629c42383723b6e035f5`                                                                                                 | 可编译插件示例与业务实现；其 SDK 子模块见下一行                                    |
+| 官方插件 Info PR #37 快照  | Plugin `f14b744a26f08011311b956e9ec85fcb8ce10b04`；`sdk/` `c304aff91dc9a8a3564b7fa67c1aac89ed363f41` (`fiex-plugin-sdk` 0.3.4，protocol 8.0) | 隐藏 Info 子 section 的协议迁移；PR 分支 pin 已与 Core PR #261/#262 使用的 SDK 快照对齐，仍未合并 |
 | 官方插件仓库 `sdk/` 子模块 | `24664a69bb411d0b2608461ae08a588f28cbe385` (`fiex-plugin-sdk` 0.3.4)                                                                       | 官方仓库当前构建与示例所锁定的 SDK 快照，与 Core 子模块相同                        |
 
 因此，插件作者应先在目标 Core 版本上验证兼容性。特别是 SDK/UI API 的小版本变化、Core 子模块锁定版本和官方插件 CI 配置，不能仅凭仓库首页的 `main` 名称推断相同。当前发布 `main` 仍以 SDK protocol 7.0 为准；PR #259–#262 所在开放堆叠栈使用 protocol 8.0，只有对应 Core/SDK/官方插件协议迁移完成并合并后，才能作为发布基线。

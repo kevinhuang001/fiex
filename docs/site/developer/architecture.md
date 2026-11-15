@@ -74,5 +74,7 @@ Core 的本地搜索、Recent、Applications、Trash 和插件连接都可以由
 - [软件需求与测试追溯](/developer/requirements)
 - [前端覆盖率基线](/developer/architecture/frontend-coverage-baseline-2026-11-15)
 - [Rust workspace 覆盖率基线](/developer/architecture/rust-workspace-coverage-baseline-2026-11-15)
+- [Feature 与 IPC 边界 ADR-0001](/developer/architecture/decisions/0001-feature-and-ipc-boundaries)
+- [代码库重构完成记录](/developer/architecture/codebase-refactor-closeout-2026-11)
 - [插件权限与安全边界](/reference/security)
 - [格式、构建与 CI](/developer/quality-ci)
