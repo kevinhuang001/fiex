@@ -273,7 +273,10 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           virtualVolume: true,
           entries: names
             .map((name) => state.entries.find((entry) => entry.name === name))
-            .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+            .filter(
+              (entry): entry is NonNullable<typeof entry> =>
+                entry !== undefined && !state.recentRemovedPaths.has(entry.path),
+            ),
           warnings: [],
         }
       }
@@ -414,15 +417,33 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     }
     case 'rename_entry': {
       const path = join(parent(a.path as string), a.name as string)
+      const previous = String(a.path)
       state.entries = state.entries.map((e) =>
         e.path === a.path ? { ...e, path, name: a.name as string } : e,
       )
-      const previous = String(a.path)
+      state.undoStack.push({ kind: 'rename', oldPath: previous, newPath: path })
       if (fixtureChanges[previous]) {
         fixtureChanges[path] = fixtureChanges[previous]
         delete fixtureChanges[previous]
       }
       return path
+    }
+    case 'undo': {
+      const action = state.undoStack.pop()
+      if (!action) throw new Error('没有可撤销的操作')
+      if (action.kind === 'rename') {
+        state.entries = state.entries.map((entry) =>
+          entry.path === action.newPath
+            ? { ...entry, path: action.oldPath, name: basename(action.oldPath) }
+            : entry,
+        )
+        const change = fixtureChanges[action.newPath]
+        if (change) {
+          fixtureChanges[action.oldPath] = change
+          delete fixtureChanges[action.newPath]
+        }
+      }
+      return null
     }
     case 'recycle':
       state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
