@@ -298,7 +298,7 @@ test('PDF preview renders a real document', async ({ page }) => {
     document.body.append(host)
     const mount = dom.createRoot || dom.default.createRoot
     const element = react.createElement || react.default.createElement
-    mount(host).render(element(Component, { url: '/preview-fixture.pdf' }))
+    mount(host).render(element(Component, { url: '/preview-fixture.pdf', onReportError: () => {} }))
   })
   await expect(page.locator('#pdf-test .pdf-controls')).toContainText('1 / 1')
   await expect

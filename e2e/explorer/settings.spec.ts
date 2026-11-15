@@ -40,7 +40,7 @@ test('settings creates tags and the file dialog only applies them', async ({ pag
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(
     page.locator('[data-path="/Users/kevin/Documents/Notes.md"] .tag-dots'),
-  ).toBeVisible()
+  ).toHaveAttribute('title', /验收/)
   await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
   await page.getByRole('menuitem', { name: '显示简介' }).click()
   await expect(page.getByRole('dialog')).toContainText('验收')
