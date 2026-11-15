@@ -2,7 +2,7 @@ import { useAppEnvironment } from '@/hooks/useAppEnvironment'
 import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/features/explorer/components/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
-import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
+import { ExplorerDialogs } from '@/app/layout/ExplorerDialogs'
 import { ErrorDialogHost } from '@/components/ErrorDialogHost'
 import { reportError } from '@/lib/errorCenter'
 import { ExplorerPathBar } from '@/features/explorer/components/ExplorerPathBar'
@@ -14,12 +14,13 @@ import {
   explorerContextMenuProps,
   explorerStatusBarProps,
   explorerTabsProps,
-} from '@/components/explorer/appShellBindings'
+} from '@/app/layout/appShellBindings'
 import { LogCenter } from '@/components/activity/LogCenter'
 import { ActivityCenter } from '@/components/ActivityCenter'
 import { SecondaryPane } from '@/components/SecondaryPane'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
-import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
+import { ExplorerTabs } from '@/features/explorer/components/ExplorerTabs'
+import { WindowControls } from '@/app/layout/WindowControls'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
@@ -131,7 +132,14 @@ export default function App() {
         className={`main ${app.split ? 'split' : ''}`}
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
-        <ExplorerTabs {...explorerTabsProps(app, tabName)} />
+        <ExplorerTabs
+          {...explorerTabsProps(app, tabName)}
+          windowControls={
+            app.platform === 'windows' || app.platform === 'linux' ? (
+              <WindowControls control={app.control} />
+            ) : null
+          }
+        />
         {!fullView && (
           <ExplorerToolbar
             {...explorerToolbarProps(app, activePrefs, updateToolbarView, () =>

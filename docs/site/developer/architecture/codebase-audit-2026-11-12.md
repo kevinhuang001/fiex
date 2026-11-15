@@ -185,3 +185,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **Explorer 文件视图组件归属：** 将列表、图标、画廊和列视图及其行、拖拽、装饰徽标组件从 `components/browser` 整体迁入 `features/explorer/components`，并删除旧目录入口。将多 feature 共用的 FileIcon 放入 `shared/ui`；App 与次面板直接引用 Explorer 组件，列表视图从 sorting 专用模块导入规则。更新装饰徽标需求追溯及架构文档路径。
 
 **Explorer 路径与状态栏归属：** 将地址栏、面包屑、路径工具栏、Explorer 状态栏和对应测试从 `components/explorer` 迁入 `features/explorer/components`。通用 `Button` primitive 从 `components/ui` 迁入 `shared/ui` 并更新全部调用方；不保留旧路径 re-export。同步补充路径栏和虚拟文件系统终端按钮的需求追溯。
+
+**应用壳与标签栏边界：** 将 Explorer tabs renderer 迁入 `features/explorer/components`，通过 `windowControls` 注入原生窗口控件，不让 feature 依赖 Tauri；`WindowControls`、多域弹窗组合器和各区域 props adapter 迁入 `app/layout`。`App` 改用新归属路径，无旧目录转发文件。

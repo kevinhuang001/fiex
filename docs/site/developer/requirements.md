@@ -242,7 +242,7 @@
 | src-tauri/src/remote/sync/metadata/tests.rs                             | REMOTE-05（原子元数据替换中断后读取已提交状态并完成重试）                               |
 | src-tauri/src/remote/ tests                                             | CONN、REMOTE                                                                            |
 
-应用壳输入合同由完整 TypeScript 构建检查：`src/components/explorer/appShellBindings.ts` 为每个区域声明所需字段，`src/hooks/useAppEnvironment.ts` 仅接收环境 hook 使用的导航、自启动、插件市场和字体设置字段；自启动 readiness 模型由 `src/hooks/autostartSessions.test.ts` 覆盖。
+应用壳输入合同由完整 TypeScript 构建检查：`src/app/layout/appShellBindings.ts` 为每个区域声明所需字段，`src/hooks/useAppEnvironment.ts` 仅接收环境 hook 使用的导航、自启动、插件市场和字体设置字段；自启动 readiness 模型由 `src/hooks/autostartSessions.test.ts` 覆盖。
 
 ## 本轮界面改动的按钮级冒烟追溯
 

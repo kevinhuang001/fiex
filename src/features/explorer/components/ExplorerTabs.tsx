@@ -1,9 +1,7 @@
 import { t } from '@/i18n'
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { Platform } from '@/lib/platform'
 import { Columns2, Folder, Plus, X } from 'lucide-react'
-import { WindowControls } from '@/components/WindowControls'
 
 type TabBox = { left: number; top: number; width: number; height: number; center: number }
 type DragOrigin = { pointerX: number; grab: number; rects: TabBox[]; gap: number }
@@ -27,8 +25,7 @@ export interface ExplorerTabsProps {
   closeWorkspaceTab: (index: number) => void
   newWorkspaceTab: () => void
   moveWorkspaceTab: (from: number, to: number) => void
-  control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
-  platform: Platform
+  windowControls: ReactNode
 }
 
 export function ExplorerTabs({
@@ -40,8 +37,7 @@ export function ExplorerTabs({
   closeWorkspaceTab,
   newWorkspaceTab,
   moveWorkspaceTab,
-  control,
-  platform,
+  windowControls,
 }: ExplorerTabsProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const dragged = useRef(false)
@@ -212,7 +208,7 @@ export function ExplorerTabs({
         <Plus size={18} />
       </button>
       <div className="tabs-spacer" data-tauri-drag-region />
-      {(platform === 'windows' || platform === 'linux') && <WindowControls control={control} />}
+      {windowControls}
       {lifted &&
         createPortal(
           <div

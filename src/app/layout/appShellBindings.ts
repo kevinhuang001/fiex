@@ -1,8 +1,8 @@
 import type { AppController } from '@/hooks/useAppController'
-import type { ExplorerTabsProps } from './ExplorerTabs'
+import type { ExplorerTabsProps } from '@/features/explorer/components/ExplorerTabs'
 import type { ExplorerPathBarProps } from '@/features/explorer/components/ExplorerPathBar'
 import type { ExplorerStatusBarProps } from '@/features/explorer/components/ExplorerStatusBar'
-import type { ExplorerToolbarProps } from './ExplorerToolbar'
+import type { ExplorerToolbarProps } from '@/components/explorer/ExplorerToolbar'
 import type { ExplorerDialogsProps } from './ExplorerDialogs'
 import type { ContextMenuProps } from '@/features/context-menu/types'
 import type { Preferences } from '@/lib/types'
@@ -18,11 +18,9 @@ export function explorerTabsProps(
     | 'closeWorkspaceTab'
     | 'newWorkspaceTab'
     | 'moveWorkspaceTab'
-    | 'control'
-    | 'platform'
   >,
   displayName: ExplorerTabsProps['displayName'],
-): ExplorerTabsProps {
+): Omit<ExplorerTabsProps, 'windowControls'> {
   return {
     left: app.left,
     panePaths: app.panePaths,
@@ -32,8 +30,6 @@ export function explorerTabsProps(
     closeWorkspaceTab: app.closeWorkspaceTab,
     newWorkspaceTab: app.newWorkspaceTab,
     moveWorkspaceTab: app.moveWorkspaceTab,
-    control: app.control,
-    platform: app.platform,
   }
 }
 
