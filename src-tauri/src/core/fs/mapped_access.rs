@@ -19,8 +19,10 @@ impl UserActionContext {
         Self { _private: () }
     }
 
-    #[cfg(test)]
-    pub(crate) fn for_test() -> Self {
+    /// Construct a trusted action for the external integration harness.
+    /// This constructor is excluded from normal application builds.
+    #[cfg(any(test, feature = "integration-test"))]
+    pub fn for_test() -> Self {
         Self { _private: () }
     }
 }
