@@ -113,6 +113,22 @@ fn review_cached(
     request: &PreflightRequest,
     check: impl Fn() -> Result<(), FsError>,
 ) -> bool {
+    review_cached_with_cache(
+        availability_cache(),
+        path,
+        resource_revision,
+        request,
+        check,
+    )
+}
+
+fn review_cached_with_cache(
+    cache: &Mutex<LruMap<AvailabilityCacheKey, Arc<AvailabilityCell>>>,
+    path: &str,
+    resource_revision: u64,
+    request: &PreflightRequest,
+    check: impl Fn() -> Result<(), FsError>,
+) -> bool {
     if request.phase != PreflightPhase::Availability || request.validate().is_err() {
         return false;
     }
@@ -121,7 +137,7 @@ fn review_cached(
         resource_revision,
         request: request.clone(),
     };
-    let (cell, owns_check, cache_full) = match availability_cache().lock() {
+    let (cell, owns_check, cache_full) = match cache.lock() {
         Ok(mut cache) => {
             if let Some(cell) = cache.get_mut(&key) {
                 (Some(Arc::clone(cell)), false, false)
