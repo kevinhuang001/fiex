@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { FolderOpen, LoaderCircle } from 'lucide-react'
-import { FileIcon } from '@/components/FileIcon'
+import { FileIcon } from '@/shared/ui/FileIcon'
 import { date, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 

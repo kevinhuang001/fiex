@@ -7,7 +7,7 @@ import type {
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
-import { FileIcon } from './FileIcon'
+import { FileIcon } from '@/shared/ui/FileIcon'
 import { FileInfoSections } from './FileInfoSections'
 import { tagHex } from '@/lib/tags'
 import { call, native } from '@/lib/api'
