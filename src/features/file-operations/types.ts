@@ -21,6 +21,7 @@ export interface ExplorerOperationState {
   setQuery: (query: string) => void
   setSelected: (paths: string[]) => void
   beginRename: (target: string, createdEntry?: Entry) => void
+  reload: () => void
 }
 
 export interface OperationActivity {
@@ -49,6 +50,7 @@ export interface FileOperationRuntimeServices extends OperationActivity {
  * can be tested and checked without importing the full API adapter. */
 export interface FileOperationServices {
   fileInfo: (path: string) => Promise<Entry>
+  renameEntry: (path: string, name: string) => Promise<string>
   createEntry: (path: string, name: string) => Promise<string>
   createFileEntry: (
     path: string,

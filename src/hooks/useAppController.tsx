@@ -1,12 +1,10 @@
-import { t } from '@/i18n'
 import { useExplorer } from '@/features/explorer/hooks/useExplorer'
-import { batchRenameEntries } from '@/features/file-operations/batchRename'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { loadSavedTabs } from '@/lib/tabs'
 import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useDialogs } from './controller/useDialogs'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useAppControllerActions } from './controller/useAppControllerActions'
@@ -18,7 +16,6 @@ import { useAppSessionPersistence } from './controller/useAppSessionPersistence'
 export function useAppController() {
   useRemoteActivity()
   const [prefs, applyPreferences] = usePreferences()
-  const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(
     prefs,
     explorerServices,
@@ -117,20 +114,6 @@ export function useAppController() {
         ).values(),
       ]
     : chosen
-  const openBatchRename = (paths = x.selected) => {
-    const targets = x.entries.filter((entry) => paths.includes(entry.path))
-    if (targets.length > 1) setBatchRename(targets)
-  }
-  const applyBatchRename = async (renames: { path: string; name: string }[]) => {
-    const renamed = await batchRenameEntries(renames, (path, name) =>
-      call('rename_entry', { path, name }),
-    )
-    setBatchRename(null)
-    x.setSelected([])
-    x.reload()
-    notify(t('已重命名 {0} 个项目', renamed.length))
-  }
-
   const actions = useAppControllerActions({
     x,
     left,
@@ -190,10 +173,6 @@ export function useAppController() {
     chosen,
     chosenAll,
     selectedAll,
-    batchRename,
-    setBatchRename,
-    openBatchRename,
-    applyBatchRename,
     menu,
     setInfo,
     platform,

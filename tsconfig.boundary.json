@@ -63,6 +63,7 @@
     "src/features/file-operations/result.ts",
     "src/features/file-operations/types.ts",
     "src/features/file-operations/services/createRunner.ts",
+    "src/features/file-operations/services/batchRenameActions.ts",
     "src/features/file-operations/hooks/useRunner.ts",
     "src/features/file-operations/hooks/useFileOperations.ts",
     "src/components/sidebar/connectionModel.ts",

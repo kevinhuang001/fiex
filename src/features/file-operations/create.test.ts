@@ -11,6 +11,7 @@ function createContext(allowedOps = ['write', 'mkdir']) {
   const run = vi.fn(async (_label: string, operation: () => Promise<unknown>) => operation())
   const services: FileOperationServices = {
     fileInfo: vi.fn(async (path) => ({ path, allowedOps: ['rename'] }) as Entry),
+    renameEntry: vi.fn(async (path, name) => `${path.slice(0, path.lastIndexOf('/'))}/${name}`),
     createEntry: vi.fn(async (_path, name) => `/docs/${name}`),
     createFileEntry: vi.fn(async (_path, name) => `/docs/${name}`),
     recycle: vi.fn(),

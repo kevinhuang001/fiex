@@ -32,6 +32,7 @@ export function useFileOperations({
 }) {
   const services: FileOperationServices = {
     fileInfo: (path) => call('file_info', { path }),
+    renameEntry: (path, name) => call('rename_entry', { path, name }),
     createEntry: (path, name) => call('create_entry', { path, name }),
     createFileEntry: (path, name, template) => call('create_file_entry', { path, name, template }),
     recycle: (paths, onProgress) => call('recycle', { paths, onProgress }),
