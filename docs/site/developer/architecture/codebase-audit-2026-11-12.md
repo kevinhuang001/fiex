@@ -171,3 +171,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **双面板选择模型（PR #245）：** 将左右面板选择路径的并集去重，以及所选条目的跨面板对账迁入 `features/explorer/model/paneSelection.ts` 纯模型；保留单面板结果与引用行为，并以右侧较新条目覆盖重复路径，纳入严格类型边界和 OPS-SEL-01 需求追溯。
 
 **P4-02 列表刷新信号（PR #246）：** 将远端同步订阅、目录变更事件路由、本地目录 watcher 与 Applications 更新订阅从 `useListing` 收敛至 `useListingRefreshSignals`；watcher 条件、远端挂载路径匹配和 query/list 刷新目标提取成纯策略并纳入严格边界与 `UI-VIEW-05`/`REL-01` 需求追溯。
+
+**P2-03 单项原位重命名（PR #247）：** 将 `useListing` 中开始、取消和提交重命名的状态编排迁入 `features/file-operations/hooks/useInlineRename`；列表 hook 只传递当前目录、条目状态与导航 setter。新增严格边界检查和开始、取消、能力拒绝、Provider 失败及成功刷新测试，`OPS-RENAME-01`/`ARCH-01` 追溯同步更新。
