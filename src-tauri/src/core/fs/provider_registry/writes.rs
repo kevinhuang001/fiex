@@ -25,7 +25,34 @@ pub(crate) fn fail_next_provider_write_for_test(path: &str) {
 pub(crate) fn fail_provider_writes_for_test(paths: &[String]) {
     *next_provider_write_failures()
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = paths.iter().cloned().collect();
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        paths.iter().map(|path| test_write_path(path)).collect();
+}
+
+#[cfg(test)]
+fn test_write_path(path: &str) -> String {
+    let path = std::path::Path::new(path);
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => dunce::canonicalize(parent)
+            .map(|parent| parent.join(name).to_string_lossy().into_owned())
+            .unwrap_or_else(|_| path.to_string_lossy().into_owned()),
+        _ => path.to_string_lossy().into_owned(),
+    }
+}
+
+#[cfg(all(test, unix))]
+#[test]
+fn injected_write_path_resolves_parent_symlinks() {
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("real");
+    let alias = root.path().join("alias");
+    std::fs::create_dir(&directory).unwrap();
+    symlink(&directory, &alias).unwrap();
+    assert_eq!(
+        test_write_path(&alias.join("new.txt").to_string_lossy()),
+        test_write_path(&directory.join("new.txt").to_string_lossy())
+    );
 }
 
 #[cfg(test)]
@@ -42,7 +69,10 @@ fn injected_write_failure(resource: &ResourceBroker) -> Option<FsWrite> {
         let mut failures = next_provider_write_failures()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if failures.front().is_some_and(|path| path == &resource.path) {
+        if failures
+            .front()
+            .is_some_and(|path| path == &test_write_path(&resource.path))
+        {
             failures.pop_front();
             true
         } else {

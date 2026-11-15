@@ -1,9 +1,7 @@
 //! Read, list, and search operations for scoped filesystem resources.
 
 use super::ResourceBroker;
-use crate::core::fs::{
-    CHUNK, FsError, FsErrorKind, ReadHandle, directory_cache, provider_registry, streams,
-};
+use crate::core::fs::{CHUNK, FsError, FsErrorKind, directory_cache, provider_registry, streams};
 use fiex_provider_contracts::FsOperation;
 use serde_json::Value;
 
