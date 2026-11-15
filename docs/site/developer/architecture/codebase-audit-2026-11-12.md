@@ -189,3 +189,5 @@ P4-02 严格类型边界现覆盖 Explorer 文件名、文件夹视图、菜单�
 **应用壳与标签栏边界：** 将 Explorer tabs renderer 迁入 `features/explorer/components`，通过 `windowControls` 注入原生窗口控件，不让 feature 依赖 Tauri；`WindowControls`、多域弹窗组合器和各区域 props adapter 迁入 `app/layout`。`App` 改用新归属路径，无旧目录转发文件。
 
 **菜单旧入口清理：** 删除 `components/explorer/FileContextMenu.tsx` 的单行兼容转发，`App` 直接从菜单 renderer 所在目录引用实现。
+
+**Explorer 工具栏归属：** 将跨 Explorer、插件、活动中心和系统控件的 toolbar composition 与子组件移入 `app/layout/toolbar`，作为应用壳组合层；纯顺序与拖动几何规则及测试移入 `features/explorer/model` 并加入严格类型边界。`App` 和壳层 adapter 只使用新路径。

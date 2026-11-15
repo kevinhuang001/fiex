@@ -77,6 +77,7 @@
     "src/lib/listColumns.ts",
     "src/features/explorer/model/paneSelection.ts",
     "src/features/explorer/model/fileSelection.ts",
+    "src/features/explorer/model/toolbarLayout.ts",
     "src/features/explorer/services/paneViewPreferences.ts",
     "src/features/explorer/hooks/useListingRefreshSignals.ts",
     "src/features/explorer/model/listingRefreshPolicy.ts"
