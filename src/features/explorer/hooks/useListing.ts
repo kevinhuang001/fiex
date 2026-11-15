@@ -25,7 +25,6 @@ export interface ListingServices {
   watchDirectory: (path: string, pane: string) => Promise<unknown>
   unwatchDirectory: (path: string, pane: string) => Promise<unknown>
   inlineRename: InlineRenameServices
-  remoteConnections: () => Promise<RemoteConnection[]>
   watchErrorMessage: (error: unknown) => string
   directorySnapshot: DirectorySnapshotServices
   decorations: EntryDecorationServices
@@ -33,13 +32,13 @@ export interface ListingServices {
   search: ListingSearchServices
 }
 
-/** Everything a pane lists: entries, decorations, locations, connections,
- *  search results and current-directory capabilities. Path, history and tab
- *  state come from useNavigation. */
+/** Everything a pane lists: entries, decorations, locations, search results
+ *  and current-directory capabilities. Shared connection state is app-owned. */
 export function useListing(
   prefs: Preferences,
   nav: Navigation,
   services: ListingServices,
+  connections: RemoteConnection[],
   enabled = true,
   pane = 'left',
   startOverride?: string,
@@ -73,8 +72,6 @@ export function useListing(
     services: services.decorations,
   })
   const decorations = query || !services.native ? searchDecorations : directoryDecorations
-  const [connections, setConnections] = useState<RemoteConnection[]>([])
-  const [connectionsLoaded, setConnectionsLoaded] = useState(false)
   const [renderedPath, setRenderedPath] = useState('')
   const paintedByPath = useRef(new PaintedListingCache(32))
   const renderedPathRef = useRef('')
@@ -174,26 +171,9 @@ export function useListing(
     setTagFilterState(tag)
     setSelected([])
   }
-  const refreshConnections = useCallback(async () => {
-    try {
-      const list = await services.remoteConnections()
-      setConnections(Array.isArray(list) ? [...list] : [])
-    } catch {
-      setConnections([])
-    } finally {
-      setConnectionsLoaded(true)
-    }
-  }, [services])
-  useEffect(() => {
-    if (!enabled) return
-    void refreshConnections()
-  }, [enabled, refreshConnections])
   return {
     entries: visibleEntries,
     decorations,
-    connections,
-    connectionsLoaded,
-    refreshConnections,
     tagFilter,
     setTagFilter,
     directoryAllowedOps,
