@@ -16,6 +16,8 @@ npm run check:i18n
 npm test
 npm run test:coverage
 npm run report:coverage
+npm run test:rust-coverage-report
+npm run report:rust-coverage
 npm run build
 npm run e2e
 
@@ -54,7 +56,8 @@ Rust CI 按 OS、target、toolchain、依赖锁文件和相关源码识别 nativ
 - Kani/覆盖率/mutation 只覆盖 scope-policy 中建模的属性和代码；不能证明 Core 所有功能没有缺陷。
 - 单平台通过不能推断其他平台通过。查看矩阵中 macOS、Windows、Linux 各自的 job 状态。
 - 跨仓库插件变更要看 Core、SDK 和官方插件各自的匹配 CI；单仓库绿色不足以证明产品组合兼容。
-- 前端覆盖率趋势是全 `src/` 的增量观察数据，目前不设通过门槛；初始数据和统计范围见[前端覆盖率基线](/developer/architecture/frontend-coverage-baseline-2026-11-15)。Rust workspace 暂未建立同等范围的覆盖率基线。
+- 前端覆盖率趋势是全 `src/` 的增量观察数据，目前不设通过门槛；初始数据和统计范围见[前端覆盖率基线](/developer/architecture/frontend-coverage-baseline-2026-11-15)。
+- Rust workspace 覆盖率由 Linux coverage job 用 LLVM source-based instrumentation 采集 library unit tests；统计口径不含 doctests、bins、integration tests 和独立 SDK submodule，且不提供 branch/MC/DC 数据。初始数据和限制见[Rust workspace 覆盖率基线](/developer/architecture/rust-workspace-coverage-baseline-2026-11-15)。
 
 ## 文档站 CI
 

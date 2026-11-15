@@ -14,6 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage-report": "node --test scripts/coverage-report.test.mjs",
     "report:coverage": "node scripts/coverage-report.mjs",
+    "test:rust-coverage-report": "node --test scripts/rust-coverage-report.test.mjs",
+    "report:rust-coverage": "node scripts/rust-coverage-report.mjs",
     "e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-11-15",
+  "revision": "PR #242 head d0bd4c6f2ee3e605e2a024d46cc44b0d15342f21",
+  "scope": "src-tauri Cargo workspace library unit tests; no default features; fiex/usbfs; excludes doctests, bins, integration tests, and SDK submodule",
+  "sourceFiles": 376,
+  "total": {
+    "lines": { "count": 40911, "covered": 22628, "percent": 55.3103077411943 },
+    "functions": { "count": 5117, "covered": 2563, "percent": 50.087942153605624 },
+    "regions": { "count": 64771, "covered": 33868, "percent": 52.288832965370304 }
+  },
+  "unsupportedMetrics": ["branches", "mcdc"]
+}
