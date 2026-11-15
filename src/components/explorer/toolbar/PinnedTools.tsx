@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import type { Explorer } from '@/features/explorer/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 import { usePluginCatalog, type PluginContribution, type PluginInfo } from '@/lib/plugins'

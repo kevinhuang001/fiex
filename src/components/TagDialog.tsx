@@ -2,7 +2,7 @@ import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Modal } from './ui/Modal'
-import { Button } from './ui/button'
+import { Button } from '@/shared/ui/button'
 import { tagHex } from '@/lib/tags'
 import type { Tag } from '@/lib/types'
 

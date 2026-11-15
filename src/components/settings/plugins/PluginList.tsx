@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Download, Puzzle, ScrollText, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
 import type { PluginInfo } from '@/lib/plugins'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { pluginIcon } from '../PluginInstaller'
 
 /**

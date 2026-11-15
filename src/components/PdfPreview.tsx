@@ -8,7 +8,7 @@ import {
 } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import worker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
-import { Button } from './ui/button'
+import { Button } from '@/shared/ui/button'
 GlobalWorkerOptions.workerSrc = worker
 export default function PdfPreview({ url }: { url: string }) {
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null)

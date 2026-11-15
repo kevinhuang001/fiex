@@ -8,7 +8,7 @@ import {
   Monitor,
   Puzzle,
 } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '@/shared/ui/button'
 import { date, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 import type { PreviewCandidate } from '@/lib/preview'

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { ArrowRight, Check, Files, Replace, SkipForward } from 'lucide-react'
 import { basename, date, size } from '@/lib/files'
 import type { ConflictAction, ConflictResolution, FileVersion, TransferConflict } from '@/lib/types'
-import { Button } from './ui/button'
+import { Button } from '@/shared/ui/button'
 import { Modal } from './ui/Modal'
 
 export function ConflictDialog({

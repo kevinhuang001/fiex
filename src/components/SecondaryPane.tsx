@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { FileViews } from '@/features/explorer/components/FileViews'
-import { PathToolbar } from './explorer/PathToolbar'
+import { PathToolbar } from '@/features/explorer/components/PathToolbar'
 import { useExplorer } from '@/features/explorer/hooks/useExplorer'
 import { displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
 import { shortcutLabel } from '@/lib/shortcuts'

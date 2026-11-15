@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { PanelView } from './panel/PanelView'
 import { usePanelBridge } from './panel/usePanelBridge'
 import {

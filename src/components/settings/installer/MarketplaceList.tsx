@@ -8,7 +8,7 @@ import {
   type MarketplacePlugin,
   type PluginInfo,
 } from '@/lib/plugins'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/shared/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import { pluginIcon } from './pluginIcon'
 import { PluginCategoryFilter } from '../plugins/PluginCategoryFilter'

@@ -5,8 +5,8 @@ import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ErrorDialogHost } from '@/components/ErrorDialogHost'
 import { reportError } from '@/lib/errorCenter'
-import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
-import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import { ExplorerPathBar } from '@/features/explorer/components/ExplorerPathBar'
+import { ExplorerStatusBar } from '@/features/explorer/components/ExplorerStatusBar'
 import {
   explorerPathBarProps,
   explorerToolbarProps,

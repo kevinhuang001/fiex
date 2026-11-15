@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import * as D from './ui/dropdown-menu'
-import { Button } from './ui/button'
+import { Button } from '@/shared/ui/button'
 import { Check } from 'lucide-react'
 export function Menu({
   label,
