@@ -146,9 +146,12 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const trashGroup = groups.find(([id]) => id === 'trash')
   if (trashGroup) {
     const canRemove = permits('remove')
-    trashGroup[1] = (
-      trashView
-        ? paths.length === 0
+    let actions: CoreMenuItem[]
+    if (recentView) {
+      actions = [item('removeFromRecent', '从最近移除', 'x')]
+    } else if (trashView) {
+      actions =
+        paths.length === 0
           ? [item('emptyTrash', '清空废纸篓', 'trash')]
           : [
               item('restore', '放回原处', 'restore'),
@@ -156,11 +159,17 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
                 ? [item('delete', paths.length > 1 ? '彻底删除选中项' : '彻底删除', 'trash')]
                 : []),
             ]
-        : [
-            ...(permits('trash') ? [item('trash', '移到废纸篓', 'trash', 'trash')] : []),
-            ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
-          ]
-    ).map((item) => ({ ...item, placement: 'tail', danger: item.id !== 'restore' }))
+    } else {
+      actions = [
+        ...(permits('trash') ? [item('trash', '移到废纸篓', 'trash', 'trash')] : []),
+        ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
+      ]
+    }
+    trashGroup[1] = actions.map((menuItem) => ({
+      ...menuItem,
+      placement: 'tail',
+      danger: menuItem.id !== 'restore' && menuItem.id !== 'removeFromRecent',
+    }))
   }
   for (const [id, session] of sessions)
     if (Date.now() - session.created >= 90000) sessions.delete(id)
@@ -177,6 +186,7 @@ export function fixtureBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     cut: 'builtin:cut',
     duplicate: 'builtin:duplicate',
     copyPath: 'builtin:copy-path',
+    removeFromRecent: 'builtin:remove-from-recent',
     'remote.pin': 'builtin:pin',
     'remote.unpin': 'builtin:unpin',
     'remote.cache': 'builtin:cache',
@@ -268,6 +278,8 @@ export async function executeFixtureBuiltin(a: Record<string, unknown>) {
       directory: session.directory,
     }
   if (command.startsWith('openWith-')) return { handled: true }
+  if (command === 'removeFromRecent')
+    for (const path of session.paths) state.recentRemovedPaths.add(path)
   if (!command.startsWith('remote.'))
     return {
       kind: 'coreAction',
