@@ -359,10 +359,12 @@ test('ten thousand icons stay virtualized and support end selection and rename',
     await expect(descending).toBeVisible()
     if (await descending.locator('.menu-check svg').count()) await descending.click()
     else await page.keyboard.press('Escape')
+    await expect(descending).toBeHidden()
     await measure(
       'virtualized_end_navigation',
       async () => {
         await page.getByRole('grid', { name: '文件', exact: true }).focus()
+        await expect(page.getByRole('grid', { name: '文件', exact: true })).toBeFocused()
         await page.keyboard.press('End')
         await expect(
           page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]'),

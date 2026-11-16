@@ -363,7 +363,11 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'
       return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
     case 'set_tags': {
-      const tags = a.tags as { name: string; color: number }[]
+      // Core's Tag DTO persists the Finder colour, not the UI-only hex value.
+      const tags = (a.tags as { name: string; color: number }[]).map(({ name, color }) => ({
+        name,
+        color,
+      }))
       state.entries = state.entries.map((entry) =>
         (a.paths as string[]).includes(entry.path) ? { ...entry, tags } : entry,
       )

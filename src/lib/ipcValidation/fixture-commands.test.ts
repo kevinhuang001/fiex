@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { parseConnectionOpenResult, parseSearchBatch } from './entries'
+import { parseConnectionOpenResult, parseListing, parseSearchBatch } from './entries'
 import { parsePluginMenuResult } from './contextMenus'
 import { parseInstallPreview } from './installation'
 import { parseMarketplacePlugins } from './marketplace'
@@ -57,6 +57,14 @@ it('keeps browser fixture commands compatible with Core response contracts', asy
   ).toHaveLength(1)
   const conflict = await mock('transfer', { paths: [`${root}/Notes.md`], destination: root })
   expect(parseOperationResult(conflict).conflicts).toHaveLength(1)
+  await mock('set_tags', {
+    paths: [`${root}/Notes.md`],
+    tags: [{ name: '验收', color: 4, hex: '#007aff' }],
+  })
+  const listing = parseListing(await mock('list_directory', { path: root, hidden: false }))
+  expect(listing.entries.find((entry) => entry.name === 'Notes.md')?.tags).toEqual([
+    { name: '验收', color: 4 },
+  ])
   expect(parseOperationResult(await mock('recycle', { paths: [] })).conflicts).toEqual([])
   expect(
     decodeSimpleIpcResult('local_terminal_open', await mock('local_terminal_open', {})),
