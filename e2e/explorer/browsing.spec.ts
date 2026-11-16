@@ -360,6 +360,9 @@ test('ten thousand icons stay virtualized and support end selection and rename',
     if (await descending.locator('.menu-check svg').count()) await descending.click()
     else await page.keyboard.press('Escape')
     await expect(descending).toBeHidden()
+    // Radix restores focus asynchronously after the menu closes. Wait for that
+    // restoration before moving focus to the grid for the keyboard benchmark.
+    await expect(sort).toBeFocused()
     await measure(
       'virtualized_end_navigation',
       async () => {
