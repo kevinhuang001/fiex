@@ -21,8 +21,9 @@
 - Playwright `--list` 收集到 69 个用例。Recent 正常导航、移除、失效映射拒绝与键盘撤销流程已加入 E2E；本地尝试用 `/usr/bin/chromium` 执行 Recent 用例，但 Chromium 在启动阶段遇到 `socket() failed: Operation not permitted`，尚未进入浏览器断言。
 - SDK/API 配套：Core submodule、SDK PR #37 与官方插件 PR #37 均锁定 SDK `c304aff91dc9a8a3564b7fa67c1aac89ed363f41`；插件协议为 8.0。统一文件流/TCP API 没有 `OwnedFileReader`、`OwnedFileWriter` 或业务侧 `HostProxy` 调用；SDK 测试覆盖 Reader 离开 `Files` 局部作用域后仍满足 `Read + Seek + Send + 'static`，以及流式读写、Seek、共享窗口复用、IPC fallback、事务提交和 TCP 标准流接口。
 - 已完成 CI 回归复核：Core 的 provider 写入故障注入改为跨工作线程可见，应用目录清理测试使用隔离用户数据目录；10k 性能工作流会初始化锁定的 SDK 子模块。SDK PR #36/#37 的 Windows `cargo test --all-features` 已完成运行但以 `0xc0000005 (STATUS_ACCESS_VIOLATION)` 异常退出，Linux 与 macOS 通过；本地没有 Windows 主机复现，因此该 Windows 运行时问题仍需后续确认。本轮不等待新 CI。
-- 后续集成修订：10k 测量在每次采样前显式保持名称升序；官方插件工作流使用配套 Core，集成程序适配现有菜单与预览接口。Core 的 `integration-test` feature 仅供外部测试构造用户操作凭据，正常应用构建不得启用。Windows SDK/插件工作流使用此前 SDK 全量测试通过的 Rust 1.99.1，插件 Windows 输出路径缩短；本地 Linux 验证不能证明 Windows 问题已经解决。
+- 后续集成修订：10k 测量在每次采样前显式保持名称升序；官方插件工作流使用配套 Core，集成程序适配现有菜单与预览接口。Core 的 `integration-test` feature 仅供外部测试构造用户操作凭据，正常应用构建不得启用。Windows SDK/插件工作流使用 Rust 1.99.1，插件 Windows 输出路径缩短；SDK PR #38 的 Windows 全量工作流已通过，Rust 1.100.0 的 Windows 异常仍未定位。
 - 浏览器 fixture 合同修订：插件目录、搜索批次、连接、菜单、文件操作和终端响应与当前 IPC 解码器对齐，并以 fixture 合同测试覆盖；删除重复连接入口和旧的混合菜单分支。Recent 错误对话框、撤销快捷键及 PDF 测试入口也按当前界面与 feature 路径更新。浏览器断言仍需在可启动 Chromium 的环境运行。
+- 后续回归修订：浏览器标签 fixture 按 Core 的标签 DTO 去除仅用于界面的 `hex`；10k 测量在菜单关闭并确认文件网格取得焦点后发送 End。Windows 应用导出测试子进程使用独立的恢复日志目录，避免其他测试进程处理其正在进行的删除事务。这些修订的跨平台结果仍需运行后确认。
 
 ## 合并与发布检查表
 

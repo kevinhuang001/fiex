@@ -22,6 +22,12 @@ struct RemovalJournal {
 }
 
 fn staging_root() -> Result<PathBuf, String> {
+    // The export helper runs alongside other tests in a separate process.
+    // Keep its recovery journals out of the real profile's shared staging dir.
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os("FIEX_TEST_APPLICATION_EXPORT_HELPER_ROOT") {
+        return Ok(PathBuf::from(root).join("application-staging"));
+    }
     Ok(dirs::home_dir()
         .ok_or("cannot locate home directory")?
         .join(".fiex")
